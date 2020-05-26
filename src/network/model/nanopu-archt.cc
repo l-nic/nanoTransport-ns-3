@@ -18,6 +18,8 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 #include "ns3/log.h"
+#include "ns3/packet.h"
+#include "node.h"
 #include "nanopu-archt.h"
 
 namespace ns3 {
@@ -35,14 +37,52 @@ TypeId NanoPuArcht::GetTypeId (void)
   return tid;
 }
 
-NanoPuArcht::NanoPuArcht ()
+NanoPuArcht::NanoPuArcht (Ptr<Node> node)
 {
   NS_LOG_FUNCTION (this);
+  
+  m_node = node;
+  m_boundnetdevice = 0;
 }
 
 NanoPuArcht::~NanoPuArcht ()
 {
   NS_LOG_FUNCTION (this);
+}
+    
+/* Inherit from Socket class: Returns associated node */
+Ptr<Node>
+NanoPuArcht::GetNode (void) const
+{
+  return m_node;
+}
+    
+void
+NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
+{
+  NS_LOG_FUNCTION (this << netdevice);
+  if (netdevice != 0)
+    {
+      bool found = false;
+      for (uint32_t i = 0; i < GetNode ()->GetNDevices (); i++)
+        {
+          if (GetNode ()->GetDevice (i) == netdevice)
+            {
+              found = true;
+              break;
+            }
+        }
+      NS_ASSERT_MSG (found, "Socket cannot be bound to a NetDevice not existing on the Node");
+    }
+  m_boundnetdevice = netdevice;
+  return;
+}
+
+Ptr<NetDevice>
+NanoPuArcht::GetBoundNetDevice ()
+{
+  NS_LOG_FUNCTION (this);
+  return m_boundnetdevice;
 }
     
 } // namespace ns3
