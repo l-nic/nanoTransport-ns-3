@@ -25,6 +25,7 @@
 namespace ns3 {
     
 class Node;
+class Ipv4EndPoint;
 class Packet;
 
 /**
@@ -48,34 +49,13 @@ public:
   static TypeId GetTypeId (void);
 
   NanoPuArcht (Ptr<Node> node);
-  virtual ~NanoPuArcht ();
+  virtual ~NanoPuArcht (void);
   
   /**
    * \brief Return the node this architecture is associated with.
    * \returns the node
    */
   virtual Ptr<Node> GetNode (void);
-  
-//   /** 
-//    * \brief Allocate a local endpoint for this architecture.
-//    * \param address the address to try to allocate
-//    * \returns 0 on success, -1 on failure.
-//    */
-//   virtual int Bind (const Address &address) = 0;
-
-//   /** 
-//    * \brief Allocate a local IPv4 endpoint for this architecture.
-//    *
-//    * \returns 0 on success, -1 on failure.
-//    */
-//   virtual int Bind () = 0;
-
-//   /** 
-//    * \brief Allocate a local IPv6 endpoint for this architecture.
-//    *
-//    * \returns 0 on success, -1 on failure.
-//    */
-//   virtual int Bind6 () = 0;
   
   /**
    * \brief Bind the architecture to specific device.
@@ -107,11 +87,13 @@ public:
    * 
    * \returns Pointer to interface.
    */
-  Ptr<NetDevice> GetBoundNetDevice (); 
+  virtual Ptr<NetDevice> GetBoundNetDevice (void); 
+  
+  virtual bool Send (Ptr<Packet> p);
   
 protected:
 
-    Ptr<Node> m_node; //!< the node this architecture is located at.
+    Ptr<Node>      m_node; //!< the node this architecture is located at.
     Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
 };
     

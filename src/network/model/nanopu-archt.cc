@@ -50,9 +50,9 @@ NanoPuArcht::~NanoPuArcht ()
   NS_LOG_FUNCTION (this);
 }
     
-/* Inherit from Socket class: Returns associated node */
+/* Returns associated node */
 Ptr<Node>
-NanoPuArcht::GetNode (void) const
+NanoPuArcht::GetNode (void)
 {
   return m_node;
 }
@@ -72,7 +72,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
               break;
             }
         }
-      NS_ASSERT_MSG (found, "Socket cannot be bound to a NetDevice not existing on the Node");
+      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
   m_boundnetdevice = netdevice;
   return;
@@ -83,6 +83,32 @@ NanoPuArcht::GetBoundNetDevice ()
 {
   NS_LOG_FUNCTION (this);
   return m_boundnetdevice;
+}
+    
+bool
+NanoPuArcht::Send (Ptr<Packet> p)
+{
+  NS_LOG_FUNCTION (this << p);
+  NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
+  
+  /*
+  somewhere in the eggress pipe we will need to set the source ipv4 address of the packet 
+  we can use the logic below:
+  
+  Ptr<Ipv4> ipv4proto = GetNode ()->GetObject<Ipv4> ();
+  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (device);
+  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, Ipv4Address dest);
+  
+  where dest is the dstIP provided by the AppHeader
+  */
+    
+  /*
+   * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
+   *             packet on L2 is equivalent to sending a unicast packet.
+   * TODO: There should be a clever way of resolving the destination MAC address of the 
+   *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
+   */
+  return m_boundnetdevice->Send (p, Mac48Address ("ff:ff:ff:ff:ff:ff"), 0x800);
 }
     
 } // namespace ns3
