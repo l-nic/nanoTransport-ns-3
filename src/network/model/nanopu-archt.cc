@@ -18,7 +18,6 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 #include "ns3/log.h"
-#include "ns3/packet.h"
 #include "node.h"
 #include "nanopu-archt.h"
 
@@ -75,6 +74,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
       NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
   m_boundnetdevice = netdevice;
+  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
   return;
 }
 
@@ -108,7 +108,16 @@ NanoPuArcht::Send (Ptr<Packet> p)
    * TODO: There should be a clever way of resolving the destination MAC address of the 
    *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
    */
-  return m_boundnetdevice->Send (p, Mac48Address ("ff:ff:ff:ff:ff:ff"), 0x800);
+  return m_boundnetdevice->Send (p, m_boundnetdevice->GetBroadcast (), 0x0800);
+}
+    
+bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+                                    uint16_t protocol, const Address &from)
+{
+  NS_LOG_FUNCTION (this << p);
+  NS_LOG_UNCOND("Hello NanoPU");
+    
+  return true;
 }
     
 } // namespace ns3

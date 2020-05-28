@@ -25,8 +25,6 @@
 namespace ns3 {
     
 class Node;
-class Ipv4EndPoint;
-class Packet;
 
 /**
  * \ingroup network
@@ -90,6 +88,9 @@ public:
   virtual Ptr<NetDevice> GetBoundNetDevice (void); 
   
   virtual bool Send (Ptr<Packet> p);
+  
+  virtual bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+                                 uint16_t protocol, const Address &from);
   
 protected:
 
