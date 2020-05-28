@@ -18,6 +18,7 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 #include "ns3/log.h"
+#include "ns3/simulator.h"
 #include "node.h"
 #include "nanopu-archt.h"
 
@@ -115,7 +116,14 @@ bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
                                     uint16_t protocol, const Address &from)
 {
   NS_LOG_FUNCTION (this << p);
-  NS_LOG_UNCOND("Hello NanoPU");
+  p->Print (std::cout);
+  std::cout << "\nAt time " <<  Simulator::Now ().GetSeconds () << 
+               " NanoPU received a packet of size " << p->GetSize () << std::endl;
+  
+  uint8_t *buffer = new uint8_t[p->GetSize ()];
+  p->CopyData(buffer, p->GetSize ());
+  std::string s = std::string(buffer, buffer+p->GetSize());
+  std::cout <<"  Payload: " << s << std::endl;
     
   return true;
 }
