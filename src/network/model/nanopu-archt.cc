@@ -21,6 +21,7 @@
 #include "ns3/simulator.h"
 #include "node.h"
 #include "nanopu-archt.h"
+#include "ns3/ipv4-header.h"
 
 namespace ns3 {
 
@@ -116,14 +117,20 @@ bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
                                     uint16_t protocol, const Address &from)
 {
   NS_LOG_FUNCTION (this << p);
+  NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
+               " NanoPU received a packet of size " << p->GetSize ());
+    
   p->Print (std::cout);
-  std::cout << "\nAt time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU received a packet of size " << p->GetSize () << std::endl;
+  std::cout << std::endl;
   
-  uint8_t *buffer = new uint8_t[p->GetSize ()];
-  p->CopyData(buffer, p->GetSize ());
-  std::string s = std::string(buffer, buffer+p->GetSize());
-  std::cout <<"  Payload: " << s << std::endl;
+//   uint8_t *buffer = new uint8_t[p->GetSize ()];
+//   p->CopyData(buffer, p->GetSize ());
+//   std::string s = std::string(buffer, buffer+p->GetSize());
+//   std::cout <<"  Payload: " << s << std::endl;
+    
+  Ipv4Header iph;
+  p->PeekHeader (iph);
+  NS_LOG_DEBUG ("This is the IP header: " << iph);
     
   return true;
 }

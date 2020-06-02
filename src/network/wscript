@@ -3,6 +3,7 @@
 def build(bld):
     network = bld.create_ns3_module('network', ['core', 'stats'])
     network.source = [
+        '../internet/model/ipv4-header.cc',
         'model/address.cc',
         'model/application.cc',
         'model/buffer.cc',
@@ -91,6 +92,7 @@ def build(bld):
     headers = bld(features='ns3header')
     headers.module = 'network'
     headers.source = [
+        '../internet/model/ipv4-header.h',
         'model/address.h',
         'model/application.h',
         'model/buffer.h',
