@@ -5,6 +5,7 @@ def build(bld):
     network.source = [
         '../internet/model/ipv4-header.cc',
         '../internet/model/udp-header.cc',
+        '../internet/model/ndp-header.cc',
         'model/address.cc',
         'model/application.cc',
         'model/buffer.cc',
@@ -95,6 +96,7 @@ def build(bld):
     headers.source = [
         '../internet/model/ipv4-header.h',
         '../internet/model/udp-header.h',
+        '../internet/model/ndp-header.h',
         'model/address.h',
         'model/application.h',
         'model/buffer.h',

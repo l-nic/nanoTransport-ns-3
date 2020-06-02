@@ -79,6 +79,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
     }
   m_boundnetdevice = netdevice;
   m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
+  m_mtu = m_boundnetdevice->GetMtu ();
   return;
 }
 

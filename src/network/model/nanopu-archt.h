@@ -96,6 +96,8 @@ protected:
 
     Ptr<Node>      m_node; //!< the node this architecture is located at.
     Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
+    
+    uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
 };
     
 } // namespace ns3
