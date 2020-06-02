@@ -21,7 +21,6 @@
 #define NANOPU_ARCHT_H
 
 #include "ns3/object.h"
-#include "ns3/ipv4-header.h"
 
 namespace ns3 {
     

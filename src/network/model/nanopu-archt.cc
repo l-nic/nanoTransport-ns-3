@@ -23,6 +23,8 @@
 #include "nanopu-archt.h"
 #include "ns3/ipv4-header.h"
 
+#include "ns3/udp-header.h"
+
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
@@ -116,21 +118,38 @@ NanoPuArcht::Send (Ptr<Packet> p)
 bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
-  NS_LOG_FUNCTION (this << p);
+  Ptr<Packet> cp = p->Copy ();
+  NS_LOG_FUNCTION (this << cp);
   NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU received a packet of size " << p->GetSize ());
+               " NanoPU received a packet of size " << cp->GetSize ());
     
-  p->Print (std::cout);
+  cp->Print (std::cout);
   std::cout << std::endl;
-  
-//   uint8_t *buffer = new uint8_t[p->GetSize ()];
-//   p->CopyData(buffer, p->GetSize ());
-//   std::string s = std::string(buffer, buffer+p->GetSize());
-//   std::cout <<"  Payload: " << s << std::endl;
     
   Ipv4Header iph;
-  p->PeekHeader (iph);
+  cp->RemoveHeader (iph);
   NS_LOG_DEBUG ("This is the IP header: " << iph);
+  Ipv4Address src_ip4 = iph.GetSource ();
+  iph.SetSource (iph.GetDestination ());
+  iph.SetDestination (src_ip4);
+    
+  UdpHeader udph;
+  cp->RemoveHeader (udph);
+  NS_LOG_DEBUG ("This is the UDP header: " << udph);
+  uint16_t src_port = udph.GetSourcePort ();
+  udph.SetSourcePort (udph.GetDestinationPort ());
+  udph.SetDestinationPort (src_port);
+  
+  uint8_t *buffer = new uint8_t[cp->GetSize ()];
+  cp->CopyData(buffer, cp->GetSize ());
+  std::string s = std::string(buffer, buffer+cp->GetSize());
+  NS_LOG_DEBUG ("This is the payload: " << s);
+//   std::cout <<"  Payload: " << s << std::endl;
+  
+  cp->AddHeader (udph);
+  cp->AddHeader (iph);
+    
+  Send(cp);
     
   return true;
 }
