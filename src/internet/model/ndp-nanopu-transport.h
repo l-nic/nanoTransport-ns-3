@@ -17,27 +17,23 @@
  *
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
-#ifndef NANOPU_ARCHT_H
-#define NANOPU_ARCHT_H
+
+#ifndef NDP_NANOPU_TRANSPORT_H
+#define NDP_NANOPU_TRANSPORT_H
 
 #include "ns3/object.h"
+#include "ns3/nanopu-archt.h"
 
 namespace ns3 {
-    
-class Node;
-
-/**
- * \ingroup network
- * \defgroup nanopu-archt NanoPU Architecture
- */
 
 /**
  * \ingroup nanopu-archt
  *
- * \brief Architecture for devices to replace internet and transport layers
+ * \brief Transport Specific Architecture for devices to replace internet and transport layers.
+ *        This version of the architecture implements specifically the NDP transport protocol.
  *
  */
-class NanoPuArcht : public Object
+class NdpNanoPuArcht : public NanoPuArcht
 {
 public:
   /**
@@ -45,18 +41,12 @@ public:
    * \return the object TypeId
    */
   static TypeId GetTypeId (void);
-
-  NanoPuArcht (Ptr<Node> node);
-  ~NanoPuArcht (void);
+  
+  NdpNanoPuArcht (Ptr<Node> node);
+  virtual ~NdpNanoPuArcht (void);
   
   /**
-   * \brief Return the node this architecture is associated with.
-   * \returns the node
-   */
-  Ptr<Node> GetNode (void);
-  
-  /**
-   * \brief Bind the architecture to specific device.
+   * \brief Bind to the architecture to specific device.
    *
    * This method corresponds to using setsockopt() SO_BINDTODEVICE
    * of real network or BSD sockets.   If set, this option will
@@ -74,31 +64,21 @@ public:
    * \param netdevice Pointer to NetDevice of desired interface
    * \returns nothing
    */
-  virtual void BindToNetDevice (Ptr<NetDevice> netdevice);
-
+  void BindToNetDevice (Ptr<NetDevice> netdevice);
+  
   /**
-   * \brief Returns architecture's bound NetDevice, if any.
+   * \brief Implements programmable ingress pipeline architecture.
    *
-   * This method corresponds to using getsockopt() SO_BINDTODEVICE
-   * of real network or BSD sockets.
-   * 
-   * 
-   * \returns Pointer to interface.
+   * \param device Pointer to NetDevice of desired interface
+   * \param p Pointer to the arriving packet
+   * \param protocol L3 protocol of the incomming packet (Can assume IPv4 for nanoPU)
+   * \param from The L2 source address of the incoming packet 
+   * \returns boolean to check successful completion of the packet processing
    */
-  Ptr<NetDevice> GetBoundNetDevice (void); 
-  
-  virtual bool Send (Ptr<Packet> p, const Address &dest);
-  
-  virtual bool IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
-                            uint16_t protocol, const Address &from);
-  
-protected:
-
-    Ptr<Node>      m_node; //!< the node this architecture is located at.
-    Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
-    
-    uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
+  bool IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+                    uint16_t protocol, const Address &from);
 };
-    
+
 } // namespace ns3
-#endif
+
+#endif /* NDP_NANOPU_TRANSPORT */

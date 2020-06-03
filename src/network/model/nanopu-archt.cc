@@ -40,14 +40,19 @@ TypeId NanoPuArcht::GetTypeId (void)
   return tid;
 }
 
+/*
+ * NanoPu Architecture requires a transport module.
+ * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
+ */
 NanoPuArcht::NanoPuArcht (Ptr<Node> node)
 {
   NS_LOG_FUNCTION (this);
-  
-  m_node = node;
-  m_boundnetdevice = 0;
 }
 
+/*
+ * NanoPu Architecture requires a transport module.
+ * see ../../internet/model/.*-nanopu-transport.{h/cc) for destructor
+ */
 NanoPuArcht::~NanoPuArcht ()
 {
   NS_LOG_FUNCTION (this);
@@ -59,11 +64,17 @@ NanoPuArcht::GetNode (void)
 {
   return m_node;
 }
-    
+
+/*
+ * NanoPu Architecture requires a transport module. The function below
+ * is a reference implementation for future transport modules.
+ * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
+ */
 void
 NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
 {
   NS_LOG_FUNCTION (this << netdevice);
+    
   if (netdevice != 0)
     {
       bool found = false;
@@ -78,7 +89,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
       NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
   m_boundnetdevice = netdevice;
-  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
+  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::IngressPipe, this));
   m_mtu = m_boundnetdevice->GetMtu ();
   return;
 }
@@ -91,7 +102,7 @@ NanoPuArcht::GetBoundNetDevice ()
 }
     
 bool
-NanoPuArcht::Send (Ptr<Packet> p)
+NanoPuArcht::Send (Ptr<Packet> p, const Address &dest)
 {
   NS_LOG_FUNCTION (this << p);
   NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
@@ -106,53 +117,21 @@ NanoPuArcht::Send (Ptr<Packet> p)
   
   where dest is the dstIP provided by the AppHeader
   */
-    
-  /*
-   * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
-   *             packet on L2 is equivalent to sending a unicast packet.
-   * TODO: There should be a clever way of resolving the destination MAC address of the 
-   *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
-   */
-  return m_boundnetdevice->Send (p, m_boundnetdevice->GetBroadcast (), 0x0800);
+
+  return m_boundnetdevice->Send (p, dest, 0x0800);
 }
-    
-bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+
+/*
+ * NanoPu Architecture requires a transport module. The function below
+ * is a reference implementation for future transport modules.
+ * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
+ */
+bool NanoPuArcht::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
-  Ptr<Packet> cp = p->Copy ();
-  NS_LOG_FUNCTION (this << cp);
-  NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU received a packet of size " << cp->GetSize ());
+  NS_LOG_FUNCTION (this << p);
     
-  cp->Print (std::cout);
-  std::cout << std::endl;
-    
-  Ipv4Header iph;
-  cp->RemoveHeader (iph);
-  NS_LOG_DEBUG ("This is the IP header: " << iph);
-  Ipv4Address src_ip4 = iph.GetSource ();
-  iph.SetSource (iph.GetDestination ());
-  iph.SetDestination (src_ip4);
-    
-  UdpHeader udph;
-  cp->RemoveHeader (udph);
-  NS_LOG_DEBUG ("This is the UDP header: " << udph);
-  uint16_t src_port = udph.GetSourcePort ();
-  udph.SetSourcePort (udph.GetDestinationPort ());
-  udph.SetDestinationPort (src_port);
-  
-  uint8_t *buffer = new uint8_t[cp->GetSize ()];
-  cp->CopyData(buffer, cp->GetSize ());
-  std::string s = std::string(buffer, buffer+cp->GetSize());
-  NS_LOG_DEBUG ("This is the payload: " << s);
-//   std::cout <<"  Payload: " << s << std::endl;
-  
-  cp->AddHeader (udph);
-  cp->AddHeader (iph);
-    
-  Send(cp);
-    
-  return true;
+  return false;
 }
     
 } // namespace ns3

@@ -21,7 +21,6 @@
 #ifndef NDP_HEADER_H
 #define NDP_HEADER_H
 
-#include <stdint.h>
 #include "ns3/header.h"
 
 namespace ns3 {
@@ -142,16 +141,16 @@ public:
   /**
    * \brief NDP flag field values
    */
-  typedef enum
+  typedef enum Flags_t
   {
-    DATA = 0,  //!< DATA Packet
-    ACK  = 1,  //!< ACK
-    NACK  = 2, //!< NACK
-    PULL  = 4, //!< PULL
-    CHOP  = 8, //!< CHOP
-    F1  = 16,  //!< Empty for future reference
-    F2  = 32,  //!< Empty for future reference
-    F3  = 64   //!< Empty for future reference
+    DATA = 1,  //!< DATA Packet
+    ACK  = 2,  //!< ACK
+    NACK  = 4, //!< NACK
+    PULL  = 8, //!< PULL
+    CHOP  = 16, //!< CHOP
+    F1  = 32,  //!< Empty for future reference
+    F2  = 64,  //!< Empty for future reference
+    F3  = 128   //!< Empty for future reference
   } Flags_t;
   
 private:
