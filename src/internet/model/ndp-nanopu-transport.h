@@ -21,11 +21,45 @@
 #ifndef NDP_NANOPU_TRANSPORT_H
 #define NDP_NANOPU_TRANSPORT_H
 
+#include <unordered_map>
+
 #include "ns3/object.h"
 #include "ns3/nanopu-archt.h"
 
 namespace ns3 {
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Ingress Pipeline Architecture for NanoPU with NDP Transport
+ *
+ */
+class NdpNanoPuArchtIngressPipe : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
 
+  NdpNanoPuArchtIngressPipe (void);
+  ~NdpNanoPuArchtIngressPipe (void);
+  
+  bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
+                    uint16_t protocol, const Address &from);
+                            
+  void SetReassemble (Ptr<NanoPuArchtReassemble> reassemble);
+  
+protected:
+
+    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
+
+    std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
+};
+ 
+/******************************************************************************/
+ 
 /**
  * \ingroup nanopu-archt
  *
@@ -64,7 +98,7 @@ public:
    * \param netdevice Pointer to NetDevice of desired interface
    * \returns nothing
    */
-  void BindToNetDevice (Ptr<NetDevice> netdevice);
+//   void BindToNetDevice (Ptr<NetDevice> netdevice);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.
@@ -75,9 +109,13 @@ public:
    * \param from The L2 source address of the incoming packet 
    * \returns boolean to check successful completion of the packet processing
    */
-  bool IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+  bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
-};
+
+protected:
+
+  Ptr<NdpNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
+};   
 
 } // namespace ns3
 

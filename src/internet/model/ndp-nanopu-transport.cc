@@ -18,6 +18,8 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
+#include <unordered_map>
+
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/node.h"
@@ -33,61 +35,35 @@ NS_LOG_COMPONENT_DEFINE ("NdpNanoPuArcht");
 
 NS_OBJECT_ENSURE_REGISTERED (NdpNanoPuArcht);
 
-TypeId NdpNanoPuArcht::GetTypeId (void)
+TypeId NdpNanoPuArchtIngressPipe::GetTypeId (void)
 {
-  static TypeId tid = TypeId ("ns3::NdpNanoPuArcht")
+  static TypeId tid = TypeId ("ns3::NdpNanoPuArchtIngressPipe")
     .SetParent<Object> ()
     .SetGroupName("Network")
   ;
   return tid;
 }
 
-NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
+NdpNanoPuArchtIngressPipe::NdpNanoPuArchtIngressPipe ()
 {
   NS_LOG_FUNCTION (this);
-  
-  m_node = node;
-  m_boundnetdevice = 0;
 }
 
-NdpNanoPuArcht::~NdpNanoPuArcht ()
+NdpNanoPuArchtIngressPipe::~NdpNanoPuArchtIngressPipe ()
 {
   NS_LOG_FUNCTION (this);
 }
     
-void
-NdpNanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
-{
-  NS_LOG_FUNCTION (this << netdevice);
-  if (netdevice != 0)
-    {
-      bool found = false;
-      for (uint32_t i = 0; i < GetNode ()->GetNDevices (); i++)
-        {
-          if (GetNode ()->GetDevice (i) == netdevice)
-            {
-              found = true;
-              break;
-            }
-        }
-      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
-    }
-  m_boundnetdevice = netdevice;
-  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NdpNanoPuArcht::IngressPipe, this));
-  m_mtu = m_boundnetdevice->GetMtu ();
-  return;
-}
-    
-bool NdpNanoPuArcht::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
-                                    uint16_t protocol, const Address &from)
+bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+                                             uint16_t protocol, const Address &from)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (this << cp);
   NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU received a packet of size " << cp->GetSize ());
+               " NanoPU IngressPipe received a packet of size " << cp->GetSize ());
     
-  cp->Print (std::cout);
-  std::cout << std::endl;
+//   cp->Print (std::cout);
+//   std::cout << std::endl;
     
   Ipv4Header iph;
   cp->RemoveHeader (iph);
@@ -110,8 +86,7 @@ bool NdpNanoPuArcht::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
   
   cp->AddHeader (udph);
   cp->AddHeader (iph);
-  
-      
+     
   /*
    * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
    *             packet on L2 is equivalent to sending a unicast packet.
@@ -119,7 +94,57 @@ bool NdpNanoPuArcht::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
    *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
    */
 //   Send(cp, m_boundnetdevice->GetBroadcast ());
-  Send(cp, from);
+//   Send(cp, from);
+    
+  return true;
+}
+    
+void NdpNanoPuArchtIngressPipe::SetReassemble (Ptr<NanoPuArchtReassemble> reassemble)
+{
+  NS_LOG_FUNCTION (this << reassemble);
+  
+  m_reassemble = reassemble;
+}
+
+TypeId NdpNanoPuArcht::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NdpNanoPuArcht")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
+{
+  NS_LOG_FUNCTION (this);
+  
+  m_node = node;
+  m_boundnetdevice = 0;
+  m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> ();
+  m_ingresspipe->SetReassemble (m_reassemble);
+}
+
+NdpNanoPuArcht::~NdpNanoPuArcht ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+bool NdpNanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+                                    uint16_t protocol, const Address &from)
+{
+  NS_LOG_FUNCTION (this << p);
+    
+  m_ingresspipe->IngressPipe (device, p, protocol, from);
+      
+//   /*
+//    * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
+//    *             packet on L2 is equivalent to sending a unicast packet.
+//    * TODO: There should be a clever way of resolving the destination MAC address of the 
+//    *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
+//    */
+// //   Send(cp, m_boundnetdevice->GetBroadcast ());
+//   Send(cp, from);
     
   return true;
 }

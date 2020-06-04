@@ -81,11 +81,10 @@ NdpHeader::Print (std::ostream &os) const
 uint32_t 
 NdpHeader::GetSerializedSize (void) const
 {
-  /* Note: Actually real NDP header takes 15 bytes, but
-   *       we use 30, so that Eth+IP+NDP headers make 64 bytes
-   *       which is compliant with the htsim implementation of NDP.
+  /* Note: In htsim implementation, control packets of NDP are 64 bytes
+   *       That would require another 15 bytes to be appended to the packet
    */
-  return 30; 
+  return 15; 
 }
     
 std::string

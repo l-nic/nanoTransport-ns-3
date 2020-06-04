@@ -17,6 +17,10 @@
  *
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
+#include <unordered_map>
+#include <tuple>
+#include <list>
+
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "node.h"
@@ -31,6 +35,25 @@ NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
 
 NS_OBJECT_ENSURE_REGISTERED (NanoPuArcht);
 
+TypeId NanoPuArchtReassemble::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NanoPuArchtReassemble")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NanoPuArchtReassemble::NanoPuArchtReassemble ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+NanoPuArchtReassemble::~NanoPuArchtReassemble ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
 TypeId NanoPuArcht::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::NanoPuArcht")
@@ -47,6 +70,8 @@ TypeId NanoPuArcht::GetTypeId (void)
 NanoPuArcht::NanoPuArcht (Ptr<Node> node)
 {
   NS_LOG_FUNCTION (this);
+    
+  m_reassemble = CreateObject<NanoPuArchtReassemble> ();
 }
 
 /*
@@ -89,7 +114,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
       NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
   m_boundnetdevice = netdevice;
-  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::IngressPipe, this));
+  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
   m_mtu = m_boundnetdevice->GetMtu ();
   return;
 }
@@ -126,10 +151,12 @@ NanoPuArcht::Send (Ptr<Packet> p, const Address &dest)
  * is a reference implementation for future transport modules.
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
  */
-bool NanoPuArcht::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
   NS_LOG_FUNCTION (this << p);
+  NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
+               " NanoPU received a packet of size " << p->GetSize ());
     
   return false;
 }

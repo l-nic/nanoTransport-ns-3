@@ -20,12 +20,50 @@
 #ifndef NANOPU_ARCHT_H
 #define NANOPU_ARCHT_H
 
+#include <unordered_map>
+#include <tuple>
+#include <list>
+
 #include "ns3/object.h"
+
+#define BITMAP_SIZE 20
 
 namespace ns3 {
     
 class Node;
+    
+typedef struct bitmap_t { unsigned int val : BITMAP_SIZE; } bitmap_t;
 
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Ingress Pipeline Architecture for NanoPU with NDP Transport
+ *
+ */
+class NanoPuArchtReassemble : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtReassemble (void);
+  ~NanoPuArchtReassemble (void);
+  
+protected:
+
+    std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
+    /* TODO: Fix the issue below */
+//     std::unordered_map< std::tuple<Ipv4Address, uint16_t, uint16_t>, 
+//                         uint16_t> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
+    std::unordered_map<uint16_t, uint8_t*> m_buffers; //!< message reassembly buffers, {rx_msg_id => ["pkt_0_data", ..., "pkt_N_data"]}
+    std::unordered_map<uint16_t, bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+};
+    
+/******************************************************************************/
+    
 /**
  * \ingroup network
  * \defgroup nanopu-archt NanoPU Architecture
@@ -89,7 +127,7 @@ public:
   
   virtual bool Send (Ptr<Packet> p, const Address &dest);
   
-  virtual bool IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+  virtual bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                             uint16_t protocol, const Address &from);
   
 protected:
@@ -98,6 +136,8 @@ protected:
     Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
     
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
+    
+    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
 };
     
 } // namespace ns3
