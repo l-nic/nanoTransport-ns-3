@@ -64,7 +64,7 @@ protected:
  * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
  *
  */
-class NdpNanoPuArchtEgressPipe : public Object
+class NdpNanoPuArchtEgressPipe : public NanoPuArchtEgressPipe
 {
 public:
   /**
@@ -80,6 +80,30 @@ public:
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
+};
+ 
+/******************************************************************************/
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
+ *
+ */
+class NdpNanoPuArchtPktGen : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter);
+  ~NdpNanoPuArchtPktGen (void);
+  
+protected:
+  Ptr<NanoPuArchtArbiter> m_arbiter; //!< the archt itself to be able to send packets
 };
  
 /******************************************************************************/

@@ -137,6 +137,27 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
     
   return true;
 }
+    
+TypeId NdpNanoPuArchtPktGen::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NdpNanoPuArchtPktGen")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter)
+{
+  NS_LOG_FUNCTION (this);
+    
+  m_arbiter = arbiter;
+}
+
+NdpNanoPuArchtPktGen::~NdpNanoPuArchtPktGen ()
+{
+  NS_LOG_FUNCTION (this);
+}
 
 TypeId NdpNanoPuArcht::GetTypeId (void)
 {
@@ -155,6 +176,8 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
   m_boundnetdevice = 0;
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble);
   m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
+    
+  m_arbiter->SetEgressPipe(m_egresspipe);
 }
 
 NdpNanoPuArcht::~NdpNanoPuArcht ()

@@ -51,6 +51,59 @@ typedef struct egressMeta_t {
     uint16_t pktOffset;
 }egressMeta_t;
 
+/******************************************************************************/
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Base Egress Pipeline Architecture for NanoPU. 
+ *        Every transport protocol should implement their own egress pipe inheriting from this
+ *
+ */
+class NanoPuArchtEgressPipe : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtEgressPipe ();
+  ~NanoPuArchtEgressPipe (void);
+  
+protected:
+};
+ 
+/******************************************************************************/
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Arbiter Architecture for NanoPU
+ *
+ */
+class NanoPuArchtArbiter : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtArbiter (void);
+  ~NanoPuArchtArbiter (void);
+  
+  void SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe);
+  
+protected:
+  
+  Ptr<NanoPuArchtEgressPipe> m_egressPipe;
+};
+    
+/******************************************************************************/
+    
 /**
  * \ingroup nanopu-archt
  *
@@ -155,6 +208,7 @@ protected:
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
     
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
+    Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
 };
     
 } // namespace ns3

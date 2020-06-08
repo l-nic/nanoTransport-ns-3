@@ -34,6 +34,51 @@ namespace ns3 {
 NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
 
 NS_OBJECT_ENSURE_REGISTERED (NanoPuArcht);
+    
+TypeId NanoPuArchtEgressPipe::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NanoPuArchtEgressPipe")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NanoPuArchtEgressPipe::NanoPuArchtEgressPipe ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+NanoPuArchtEgressPipe::~NanoPuArchtEgressPipe ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+TypeId NanoPuArchtArbiter::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NanoPuArchtArbiter")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NanoPuArchtArbiter::NanoPuArchtArbiter ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+NanoPuArchtArbiter::~NanoPuArchtArbiter ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+void NanoPuArchtArbiter::SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe)
+{
+  NS_LOG_FUNCTION (this);
+    
+  m_egressPipe = egressPipe;
+}
 
 TypeId NanoPuArchtReassemble::GetTypeId (void)
 {
@@ -72,6 +117,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node)
   NS_LOG_FUNCTION (this);
     
   m_reassemble = CreateObject<NanoPuArchtReassemble> ();
+  m_arbiter = CreateObject<NanoPuArchtArbiter> ();
 }
 
 /*
