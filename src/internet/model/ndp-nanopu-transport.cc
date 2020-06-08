@@ -176,6 +176,7 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
   m_boundnetdevice = 0;
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble);
   m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
+  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (m_arbiter);
     
   m_arbiter->SetEgressPipe(m_egresspipe);
 }

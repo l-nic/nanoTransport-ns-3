@@ -143,6 +143,7 @@ protected:
 
   Ptr<NdpNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<NdpNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
+  Ptr<NdpNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator for the archt
 };   
 
 } // namespace ns3
