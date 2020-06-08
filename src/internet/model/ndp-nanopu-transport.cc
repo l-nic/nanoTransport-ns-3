@@ -44,9 +44,11 @@ TypeId NdpNanoPuArchtIngressPipe::GetTypeId (void)
   return tid;
 }
 
-NdpNanoPuArchtIngressPipe::NdpNanoPuArchtIngressPipe ()
+NdpNanoPuArchtIngressPipe::NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble)
 {
   NS_LOG_FUNCTION (this);
+    
+  m_reassemble = reassemble;
 }
 
 NdpNanoPuArchtIngressPipe::~NdpNanoPuArchtIngressPipe ()
@@ -99,11 +101,41 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
   return true;
 }
     
-void NdpNanoPuArchtIngressPipe::SetReassemble (Ptr<NanoPuArchtReassemble> reassemble)
+TypeId NdpNanoPuArchtEgressPipe::GetTypeId (void)
 {
-  NS_LOG_FUNCTION (this << reassemble);
-  
-  m_reassemble = reassemble;
+  static TypeId tid = TypeId ("ns3::NdpNanoPuArchtEgressPipe")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NdpNanoPuArchtEgressPipe::NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht)
+{
+  NS_LOG_FUNCTION (this);
+    
+  m_nanoPuArcht = nanoPuArcht;
+}
+
+NdpNanoPuArchtEgressPipe::~NdpNanoPuArchtEgressPipe ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
+{
+  NS_LOG_FUNCTION (this << p);
+     
+  /*
+   * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
+   *             packet on L2 is equivalent to sending a unicast packet.
+   * TODO: There should be a clever way of resolving the destination MAC address of the 
+   *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
+   */
+//   m_nanoPuArcht->Send(cp, m_boundnetdevice->GetBroadcast ());
+//   m_nanoPuArcht->Send(cp, from);
+    
+  return true;
 }
 
 TypeId NdpNanoPuArcht::GetTypeId (void)
@@ -121,8 +153,8 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
   
   m_node = node;
   m_boundnetdevice = 0;
-  m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> ();
-  m_ingresspipe->SetReassemble (m_reassemble);
+  m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble);
+  m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
 }
 
 NdpNanoPuArcht::~NdpNanoPuArcht ()

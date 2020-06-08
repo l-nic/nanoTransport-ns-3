@@ -33,6 +33,23 @@ namespace ns3 {
 class Node;
     
 typedef struct bitmap_t { unsigned int val : BITMAP_SIZE; } bitmap_t;
+typedef struct reassembleMeta_t {
+    uint16_t rxMsgId;
+    Ipv4Address srcIP;
+    uint16_t srcPort;
+    uint16_t txMsgId;
+    uint16_t msgLen;
+    uint16_t pktOffset;
+}reassembleMeta_t;
+typedef struct egressMeta_t {
+    bool isData;
+    Ipv4Address dstIP;
+    uint16_t srcPort;
+    uint16_t dstPort;
+    uint16_t txMsgId;
+    uint16_t msgLen;
+    uint16_t pktOffset;
+}egressMeta_t;
 
 /**
  * \ingroup nanopu-archt

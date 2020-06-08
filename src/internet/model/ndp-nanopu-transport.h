@@ -43,19 +43,43 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtIngressPipe (void);
+  NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble);
   ~NdpNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
-                            
-  void SetReassemble (Ptr<NanoPuArchtReassemble> reassemble);
   
 protected:
 
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
 
     std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
+};
+ 
+/******************************************************************************/
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
+ *
+ */
+class NdpNanoPuArchtEgressPipe : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
+  ~NdpNanoPuArchtEgressPipe (void);
+  
+  bool EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
+  
+protected:
+  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
 };
  
 /******************************************************************************/
@@ -80,27 +104,6 @@ public:
   virtual ~NdpNanoPuArcht (void);
   
   /**
-   * \brief Bind to the architecture to specific device.
-   *
-   * This method corresponds to using setsockopt() SO_BINDTODEVICE
-   * of real network or BSD sockets.   If set, this option will
-   * force packets to leave the bound device regardless of the device that
-   * IP routing would naturally choose.  In the receive direction, only
-   * packets received from the bound interface will be delivered.
-   *
-   * This option has no particular relationship to binding sockets to
-   * an address via Socket::Bind ().  It is possible to bind sockets to a 
-   * specific IP address on the bound interface by calling both 
-   * Socket::Bind (address) and Socket::BindToNetDevice (device), but it
-   * is also possible to bind to mismatching device and address, even if
-   * the socket can not receive any packets as a result.
-   *
-   * \param netdevice Pointer to NetDevice of desired interface
-   * \returns nothing
-   */
-//   void BindToNetDevice (Ptr<NetDevice> netdevice);
-  
-  /**
    * \brief Implements programmable ingress pipeline architecture.
    *
    * \param device Pointer to NetDevice of desired interface
@@ -115,6 +118,7 @@ public:
 protected:
 
   Ptr<NdpNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
+  Ptr<NdpNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
 };   
 
 } // namespace ns3

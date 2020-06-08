@@ -35,8 +35,8 @@ NS_OBJECT_ENSURE_REGISTERED (NdpHeader);
  * problems so you can see the patterns in memory.
  */
 NdpHeader::NdpHeader ()
-  : m_sourcePort (0xfffd),
-    m_destinationPort (0xfffd),
+  : m_srcPort (0xfffd),
+    m_dstPort (0xfffd),
     m_txMsgId (0),
     m_flags (0),
     m_msgLen (0),
@@ -70,7 +70,7 @@ void
 NdpHeader::Print (std::ostream &os) const
 {
   os << "length: " << m_payloadSize + GetSerializedSize ()
-     << " " << m_sourcePort << " > " << m_destinationPort
+     << " " << m_srcPort << " > " << m_dstPort
      << " msgLen: " << m_msgLen
      << " pktOffset: " << m_pktOffset
      << " pullOffset: " << m_pullOffset
@@ -120,8 +120,8 @@ NdpHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
 
-  i.WriteHtonU16 (m_sourcePort);
-  i.WriteHtonU16 (m_destinationPort);
+  i.WriteHtonU16 (m_srcPort);
+  i.WriteHtonU16 (m_dstPort);
   i.WriteHtonU16 (m_txMsgId);
   i.WriteU8 (m_flags);
   i.WriteHtonU16 (m_msgLen);
@@ -133,8 +133,8 @@ uint32_t
 NdpHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-  m_sourcePort = i.ReadNtohU16 ();
-  m_destinationPort = i.ReadNtohU16 ();
+  m_srcPort = i.ReadNtohU16 ();
+  m_dstPort = i.ReadNtohU16 ();
   m_txMsgId = i.ReadNtohU16 ();
   m_flags = i.ReadU8 ();
   m_msgLen = i.ReadNtohU16 ();
@@ -146,25 +146,25 @@ NdpHeader::Deserialize (Buffer::Iterator start)
 }
     
 void 
-NdpHeader::SetSourcePort (uint16_t port)
+NdpHeader::SetSrcPort (uint16_t port)
 {
-  m_sourcePort = port;
+  m_srcPort = port;
 }
 uint16_t 
-NdpHeader::GetSourcePort (void) const
+NdpHeader::GetSrcPort (void) const
 {
-  return m_sourcePort;
+  return m_srcPort;
 }
     
 void 
-NdpHeader::SetDestinationPort (uint16_t port)
+NdpHeader::SetDstPort (uint16_t port)
 {
-  m_sourcePort = port;
+  m_dstPort = port;
 }
 uint16_t 
-NdpHeader::GetDestinationPort (void) const
+NdpHeader::GetDstPort (void) const
 {
-  return m_sourcePort;
+  return m_dstPort;
 }
     
 void 
