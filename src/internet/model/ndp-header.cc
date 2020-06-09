@@ -197,7 +197,7 @@ NdpHeader::SetMsgLen (uint16_t msgLen)
 uint16_t 
 NdpHeader::GetMsgLen (void) const
 {
-  return m_txMsgId;
+  return m_msgLen;
 }
     
 void 
