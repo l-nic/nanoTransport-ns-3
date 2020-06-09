@@ -34,6 +34,8 @@ namespace ns3 {
 NS_LOG_COMPONENT_DEFINE ("NdpNanoPuArcht");
 
 NS_OBJECT_ENSURE_REGISTERED (NdpNanoPuArcht);
+    
+/******************************************************************************/
 
 TypeId NdpNanoPuArchtIngressPipe::GetTypeId (void)
 {
@@ -101,6 +103,8 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
   return true;
 }
     
+/******************************************************************************/
+    
 TypeId NdpNanoPuArchtEgressPipe::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::NdpNanoPuArchtEgressPipe")
@@ -138,6 +142,8 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   return true;
 }
     
+/******************************************************************************/
+    
 TypeId NdpNanoPuArchtPktGen::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::NdpNanoPuArchtPktGen")
@@ -159,6 +165,8 @@ NdpNanoPuArchtPktGen::~NdpNanoPuArchtPktGen ()
   NS_LOG_FUNCTION (this);
 }
 
+/******************************************************************************/
+    
 TypeId NdpNanoPuArcht::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::NdpNanoPuArcht")
@@ -168,12 +176,10 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
   return tid;
 }
 
-NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node) : NanoPuArcht (node)
+NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node, uint16_t maxMessages) : NanoPuArcht (node, maxMessages)
 {
   NS_LOG_FUNCTION (this);
   
-  m_node = node;
-  m_boundnetdevice = 0;
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble);
   m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
   m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (m_arbiter);

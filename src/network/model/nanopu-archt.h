@@ -23,16 +23,18 @@
 #include <unordered_map>
 #include <tuple>
 #include <list>
+#include <math.h>
 
 #include "ns3/object.h"
 
-#define BITMAP_SIZE 20
+// Note that bitmap_t is defined as uint64_t below
+#define BITMAP_SIZE 64
 
 namespace ns3 {
     
 class Node;
     
-typedef struct bitmap_t { unsigned int val : BITMAP_SIZE; } bitmap_t;
+typedef uint64_t bitmap_t ;
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIP;
@@ -41,6 +43,13 @@ typedef struct reassembleMeta_t {
     uint16_t msgLen;
     uint16_t pktOffset;
 }reassembleMeta_t;
+typedef struct rxMsgInfoMeta_t {
+    uint16_t rxMsgId;
+    uint16_t ackNo; //!< Next expected packet
+    bool isNewMsg;
+    bool isNewPkt;
+    bool success;
+}rxMsgInfoMeta_t;
 typedef struct egressMeta_t {
     bool isData;
     Ipv4Address dstIP;
@@ -103,6 +112,80 @@ protected:
 };
     
 /******************************************************************************/
+   
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Packetization Block for NanoPU Architecture
+ *
+ */
+class NanoPuArchtPacketize : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter);
+  ~NanoPuArchtPacketize (void);
+  
+protected:
+  
+  Ptr<NanoPuArchtArbiter> m_arbiter;
+};
+    
+/******************************************************************************/
+    
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Timer Module for NanoPU Architecture
+ *
+ */
+class NanoPuArchtTimer : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize);
+  ~NanoPuArchtTimer (void);
+  
+protected:
+  
+  Ptr<NanoPuArchtPacketize> m_packetize;
+};
+    
+/******************************************************************************/
+
+/* The rxMsgIdTable in the Reassembly Buffer requires a lookup table with multiple
+ * key values. Thus we define appropriate template functions below for the 
+ * corresponding unordered map below.
+ */
+typedef std::tuple<uint32_t, uint16_t, uint16_t> rxMsgIdTableKey_t;
+struct rxMsgIdTable_hash : public std::unary_function<rxMsgIdTableKey_t, std::size_t>
+{
+  std::size_t operator()(const rxMsgIdTableKey_t& k) const
+    {
+      return std::get<0>(k) ^ std::get<1>(k) ^ std::get<2>(k);
+    }
+};
+struct rxMsgIdTable_key_equal : public std::binary_function<rxMsgIdTableKey_t, rxMsgIdTableKey_t, bool>
+{
+  bool operator()(const rxMsgIdTableKey_t& v0, const rxMsgIdTableKey_t& v1) const
+    {
+      return (
+        std::get<0>(v0) == std::get<0>(v1) &&
+        std::get<1>(v0) == std::get<1>(v1) &&
+        std::get<2>(v0) == std::get<2>(v1)
+      );
+    }
+};
     
 /**
  * \ingroup nanopu-archt
@@ -119,15 +202,17 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtReassemble (void);
+  NanoPuArchtReassemble (uint16_t maxMessages);
   ~NanoPuArchtReassemble (void);
+  
+  rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
+                                uint16_t msgLen, uint16_t pktOffset);
   
 protected:
 
     std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
-    /* TODO: Fix the issue below */
-//     std::unordered_map< std::tuple<Ipv4Address, uint16_t, uint16_t>, 
-//                         uint16_t> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
+    std::unordered_map<const rxMsgIdTableKey_t, uint16_t, rxMsgIdTable_hash, 
+                       rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
     std::unordered_map<uint16_t, uint8_t*> m_buffers; //!< message reassembly buffers, {rx_msg_id => ["pkt_0_data", ..., "pkt_N_data"]}
     std::unordered_map<uint16_t, bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
 };
@@ -154,7 +239,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArcht (Ptr<Node> node);
+  NanoPuArcht (Ptr<Node> node, uint16_t m_maxMessages=100);
   ~NanoPuArcht (void);
   
   /**
@@ -206,9 +291,12 @@ protected:
     Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
     
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
+    uint16_t m_maxMessages; //!< Max number of msg Reassembly and Packetize modules can handle at a time
     
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
+    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization block of the architecture
+    Ptr<NanoPuArchtTimer> m_timer; //!< the timer module of the architecture
 };
     
 } // namespace ns3

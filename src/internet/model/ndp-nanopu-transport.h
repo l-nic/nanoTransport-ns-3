@@ -124,7 +124,7 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  NdpNanoPuArcht (Ptr<Node> node);
+  NdpNanoPuArcht (Ptr<Node> node, uint16_t maxMessages=100);
   virtual ~NdpNanoPuArcht (void);
   
   /**

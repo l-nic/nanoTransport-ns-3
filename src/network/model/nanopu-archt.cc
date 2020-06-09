@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <list>
+#include <numeric>
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
@@ -34,6 +35,15 @@ namespace ns3 {
 NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
 
 NS_OBJECT_ENSURE_REGISTERED (NanoPuArcht);
+    
+/*
+ * \brief Find the first set bit in the provided bitmap
+ * 
+ * \returns Index of first 1 from right to left, in binary representation of a bitmap
+ */
+uint16_t getFirstSetBitPos(bitmap_t n) { return (n!=0) ? log2(n & -n) : BITMAP_SIZE; };
+    
+/******************************************************************************/
     
 TypeId NanoPuArchtEgressPipe::GetTypeId (void)
 {
@@ -53,6 +63,8 @@ NanoPuArchtEgressPipe::~NanoPuArchtEgressPipe ()
 {
   NS_LOG_FUNCTION (this);
 }
+    
+/******************************************************************************/
     
 TypeId NanoPuArchtArbiter::GetTypeId (void)
 {
@@ -79,6 +91,54 @@ void NanoPuArchtArbiter::SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe)
     
   m_egressPipe = egressPipe;
 }
+    
+/******************************************************************************/
+    
+TypeId NanoPuArchtPacketize::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NanoPuArchtPacketize")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter)
+{
+  NS_LOG_FUNCTION (this);
+    
+  m_arbiter = arbiter;
+}
+
+NanoPuArchtPacketize::~NanoPuArchtPacketize ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+/******************************************************************************/
+    
+TypeId NanoPuArchtTimer::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::NanoPuArchtTimer")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+  ;
+  return tid;
+}
+
+NanoPuArchtTimer::NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize)
+{
+  NS_LOG_FUNCTION (this);
+    
+  m_packetize = packetize;
+}
+
+NanoPuArchtTimer::~NanoPuArchtTimer ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+/******************************************************************************/
 
 TypeId NanoPuArchtReassemble::GetTypeId (void)
 {
@@ -89,15 +149,74 @@ TypeId NanoPuArchtReassemble::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtReassemble::NanoPuArchtReassemble ()
+NanoPuArchtReassemble::NanoPuArchtReassemble (uint16_t maxMessages)
 {
   NS_LOG_FUNCTION (this);
+    
+  m_rxMsgIdFreeList.resize(maxMessages);
+  std::iota(m_rxMsgIdFreeList.begin(), m_rxMsgIdFreeList.end(), 0);
 }
 
 NanoPuArchtReassemble::~NanoPuArchtReassemble ()
 {
   NS_LOG_FUNCTION (this);
 }
+
+rxMsgInfoMeta_t 
+NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, 
+                                     uint16_t txMsgId, uint16_t msgLen, 
+                                     uint16_t pktOffset)
+{
+  NS_LOG_FUNCTION (this << srcIp << srcPort << txMsgId << msgLen << pktOffset);
+    
+  rxMsgInfoMeta_t rxMsgInfo;
+  rxMsgInfo.isNewMsg = false;
+  rxMsgInfo.isNewPkt = false;
+  rxMsgInfo.success = false;
+    
+  rxMsgIdTableKey_t key (srcIp.Get (), srcPort, txMsgId);
+  NS_LOG_INFO ("Processing GetRxMsgInfo extern call for: " << srcIp.Get () 
+                                                     << "-" << srcPort
+                                                     << "-" << txMsgId); 
+  auto entry = m_rxMsgIdTable.find(key);
+  if (entry != m_rxMsgIdTable.end())
+  {
+    rxMsgInfo.rxMsgId = entry->second;
+    NS_LOG_LOGIC("Found rxMsgId: " << entry->second);
+      
+    // compute the beginning of the inflight window
+    rxMsgInfo.ackNo = getFirstSetBitPos(~m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second);
+    if (rxMsgInfo.ackNo == BITMAP_SIZE)
+    {
+      NS_LOG_LOGIC("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");
+      rxMsgInfo.ackNo = msgLen;
+    }
+      
+    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second & (1<<pktOffset)) == 0;
+    rxMsgInfo.success = true;
+  }
+  // try to allocate an rx_msg_id
+  else if (m_rxMsgIdFreeList.size() > 0)
+  {
+    rxMsgInfo.rxMsgId = m_rxMsgIdFreeList.front ();
+    NS_LOG_LOGIC("Allocating rxMsgId: " << rxMsgInfo.rxMsgId);
+    m_rxMsgIdFreeList.pop_front ();
+     
+    m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
+    // TODO: allocate buffer to reassemble the message
+     //  num_pkts = compute_num_pkts(msg_len)
+     //  self.buffers[rx_msg_id] = ["" for i in range(num_pkts)]
+    m_receivedBitmap.insert({rxMsgInfo.rxMsgId,0});
+    rxMsgInfo.ackNo = 0;
+    rxMsgInfo.isNewMsg = true;
+    rxMsgInfo.isNewPkt = true;
+    rxMsgInfo.success = true;
+  }
+    
+  return rxMsgInfo;
+}
+    
+/******************************************************************************/
     
 TypeId NanoPuArcht::GetTypeId (void)
 {
@@ -112,12 +231,18 @@ TypeId NanoPuArcht::GetTypeId (void)
  * NanoPu Architecture requires a transport module.
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
  */
-NanoPuArcht::NanoPuArcht (Ptr<Node> node)
+NanoPuArcht::NanoPuArcht (Ptr<Node> node, uint16_t maxMessages)
 {
   NS_LOG_FUNCTION (this);
     
-  m_reassemble = CreateObject<NanoPuArchtReassemble> ();
+  m_node = node;
+  m_boundnetdevice = 0;
+  m_maxMessages = maxMessages;
+    
+  m_reassemble = CreateObject<NanoPuArchtReassemble> (m_maxMessages);
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
+  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter);
+  m_timer = CreateObject<NanoPuArchtTimer> (m_packetize);
 }
 
 /*
