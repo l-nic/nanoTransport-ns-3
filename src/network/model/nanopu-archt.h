@@ -26,6 +26,7 @@
 #include <math.h>
 
 #include "ns3/object.h"
+#include "ns3/callback.h"
 
 // Note that bitmap_t is defined as uint64_t below
 #define BITMAP_SIZE 64
@@ -205,16 +206,31 @@ public:
   NanoPuArchtReassemble (uint16_t maxMessages);
   ~NanoPuArchtReassemble (void);
   
+  /**
+   * \brief Allows applications to set a callback for every reassembled msg on RX
+   * \param reassembledMsgCb Callback provided by application
+   */
+  void SetRecvCallback (Callback<void, Ptr<NanoPuArchtReassemble>, Ptr<Packet> > reassembledMsgCb);
+  /**
+   * \brief Notifies the application every time a message is reassembled
+   * \param msg The message that is reassembled with application header and should be given to the application
+   */
+  void NotifyApplications (Ptr<Packet> msg);
+  
   rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
                                 uint16_t msgLen, uint16_t pktOffset);
   
 protected:
 
     std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
-    std::unordered_map<const rxMsgIdTableKey_t, uint16_t, rxMsgIdTable_hash, 
+    std::unordered_map<const rxMsgIdTableKey_t, 
+                       uint16_t, 
+                       rxMsgIdTable_hash, 
                        rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
     std::unordered_map<uint16_t, uint8_t*> m_buffers; //!< message reassembly buffers, {rx_msg_id => ["pkt_0_data", ..., "pkt_N_data"]}
     std::unordered_map<uint16_t, bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+    
+    Callback<void, Ptr<NanoPuArchtReassemble>, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
 };
     
 /******************************************************************************/
@@ -279,6 +295,16 @@ public:
    * \returns Pointer to interface.
    */
   Ptr<NetDevice> GetBoundNetDevice (void); 
+  
+  /**
+   * \brief Returns architecture's Reassembly Buffer.
+   *
+   * This method allows applications to get the reassembly buffer
+   * and set callback to be notified for every reassembled message
+   * 
+   * \returns Pointer to the reassembly buffer.
+   */
+  Ptr<NanoPuArchtReassemble> GetReassemblyBuffer (void);
   
   virtual bool Send (Ptr<Packet> p, const Address &dest);
   

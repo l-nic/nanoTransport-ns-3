@@ -161,6 +161,28 @@ NanoPuArchtReassemble::~NanoPuArchtReassemble ()
 {
   NS_LOG_FUNCTION (this);
 }
+    
+void 
+NanoPuArchtReassemble::SetRecvCallback (Callback<void, 
+                                                 Ptr<NanoPuArchtReassemble>, 
+                                                 Ptr<Packet> > reassembledMsgCb)
+{
+  NS_LOG_FUNCTION (this << &reassembledMsgCb);
+  m_reassembledMsgCb = reassembledMsgCb;
+}
+    
+void NanoPuArchtReassemble::NotifyApplications (Ptr<Packet> msg)
+{
+  NS_LOG_FUNCTION (this << msg);
+  if (!m_reassembledMsgCb.IsNull ())
+    {
+      m_reassembledMsgCb (this, msg);
+    }
+  else
+    {
+      NS_LOG_ERROR ("Error: NanoPU received a message but no application is looking for it" << this << msg);
+    }
+}
 
 rxMsgInfoMeta_t 
 NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, 
@@ -295,6 +317,13 @@ NanoPuArcht::GetBoundNetDevice ()
 {
   NS_LOG_FUNCTION (this);
   return m_boundnetdevice;
+}
+    
+Ptr<NanoPuArchtReassemble> 
+NanoPuArcht::GetReassemblyBuffer (void)
+{
+  NS_LOG_FUNCTION (this);
+  return m_reassemble;
 }
     
 bool
