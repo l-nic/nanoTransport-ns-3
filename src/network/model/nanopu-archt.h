@@ -219,6 +219,8 @@ public:
   
   rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
                                 uint16_t msgLen, uint16_t pktOffset);
+                                
+  void ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta);
   
 protected:
 
@@ -227,10 +229,15 @@ protected:
                        uint16_t, 
                        rxMsgIdTable_hash, 
                        rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
-    std::unordered_map<uint16_t, uint8_t*> m_buffers; //!< message reassembly buffers, {rx_msg_id => ["pkt_0_data", ..., "pkt_N_data"]}
-    std::unordered_map<uint16_t, bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+    std::unordered_map<uint16_t,
+                       std::map<uint16_t, 
+                                Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
+    std::unordered_map<uint16_t, 
+                       bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
     
-    Callback<void, Ptr<NanoPuArchtReassemble>, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
+    Callback<void, 
+             Ptr<NanoPuArchtReassemble>, 
+             Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
 };
     
 /******************************************************************************/

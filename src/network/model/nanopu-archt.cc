@@ -197,7 +197,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   rxMsgInfo.success = false;
     
   rxMsgIdTableKey_t key (srcIp.Get (), srcPort, txMsgId);
-  NS_LOG_INFO ("Processing GetRxMsgInfo extern call for: " << srcIp.Get () 
+  NS_LOG_LOGIC ("Processing GetRxMsgInfo extern call for: " << srcIp.Get () 
                                                      << "-" << srcPort
                                                      << "-" << txMsgId); 
   auto entry = m_rxMsgIdTable.find(key);
@@ -225,10 +225,10 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     m_rxMsgIdFreeList.pop_front ();
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
-    // TODO: allocate buffer to reassemble the message
-     //  num_pkts = compute_num_pkts(msg_len)
-     //  self.buffers[rx_msg_id] = ["" for i in range(num_pkts)]
     m_receivedBitmap.insert({rxMsgInfo.rxMsgId,0});
+    std::map<uint16_t,Ptr<Packet>> buffer;
+    m_buffers.insert({rxMsgInfo.rxMsgId,buffer});
+    
     rxMsgInfo.ackNo = 0;
     rxMsgInfo.isNewMsg = true;
     rxMsgInfo.isNewPkt = true;
@@ -236,6 +236,33 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   }
     
   return rxMsgInfo;
+}
+    
+void 
+NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
+{
+  NS_LOG_FUNCTION (this << pkt);
+    
+  NS_LOG_LOGIC ("Processing pkt "<< meta.pktOffset 
+                << " for msg " << meta.rxMsgId);
+    
+  /* Record pkt in buffer*/
+  auto buffer = m_buffers.find (meta.rxMsgId);
+  NS_ASSERT (buffer != m_buffers.end ());
+  buffer->second [meta.pktOffset] = pkt;
+    
+  /* Mark the packet as received*/
+  // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
+  m_receivedBitmap [meta.rxMsgId] |= (1<<meta.pktOffset);
+    
+  /* Check if all pkts have been received*/
+  if (m_receivedBitmap [meta.rxMsgId] == static_cast<bitmap_t>((1<<meta.msgLen)-1))
+  {
+    NS_LOG_LOGIC ("All packets have been received for msg " << meta.rxMsgId);
+      
+    /* Push the reassembled msg to the applications*/
+    
+  }
 }
     
 /******************************************************************************/
