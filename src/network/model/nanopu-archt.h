@@ -26,6 +26,7 @@
 #include <math.h>
 
 #include "ns3/object.h"
+#include "ns3/ipv4-header.h"
 #include "ns3/callback.h"
 
 // Note that bitmap_t is defined as uint64_t below
@@ -38,7 +39,7 @@ class Node;
 typedef uint64_t bitmap_t ;
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
-    Ipv4Address srcIP;
+    Ipv4Address srcIp;
     uint16_t srcPort;
     uint16_t txMsgId;
     uint16_t msgLen;

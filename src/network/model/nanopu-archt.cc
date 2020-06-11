@@ -27,6 +27,7 @@
 #include "node.h"
 #include "nanopu-archt.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/nanopu-app-header.h"
 
 #include "ns3/udp-header.h"
 
@@ -261,7 +262,25 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     NS_LOG_LOGIC ("All packets have been received for msg " << meta.rxMsgId);
       
     /* Push the reassembled msg to the applications*/
-    
+    Ptr<Packet> msg = Create<Packet> ();
+    for (uint16_t i=0; i<meta.msgLen; i++)
+    {
+      msg->AddAtEnd (buffer->second[i]);
+    }
+    NanoPuAppHeader apphdr;
+    apphdr.SetDstIp (meta.srcIp);
+    apphdr.SetDstPort (meta.srcPort);
+    apphdr.SetMsgLen (meta.msgLen);
+    apphdr.SetPayloadSize (msg->GetSize ());
+    msg->AddHeader (apphdr);
+    NotifyApplications (msg);
+      
+    /* Free the rxMsgId*/
+    rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
+    auto map = m_rxMsgIdTable.find (key);
+    NS_ASSERT (meta.rxMsgId == map->second);
+    m_rxMsgIdTable.erase (map);
+    m_rxMsgIdFreeList.push_back (meta.rxMsgId);
   }
 }
     
