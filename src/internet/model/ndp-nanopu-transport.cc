@@ -64,32 +64,32 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (this << cp);
   NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU IngressPipe received a packet of size " << cp->GetSize ());
+               " NanoPU NDP IngressPipe received a packet of size " << cp->GetSize ());
     
-//   cp->Print (std::cout);
-//   std::cout << std::endl;
+  cp->Print (std::cout);
+  std::cout << std::endl;
     
-  Ipv4Header iph;
-  cp->RemoveHeader (iph);
-  NS_LOG_DEBUG ("This is the IP header: " << iph);
-  Ipv4Address src_ip4 = iph.GetSource ();
-  iph.SetSource (iph.GetDestination ());
-  iph.SetDestination (src_ip4);
+//   Ipv4Header iph;
+//   cp->RemoveHeader (iph);
+//   NS_LOG_DEBUG ("This is the IP header: " << iph);
+//   Ipv4Address src_ip4 = iph.GetSource ();
+//   iph.SetSource (iph.GetDestination ());
+//   iph.SetDestination (src_ip4);
     
-  UdpHeader udph;
-  cp->RemoveHeader (udph);
-  NS_LOG_DEBUG ("This is the UDP header: " << udph);
-  uint16_t src_port = udph.GetSourcePort ();
-  udph.SetSourcePort (udph.GetDestinationPort ());
-  udph.SetDestinationPort (src_port);
+//   UdpHeader udph;
+//   cp->RemoveHeader (udph);
+//   NS_LOG_DEBUG ("This is the UDP header: " << udph);
+//   uint16_t src_port = udph.GetSourcePort ();
+//   udph.SetSourcePort (udph.GetDestinationPort ());
+//   udph.SetDestinationPort (src_port);
   
-  uint8_t *buffer = new uint8_t[cp->GetSize ()];
-  cp->CopyData(buffer, cp->GetSize ());
-  std::string s = std::string(buffer, buffer+cp->GetSize());
-  NS_LOG_DEBUG ("This is the payload: " << s);
+//   uint8_t *buffer = new uint8_t[cp->GetSize ()];
+//   cp->CopyData(buffer, cp->GetSize ());
+//   std::string s = std::string(buffer, buffer+cp->GetSize());
+//   NS_LOG_DEBUG ("This is the payload: " << s);
   
-  cp->AddHeader (udph);
-  cp->AddHeader (iph);
+//   cp->AddHeader (udph);
+//   cp->AddHeader (iph);
      
   /*
    * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast

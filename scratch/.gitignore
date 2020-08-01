@@ -1,5 +1,6 @@
-# Ignore everything on scratch by default, except the provided examples
+# Ignore everything on scratch by default, except the provided examples and new .cc files
 /*
 !.gitignore
 !subdir/
 !scratch-simulator.cc
+!*.cc

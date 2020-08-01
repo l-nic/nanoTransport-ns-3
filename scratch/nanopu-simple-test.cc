@@ -40,6 +40,37 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("NanoPuSimpleTest");
 
+void
+SendSingleNdpPacket (NetDeviceContainer devices)
+{
+  std::string payload = "NDP Payload";
+  uint32_t payloadSize = payload.size () + 1;
+    
+  uint8_t *buffer;
+  buffer = new uint8_t [payloadSize];
+  memcpy (buffer, payload.c_str (), payloadSize);
+   
+  Ptr<Packet> ndp_p;
+  ndp_p = Create<Packet> (buffer, payloadSize);
+    
+  NdpHeader ndph;
+  ndph.SetSrcPort (111);
+  ndph.SetDstPort (222);
+  ndph.SetFlags (NdpHeader::Flags_t::ACK);
+  ndph.SetMsgLen (1);
+  ndph.SetPayloadSize ((uint16_t) payloadSize);
+  ndp_p-> AddHeader (ndph);
+    
+  Ipv4Header iph;
+  Ipv4Address src_ip = Ipv4Address ("1.1.1.1");
+  iph.SetSource (src_ip);
+  Ipv4Address dst_ip = Ipv4Address ("2.2.2.2");
+  iph.SetDestination (dst_ip);
+  ndp_p-> AddHeader (iph);
+    
+  devices.Get (0)->Send (ndp_p, devices.Get (1)->GetBroadcast (), 0x0800);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -103,15 +134,17 @@ main (int argc, char *argv[])
     
   Packet::EnablePrinting ();
 
-  UdpEchoClientHelper echoClient (interfaces.GetAddress (1), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
-  echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
+//   UdpEchoClientHelper echoClient (interfaces.GetAddress (1), 9);
+//   echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
+//   echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+//   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
-  ApplicationContainer clientApps = echoClient.Install (nodes.Get (0));
-  echoClient.SetFill(clientApps.Get(0), "This is the payload of the packet!");
-  clientApps.Start (Seconds (2.0));
-  clientApps.Stop (Seconds (10.0));
+//   ApplicationContainer clientApps = echoClient.Install (nodes.Get (0));
+//   echoClient.SetFill(clientApps.Get(0), "This is the payload of the packet!");
+//   clientApps.Start (Seconds (2.0));
+//   clientApps.Stop (Seconds (10.0));
+  
+  Simulator::Schedule (Seconds (3.0), &SendSingleNdpPacket, devices);
 
   Simulator::Run ();
   Simulator::Destroy ();
