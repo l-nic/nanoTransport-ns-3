@@ -24,6 +24,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/node.h"
+#include "ns3/ipv4.h"
 #include "ns3/nanopu-archt.h"
 #include "ndp-nanopu-transport.h"
 #include "ns3/ipv4-header.h"
@@ -227,18 +228,42 @@ NdpNanoPuArchtEgressPipe::~NdpNanoPuArchtEgressPipe ()
     
 bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
-  NS_LOG_FUNCTION (this << p);
-     
-  /*
-   * ASSUMPTION: NanoPU will work with point to point channels, so sending a broadcast
-   *             packet on L2 is equivalent to sending a unicast packet.
-   * TODO: There should be a clever way of resolving the destination MAC address of the 
-   *       switch that is connected to the NanoPU architecture via the m_boundnetdevice
-   */
-//   m_nanoPuArcht->Send(cp, m_boundnetdevice->GetBroadcast ());
-//   m_nanoPuArcht->Send(cp, from);
+  Ptr<Packet> cp = p->Copy ();
+  NS_LOG_FUNCTION (this << cp);
+  
+  if (meta.isData)
+  {
+    NS_LOG_LOGIC(Simulator::Now ().GetSeconds () << 
+                 " NanoPU NDP EgressPipe processing data packet.");
+      
+    NdpHeader ndph;
+    ndph.SetSrcPort (meta.srcPort);
+    ndph.SetDstPort (meta.dstPort);
+    ndph.SetTxMsgId (meta.txMsgId);
+    ndph.SetMsgLen (meta.msgLen);
+    ndph.SetPktOffset (meta.pktOffset);
+    ndph.SetFlags (NdpHeader::Flags_t::DATA);
+    ndph.SetPayloadSize ((uint16_t) cp->GetSize ());
+    cp-> AddHeader (ndph);
+  }
+  else
+  {
+    NS_LOG_LOGIC(Simulator::Now ().GetSeconds () << 
+                 " NanoPU NDP EgressPipe processing control packet.");
+  }
+  
+  Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
     
-  return true;
+  Ipv4Header iph;
+  Ptr<Node> node = m_nanoPuArcht->GetNode ();
+  Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
+  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
+  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
+  iph.SetSource (srcIP);
+  iph.SetDestination (meta.dstIP);
+  cp-> AddHeader (iph);
+    
+  return m_nanoPuArcht->Send(cp, boundnetdevice->GetAddress ());
 }
     
 /******************************************************************************/

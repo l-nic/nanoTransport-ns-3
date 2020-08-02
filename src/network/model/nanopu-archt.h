@@ -61,6 +61,7 @@ typedef struct egressMeta_t {
     uint16_t txMsgId;
     uint16_t msgLen;
     uint16_t pktOffset;
+    uint16_t pullOffset;
 }egressMeta_t;
 
 /******************************************************************************/

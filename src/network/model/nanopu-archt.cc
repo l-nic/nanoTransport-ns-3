@@ -26,11 +26,10 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "node.h"
+#include "ns3/ipv4.h"
 #include "nanopu-archt.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/nanopu-app-header.h"
-
-#include "ns3/udp-header.h"
 
 namespace ns3 {
 
