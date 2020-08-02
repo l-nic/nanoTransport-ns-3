@@ -56,6 +56,8 @@ SendSingleNdpPacket (NetDeviceContainer devices)
   NdpHeader ndph;
   ndph.SetSrcPort (111);
   ndph.SetDstPort (222);
+  // TODO: Setting flag to DATA will throw error if no 
+  //       application is written yet
   ndph.SetFlags (NdpHeader::Flags_t::ACK);
   ndph.SetMsgLen (1);
   ndph.SetPayloadSize ((uint16_t) payloadSize);

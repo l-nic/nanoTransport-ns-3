@@ -24,6 +24,7 @@
 #include <tuple>
 #include <list>
 #include <math.h>
+#include <functional>
 
 #include "ns3/object.h"
 #include "ns3/ipv4-header.h"
@@ -130,12 +131,32 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter);
+  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
+                        uint16_t initialCredit);
   ~NanoPuArchtPacketize (void);
+  
+  void DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
+                       bool isInterval, uint16_t msgLen);
+  
+  typedef enum CreditEventOpCode_t
+  {
+    WRITE = 1,        //!< Write
+    ADD  = 2,         //!< Add
+    SHIFT_RIGHT  = 4, //!< Shift right
+    O1  = 8,          //!< Empty for future reference
+    O2  = 16,         //!< Empty for future reference
+    O3  = 32,         //!< Empty for future reference
+    O4  = 64,         //!< Empty for future reference
+    O5  = 128         //!< Empty for future reference
+  } CreditEventOpCode_t;
+  
+  void CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, int newCredit, int compVal, 
+                         CreditEventOpCode_t opCode, std::function<bool(int,int)> relOp);
   
 protected:
   
   Ptr<NanoPuArchtArbiter> m_arbiter;
+  uint16_t m_initialCredit;
 };
     
 /******************************************************************************/
@@ -263,7 +284,9 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArcht (Ptr<Node> node, uint16_t m_maxMessages=100);
+  NanoPuArcht (Ptr<Node> node, 
+               uint16_t m_maxMessages=100,
+               uint16_t initialCredit=10);
   ~NanoPuArcht (void);
   
   /**
@@ -326,6 +349,7 @@ protected:
     
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
     uint16_t m_maxMessages; //!< Max number of msg Reassembly and Packetize modules can handle at a time
+    uint16_t m_initialCredit; //!< Initial credit to be given to new messages (in packets)
     
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

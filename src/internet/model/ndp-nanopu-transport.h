@@ -27,7 +27,36 @@
 #include "ns3/nanopu-archt.h"
 
 namespace ns3 {
-    
+
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
+ *
+ */
+class NdpNanoPuArchtPktGen : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter);
+  ~NdpNanoPuArchtPktGen (void);
+  
+  void CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
+                     Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
+                     uint16_t txMsgId, uint16_t msgLen, uint16_t pktOffset, 
+                     uint16_t pullOffset);
+  
+protected:
+  Ptr<NanoPuArchtArbiter> m_arbiter; //!< the archt itself to be able to send packets
+};
+ 
+/******************************************************************************/
+ 
 /**
  * \ingroup nanopu-archt
  *
@@ -43,7 +72,10 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble);
+  NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
+                             Ptr<NanoPuArchtPacketize> packetize,
+                             Ptr<NdpNanoPuArchtPktGen> pktgen,
+                             uint16_t rttPkts);
   ~NdpNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
@@ -52,7 +84,10 @@ public:
 protected:
 
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-
+    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
+    Ptr<NdpNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
+    uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
+    
     std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
 };
  
@@ -87,30 +122,6 @@ protected:
 /**
  * \ingroup nanopu-archt
  *
- * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
- *
- */
-class NdpNanoPuArchtPktGen : public Object
-{
-public:
-  /**
-   * \brief Get the type ID.
-   * \return the object TypeId
-   */
-  static TypeId GetTypeId (void);
-
-  NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter);
-  ~NdpNanoPuArchtPktGen (void);
-  
-protected:
-  Ptr<NanoPuArchtArbiter> m_arbiter; //!< the archt itself to be able to send packets
-};
- 
-/******************************************************************************/
- 
-/**
- * \ingroup nanopu-archt
- *
  * \brief Transport Specific Architecture for devices to replace internet and transport layers.
  *        This version of the architecture implements specifically the NDP transport protocol.
  *
@@ -124,7 +135,9 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  NdpNanoPuArcht (Ptr<Node> node, uint16_t maxMessages=100);
+  NdpNanoPuArcht (Ptr<Node> node, 
+                  uint16_t maxMessages=100,
+                  uint16_t initialCredit=10);
   virtual ~NdpNanoPuArcht (void);
   
   /**

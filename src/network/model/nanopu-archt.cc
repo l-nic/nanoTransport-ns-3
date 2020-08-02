@@ -21,6 +21,7 @@
 #include <tuple>
 #include <list>
 #include <numeric>
+#include <functional>
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
@@ -104,14 +105,30 @@ TypeId NanoPuArchtPacketize::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter)
+NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
+                                            uint16_t initialCredit)
 {
   NS_LOG_FUNCTION (this);
     
   m_arbiter = arbiter;
+  m_initialCredit = initialCredit;
 }
 
 NanoPuArchtPacketize::~NanoPuArchtPacketize ()
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
+                                           bool isInterval, uint16_t msgLen)
+{
+  NS_LOG_FUNCTION (this);
+}
+    
+void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, 
+                                             int newCredit, int compVal, 
+                                             CreditEventOpCode_t opCode, 
+                                             std::function<bool(int,int)> relOp)
 {
   NS_LOG_FUNCTION (this);
 }
@@ -299,17 +316,21 @@ TypeId NanoPuArcht::GetTypeId (void)
  * NanoPu Architecture requires a transport module.
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
  */
-NanoPuArcht::NanoPuArcht (Ptr<Node> node, uint16_t maxMessages)
+NanoPuArcht::NanoPuArcht (Ptr<Node> node, 
+                          uint16_t maxMessages, 
+                          uint16_t initialCredit)
 {
   NS_LOG_FUNCTION (this);
     
   m_node = node;
   m_boundnetdevice = 0;
   m_maxMessages = maxMessages;
+  m_initialCredit = initialCredit;
     
   m_reassemble = CreateObject<NanoPuArchtReassemble> (m_maxMessages);
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
-  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter);
+  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
+                                                    m_initialCredit);
   m_timer = CreateObject<NanoPuArchtTimer> (m_packetize);
 }
 
