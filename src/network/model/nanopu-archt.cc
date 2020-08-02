@@ -214,14 +214,14 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   rxMsgInfo.success = false;
     
   rxMsgIdTableKey_t key (srcIp.Get (), srcPort, txMsgId);
-  NS_LOG_LOGIC ("Processing GetRxMsgInfo extern call for: " << srcIp.Get () 
-                                                     << "-" << srcPort
-                                                     << "-" << txMsgId); 
+  NS_LOG_LOGIC ("NanoPU Reassembly Buffer processing GetRxMsgInfo extern call for: " << srcIp.Get () 
+                                                                                     << "-" << srcPort
+                                                                                     << "-" << txMsgId); 
   auto entry = m_rxMsgIdTable.find(key);
   if (entry != m_rxMsgIdTable.end())
   {
     rxMsgInfo.rxMsgId = entry->second;
-    NS_LOG_LOGIC("Found rxMsgId: " << entry->second);
+    NS_LOG_LOGIC("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second);
       
     // compute the beginning of the inflight window
     rxMsgInfo.ackNo = getFirstSetBitPos(~m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second);
@@ -238,7 +238,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   else if (m_rxMsgIdFreeList.size() > 0)
   {
     rxMsgInfo.rxMsgId = m_rxMsgIdFreeList.front ();
-    NS_LOG_LOGIC("Allocating rxMsgId: " << rxMsgInfo.rxMsgId);
+    NS_LOG_LOGIC("NanoPU Reassembly Buffer allocating rxMsgId: " << rxMsgInfo.rxMsgId);
     m_rxMsgIdFreeList.pop_front ();
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});

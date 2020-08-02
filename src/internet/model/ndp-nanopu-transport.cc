@@ -52,6 +52,7 @@ NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter)
   NS_LOG_FUNCTION (this);
     
   m_arbiter = arbiter;
+  NS_LOG_DEBUG ("Now " << Simulator::Now ().GetSeconds ());
 }
 
 NdpNanoPuArchtPktGen::~NdpNanoPuArchtPktGen ()
@@ -66,6 +67,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
                                          uint16_t pullOffset)
 {
   NS_LOG_FUNCTION (this);
+    
+  
 }
 
 /******************************************************************************/
@@ -134,13 +137,14 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     //       before processing this incoming data packet because this
     //       packet has not updated the receivedBitmap in the reassembly
     //       buffer yet.
-    uint16_t pullOffsetDiff = 0;
+    uint16_t pullOffsetDiff;
     if (ndph.GetFlags () & NdpHeader::Flags_t::CHOP)
     {
       NS_LOG_LOGIC(Simulator::Now ().GetSeconds () << 
                    " NanoPU NDP IngressPipe processing chopped data packet.");
       genNACK = true;
       genPULL = true;
+      pullOffsetDiff = 0;
     } 
     else 
     {
@@ -167,7 +171,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     uint16_t pullOffset = 0;
     if (rxMsgInfo.isNewMsg)
     {
-      m_credits[rxMsgInfo.rxMsgId] = m_rttPkts + pullOffsetDiff;
+      m_credits.emplace(rxMsgInfo.rxMsgId, m_rttPkts + pullOffsetDiff);
     }
     else
     {
@@ -262,6 +266,10 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   iph.SetSource (srcIP);
   iph.SetDestination (meta.dstIP);
   cp-> AddHeader (iph);
+  
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+               " NanoPU NDP EgressPipe sending: " << 
+                cp->ToString ());
     
   return m_nanoPuArcht->Send(cp, boundnetdevice->GetAddress ());
 }
@@ -285,12 +293,12 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
 {
   NS_LOG_FUNCTION (this);
   
+  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (m_arbiter);
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble,
                                                            m_packetize,
                                                            m_pktgen,
                                                            initialCredit);
   m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
-  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (m_arbiter);
     
   m_arbiter->SetEgressPipe(m_egresspipe);
 }
