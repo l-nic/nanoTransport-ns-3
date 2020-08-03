@@ -110,6 +110,8 @@ public:
   
   void SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe);
   
+  void Receive(Ptr<Packet> p, egressMeta_t meta);
+  
 protected:
   
   Ptr<NanoPuArchtEgressPipe> m_egressPipe;
@@ -285,7 +287,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArcht (Ptr<Node> node, 
+  NanoPuArcht (Ptr<Node> node,
+               Ptr<NetDevice> device,
                uint16_t m_maxMessages=100,
                uint16_t initialCredit=10);
   ~NanoPuArcht (void);
@@ -297,7 +300,7 @@ public:
   Ptr<Node> GetNode (void);
   
   /**
-   * \brief Bind the architecture to specific device.
+   * \brief Bind the architecture to the device.
    *
    * This method corresponds to using setsockopt() SO_BINDTODEVICE
    * of real network or BSD sockets.   If set, this option will
@@ -312,10 +315,9 @@ public:
    * is also possible to bind to mismatching device and address, even if
    * the socket can not receive any packets as a result.
    *
-   * \param netdevice Pointer to NetDevice of desired interface
    * \returns nothing
    */
-  virtual void BindToNetDevice (Ptr<NetDevice> netdevice);
+  virtual void BindToNetDevice ();
 
   /**
    * \brief Returns architecture's bound NetDevice, if any.
@@ -337,6 +339,13 @@ public:
    * \returns Pointer to the reassembly buffer.
    */
   Ptr<NanoPuArchtReassemble> GetReassemblyBuffer (void);
+  
+  /**
+   * \brief Returns architecture's Arbiter.
+   * 
+   * \returns Pointer to the arbiter.
+   */
+  Ptr<NanoPuArchtArbiter> GetArbiter (void);
   
   virtual bool Send (Ptr<Packet> p, const Address &dest);
   

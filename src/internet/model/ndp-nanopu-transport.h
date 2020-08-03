@@ -43,7 +43,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter);
+  NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
   ~NdpNanoPuArchtPktGen (void);
   
   void CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
@@ -52,7 +52,10 @@ public:
                      uint16_t pullOffset);
   
 protected:
-  Ptr<NanoPuArchtArbiter> m_arbiter; //!< the archt itself to be able to send packets
+  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
+  
+  Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
+  Time m_packetTxTime; //!< Time to transmit/receive a full MTU packet to/from the network
 };
  
 /******************************************************************************/
@@ -135,7 +138,8 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  NdpNanoPuArcht (Ptr<Node> node, 
+  NdpNanoPuArcht (Ptr<Node> node,
+                  Ptr<NetDevice> device,
                   uint16_t maxMessages=100,
                   uint16_t initialCredit=10);
   virtual ~NdpNanoPuArcht (void);

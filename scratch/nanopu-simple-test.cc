@@ -83,6 +83,8 @@ main (int argc, char *argv[])
   LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+    
+//   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 
   NodeContainer nodes;
   nodes.Create (2);
@@ -110,8 +112,8 @@ main (int argc, char *argv[])
   
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
   uint16_t maxMessages = 100;
-  NdpNanoPuArcht nanoPu = NdpNanoPuArcht(nodes.Get (1), maxMessages);
-  nanoPu.BindToNetDevice (devices.Get (1));
+  NdpNanoPuArcht nanoPu = NdpNanoPuArcht(nodes.Get (1), devices.Get (1), maxMessages);
+//   nanoPu.BindToNetDevice (devices.Get (1));
     
   /*
    * In order for an application to bind to the nanoPu architecture:

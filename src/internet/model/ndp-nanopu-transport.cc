@@ -25,6 +25,8 @@
 #include "ns3/simulator.h"
 #include "ns3/node.h"
 #include "ns3/ipv4.h"
+#include "ns3/data-rate.h"
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/nanopu-archt.h"
 #include "ndp-nanopu-transport.h"
 #include "ns3/ipv4-header.h"
@@ -47,12 +49,21 @@ TypeId NdpNanoPuArchtPktGen::GetTypeId (void)
   return tid;
 }
 
-NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArchtArbiter> arbiter)
+NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (this);
     
-  m_arbiter = arbiter;
-  NS_LOG_DEBUG ("Now " << Simulator::Now ().GetSeconds ());
+  m_nanoPuArcht = nanoPuArcht;
+    
+  Ptr<NetDevice> netDevice = m_nanoPuArcht->GetBoundNetDevice ();
+  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
+  
+  DataRate dataRate = p2pNetDevice->GetDataRate ();
+  uint16_t mtuBytes = m_nanoPuArcht->GetBoundNetDevice ()->GetMtu ();
+  m_packetTxTime = dataRate.CalculateBytesTxTime ((uint32_t) mtuBytes);
+    
+  // Set an initial value for the last Tx time.
+  m_pacerLastTxTime = Simulator::Now () - m_packetTxTime;
 }
 
 NdpNanoPuArchtPktGen::~NdpNanoPuArchtPktGen ()
@@ -67,8 +78,78 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
                                          uint16_t pullOffset)
 {
   NS_LOG_FUNCTION (this);
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+               " NanoPU NDP PktGen processing CtrlPktEvent. " <<
+               "GenACK: " << genACK << " GenNACK: " << genNACK <<
+               " GenPULL: " << genPULL);
     
-  
+  Time delay = Time(0);
+    
+  Ptr<Packet> p = Create<Packet> ();
+    
+  egressMeta_t meta;
+  meta.isData = false;
+  meta.dstIP = dstIp;
+    
+  NdpHeader ndph;
+  ndph.SetSrcPort (srcPort);
+  ndph.SetDstPort (dstPort);
+  ndph.SetTxMsgId (txMsgId);
+  ndph.SetMsgLen (msgLen);
+  ndph.SetPktOffset (pktOffset);
+  ndph.SetPullOffset (pullOffset);
+  ndph.SetPayloadSize (0);
+    
+  if (genPULL)
+  {
+    Time now = Simulator::Now ();
+    Time txTime = m_pacerLastTxTime + m_packetTxTime;
+    
+    if (now < txTime)
+    {
+      delay = txTime - now;
+      m_pacerLastTxTime = txTime;
+    }
+    else
+    {
+      m_pacerLastTxTime = now;
+    }
+      
+    ndph.SetFlags (NdpHeader::Flags_t::PULL);
+    
+    if (genACK && delay==Time(0))
+    {
+      ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::ACK);
+      genACK = false;
+    }
+    if (genNACK && delay==Time(0))
+    {
+      ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::NACK);
+      genNACK = false;
+    }
+      
+    p-> AddHeader (ndph);
+    
+    Ptr<NanoPuArchtArbiter> arbiter = m_nanoPuArcht->GetArbiter ();
+    Simulator::Schedule (now+delay, &NanoPuArchtArbiter::Receive, arbiter, p, meta);
+    
+    NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+                  " NanoPU NDP PktGen generated: " << 
+                  p->ToString ());
+  }
+    
+  if (genACK)
+  {
+    ndph.SetFlags (NdpHeader::Flags_t::ACK);
+    p-> AddHeader (ndph);
+    m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
+  }
+  if (genNACK)
+  {
+    ndph.SetFlags (NdpHeader::Flags_t::NACK);
+    p-> AddHeader (ndph);
+    m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
+  }
 }
 
 /******************************************************************************/
@@ -285,15 +366,17 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
   return tid;
 }
 
-NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node, 
+NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
+                                Ptr<NetDevice> device,
                                 uint16_t maxMessages,
-                                uint16_t initialCredit) : NanoPuArcht (node, 
+                                uint16_t initialCredit) : NanoPuArcht (node,
+                                                                       device,
                                                                        maxMessages,
                                                                        initialCredit)
 {
   NS_LOG_FUNCTION (this);
   
-  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (m_arbiter);
+  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (this);
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble,
                                                            m_packetize,
                                                            m_pktgen,

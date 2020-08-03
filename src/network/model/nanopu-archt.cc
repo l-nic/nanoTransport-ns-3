@@ -93,6 +93,11 @@ void NanoPuArchtArbiter::SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe)
   m_egressPipe = egressPipe;
 }
     
+void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
+{
+  NS_LOG_FUNCTION (this);
+}
+    
 /******************************************************************************/
     
 TypeId NanoPuArchtPacketize::GetTypeId (void)
@@ -315,14 +320,17 @@ TypeId NanoPuArcht::GetTypeId (void)
  * NanoPu Architecture requires a transport module.
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
  */
-NanoPuArcht::NanoPuArcht (Ptr<Node> node, 
+NanoPuArcht::NanoPuArcht (Ptr<Node> node,
+                          Ptr<NetDevice> device,
                           uint16_t maxMessages, 
                           uint16_t initialCredit)
 {
   NS_LOG_FUNCTION (this);
     
   m_node = node;
-  m_boundnetdevice = 0;
+  m_boundnetdevice = device;
+  BindToNetDevice ();
+    
   m_maxMessages = maxMessages;
   m_initialCredit = initialCredit;
     
@@ -355,16 +363,16 @@ NanoPuArcht::GetNode (void)
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
  */
 void
-NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
+NanoPuArcht::BindToNetDevice ()
 {
-  NS_LOG_FUNCTION (this << netdevice);
+  NS_LOG_FUNCTION (this << m_boundnetdevice);
     
-  if (netdevice != 0)
+  if (m_boundnetdevice != 0)
     {
       bool found = false;
       for (uint32_t i = 0; i < GetNode ()->GetNDevices (); i++)
         {
-          if (GetNode ()->GetDevice (i) == netdevice)
+          if (GetNode ()->GetDevice (i) == m_boundnetdevice)
             {
               found = true;
               break;
@@ -372,7 +380,7 @@ NanoPuArcht::BindToNetDevice (Ptr<NetDevice> netdevice)
         }
       NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
-  m_boundnetdevice = netdevice;
+//   m_boundnetdevice = netdevice;
   m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
   m_mtu = m_boundnetdevice->GetMtu ();
   return;
@@ -390,6 +398,12 @@ NanoPuArcht::GetReassemblyBuffer (void)
 {
   NS_LOG_FUNCTION (this);
   return m_reassemble;
+}
+    
+Ptr<NanoPuArchtArbiter> NanoPuArcht::GetArbiter (void)
+{
+  NS_LOG_FUNCTION (this);
+  return m_arbiter;
 }
     
 bool
