@@ -85,6 +85,8 @@ public:
   NanoPuArchtEgressPipe ();
   ~NanoPuArchtEgressPipe (void);
   
+  virtual bool EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
+  
 protected:
 };
  

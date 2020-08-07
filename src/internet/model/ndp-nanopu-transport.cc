@@ -51,7 +51,7 @@ TypeId NdpNanoPuArchtPktGen::GetTypeId (void)
 
 NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
     
@@ -68,7 +68,7 @@ NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht)
 
 NdpNanoPuArchtPktGen::~NdpNanoPuArchtPktGen ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
@@ -77,7 +77,7 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
                                          uint16_t msgLen, uint16_t pktOffset, 
                                          uint16_t pullOffset)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
                " NanoPU NDP PktGen processing CtrlPktEvent. " <<
                "GenACK: " << genACK << " GenNACK: " << genNACK <<
@@ -131,11 +131,11 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
     p-> AddHeader (ndph);
     
     Ptr<NanoPuArchtArbiter> arbiter = m_nanoPuArcht->GetArbiter ();
-    Simulator::Schedule (now+delay, &NanoPuArchtArbiter::Receive, arbiter, p, meta);
+    Simulator::Schedule (delay, &NanoPuArchtArbiter::Receive, arbiter, p, meta);
     
-    NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
-                  " NanoPU NDP PktGen generated: " << 
-                  p->ToString ());
+//     NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+//                   " NanoPU NDP PktGen generated: " << 
+//                   p->ToString ());
   }
     
   if (genACK)
@@ -168,7 +168,7 @@ NdpNanoPuArchtIngressPipe::NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble>
                                                       Ptr<NdpNanoPuArchtPktGen> pktgen,
                                                       uint16_t rttPkts)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_reassemble = reassemble;
   m_packetize = packetize;
@@ -178,14 +178,14 @@ NdpNanoPuArchtIngressPipe::NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble>
 
 NdpNanoPuArchtIngressPipe::~NdpNanoPuArchtIngressPipe ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                              uint16_t protocol, const Address &from)
 {
   Ptr<Packet> cp = p->Copy ();
-  NS_LOG_FUNCTION (this << cp);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << cp);
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
                " NanoPU NDP IngressPipe received: " << 
                 cp->ToString ());
@@ -301,20 +301,20 @@ TypeId NdpNanoPuArchtEgressPipe::GetTypeId (void)
 
 NdpNanoPuArchtEgressPipe::NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
 }
 
 NdpNanoPuArchtEgressPipe::~NdpNanoPuArchtEgressPipe ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
   Ptr<Packet> cp = p->Copy ();
-  NS_LOG_FUNCTION (this << cp);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << cp);
   
   if (meta.isData)
   {
@@ -374,7 +374,7 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
                                                                        maxMessages,
                                                                        initialCredit)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   
   m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (this);
   m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble,
@@ -388,13 +388,13 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
 
 NdpNanoPuArcht::~NdpNanoPuArcht ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 bool NdpNanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
-  NS_LOG_FUNCTION (this << p);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
     
   m_ingresspipe->IngressPipe (device, p, protocol, from);
     

@@ -57,12 +57,23 @@ TypeId NanoPuArchtEgressPipe::GetTypeId (void)
 
 NanoPuArchtEgressPipe::NanoPuArchtEgressPipe ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
 
 NanoPuArchtEgressPipe::~NanoPuArchtEgressPipe ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+bool NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
+{
+  Ptr<Packet> cp = p->Copy ();
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << cp);
+  NS_LOG_DEBUG ("ERROR: At time " <<  Simulator::Now ().GetSeconds () << 
+               " NanoPU wants to send a packet of size " << 
+                p->GetSize () << ", but te egress pipe can not be found!");
+    
+  return false;
 }
     
 /******************************************************************************/
@@ -78,24 +89,31 @@ TypeId NanoPuArchtArbiter::GetTypeId (void)
 
 NanoPuArchtArbiter::NanoPuArchtArbiter ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
 
 NanoPuArchtArbiter::~NanoPuArchtArbiter ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void NanoPuArchtArbiter::SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_egressPipe = egressPipe;
 }
     
 void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  // TODO: The arbiter acts as a priority queue that pulls packets 
+  //       from the packetization buffer and the packet generator.
+  //       Then the arbiter should prioritize control packets over
+  //       data packets for higher performance.
+    
+  m_egressPipe->EgressPipe(p, meta);
 }
     
 /******************************************************************************/
@@ -112,7 +130,7 @@ TypeId NanoPuArchtPacketize::GetTypeId (void)
 NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
                                             uint16_t initialCredit)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_arbiter = arbiter;
   m_initialCredit = initialCredit;
@@ -120,13 +138,13 @@ NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
 
 NanoPuArchtPacketize::~NanoPuArchtPacketize ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
                                            bool isInterval, uint16_t msgLen)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, 
@@ -134,7 +152,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
                                              CreditEventOpCode_t opCode, 
                                              std::function<bool(int,int)> relOp)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 /******************************************************************************/
@@ -150,14 +168,14 @@ TypeId NanoPuArchtTimer::GetTypeId (void)
 
 NanoPuArchtTimer::NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_packetize = packetize;
 }
 
 NanoPuArchtTimer::~NanoPuArchtTimer ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 /******************************************************************************/
@@ -173,7 +191,7 @@ TypeId NanoPuArchtReassemble::GetTypeId (void)
 
 NanoPuArchtReassemble::NanoPuArchtReassemble (uint16_t maxMessages)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_rxMsgIdFreeList.resize(maxMessages);
   std::iota(m_rxMsgIdFreeList.begin(), m_rxMsgIdFreeList.end(), 0);
@@ -181,7 +199,7 @@ NanoPuArchtReassemble::NanoPuArchtReassemble (uint16_t maxMessages)
 
 NanoPuArchtReassemble::~NanoPuArchtReassemble ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void 
@@ -189,20 +207,22 @@ NanoPuArchtReassemble::SetRecvCallback (Callback<void,
                                                  Ptr<NanoPuArchtReassemble>, 
                                                  Ptr<Packet> > reassembledMsgCb)
 {
-  NS_LOG_FUNCTION (this << &reassembledMsgCb);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << &reassembledMsgCb);
   m_reassembledMsgCb = reassembledMsgCb;
 }
     
 void NanoPuArchtReassemble::NotifyApplications (Ptr<Packet> msg)
 {
-  NS_LOG_FUNCTION (this << msg);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << msg);
   if (!m_reassembledMsgCb.IsNull ())
     {
       m_reassembledMsgCb (this, msg);
     }
   else
     {
-      NS_LOG_ERROR ("Error: NanoPU received a message but no application is looking for it" << this << msg);
+      NS_LOG_ERROR (Simulator::Now ().GetSeconds () << 
+                    " Error: NanoPU received a message but no application is looking for it. " << 
+                    this << " " << msg);
     }
 }
 
@@ -211,7 +231,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
                                      uint16_t txMsgId, uint16_t msgLen, 
                                      uint16_t pktOffset)
 {
-  NS_LOG_FUNCTION (this << srcIp << srcPort << txMsgId << msgLen << pktOffset);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << 
+                   srcIp << srcPort << txMsgId << msgLen << pktOffset);
     
   rxMsgInfoMeta_t rxMsgInfo;
   rxMsgInfo.isNewMsg = false;
@@ -219,7 +240,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   rxMsgInfo.success = false;
     
   rxMsgIdTableKey_t key (srcIp.Get (), srcPort, txMsgId);
-  NS_LOG_LOGIC ("NanoPU Reassembly Buffer processing GetRxMsgInfo extern call for: " << srcIp.Get () 
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+                " NanoPU Reassembly Buffer processing GetRxMsgInfo extern call for: " << srcIp.Get () 
                                                                                      << "-" << srcPort
                                                                                      << "-" << txMsgId); 
   auto entry = m_rxMsgIdTable.find(key);
@@ -263,9 +285,10 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
 void 
 NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
 {
-  NS_LOG_FUNCTION (this << pkt);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << pkt);
     
-  NS_LOG_LOGIC ("Processing pkt "<< meta.pktOffset 
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+                " Processing pkt "<< meta.pktOffset 
                 << " for msg " << meta.rxMsgId);
     
   /* Record pkt in buffer*/
@@ -325,7 +348,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
                           uint16_t maxMessages, 
                           uint16_t initialCredit)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_node = node;
   m_boundnetdevice = device;
@@ -347,7 +370,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
  */
 NanoPuArcht::~NanoPuArcht ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 /* Returns associated node */
@@ -365,7 +388,7 @@ NanoPuArcht::GetNode (void)
 void
 NanoPuArcht::BindToNetDevice ()
 {
-  NS_LOG_FUNCTION (this << m_boundnetdevice);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << m_boundnetdevice);
     
   if (m_boundnetdevice != 0)
     {
@@ -380,7 +403,7 @@ NanoPuArcht::BindToNetDevice ()
         }
       NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
     }
-//   m_boundnetdevice = netdevice;
+
   m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
   m_mtu = m_boundnetdevice->GetMtu ();
   return;
@@ -389,39 +412,28 @@ NanoPuArcht::BindToNetDevice ()
 Ptr<NetDevice>
 NanoPuArcht::GetBoundNetDevice ()
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   return m_boundnetdevice;
 }
     
 Ptr<NanoPuArchtReassemble> 
 NanoPuArcht::GetReassemblyBuffer (void)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   return m_reassemble;
 }
     
 Ptr<NanoPuArchtArbiter> NanoPuArcht::GetArbiter (void)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   return m_arbiter;
 }
     
 bool
 NanoPuArcht::Send (Ptr<Packet> p, const Address &dest)
 {
-  NS_LOG_FUNCTION (this << p);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
   NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
-  
-  /*
-  somewhere in the eggress pipe we will need to set the source ipv4 address of the packet 
-  we can use the logic below:
-  
-  Ptr<Ipv4> ipv4proto = GetNode ()->GetObject<Ipv4> ();
-  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (device);
-  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, Ipv4Address dest);
-  
-  where dest is the dstIP provided by the AppHeader
-  */
 
   return m_boundnetdevice->Send (p, dest, 0x0800);
 }
@@ -434,7 +446,7 @@ NanoPuArcht::Send (Ptr<Packet> p, const Address &dest)
 bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
-  NS_LOG_FUNCTION (this << p);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
   NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
                " NanoPU received a packet of size " << p->GetSize ());
     
