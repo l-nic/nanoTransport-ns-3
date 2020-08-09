@@ -22,6 +22,7 @@
 #include <list>
 #include <numeric>
 #include <functional>
+#include <bitset>
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
@@ -69,8 +70,8 @@ bool NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << cp);
-  NS_LOG_DEBUG ("ERROR: At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU wants to send a packet of size " << 
+  NS_LOG_ERROR (Simulator::Now ().GetSeconds () <<
+                "ERROR: NanoPU wants to send a packet of size " << 
                 p->GetSize () << ", but te egress pipe can not be found!");
     
   return false;
@@ -155,10 +156,34 @@ void NanoPuArchtPacketize::SetTimerModule (Ptr<NanoPuArchtTimer> timer)
   m_timer = timer;
 }
     
-void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
-                                           bool isInterval, uint16_t msgLen)
+void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
+                                           bitmap_t ackPkts)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG("NanoPU DeliveredEvent for msg " << txMsgId <<
+               " packets (bitmap) " << std::bitset<BITMAP_SIZE>(ackPkts) );
+    
+  if (m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
+  {
+    m_deliveredBitmap[txMsgId] |= ackPkts;
+      
+    if (m_deliveredBitmap[txMsgId] == (bitmap_t)((1<<msgLen)-1))
+    {
+      NS_LOG_LOGIC("The whole message is delivered.");
+        
+      m_timer->CancelTimerEvent (txMsgId);
+        
+      /* Free the txMsgId*/
+      m_txMsgIdFreeList.push_back (txMsgId);
+    }
+  }
+  else
+  {
+    NS_LOG_ERROR(Simulator::Now ().GetSeconds () <<
+                 "ERROR: DeliveredEvent was triggered for unknown tx_msg_id: "
+                 << txMsgId);
+  }
 }
     
 void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, 
@@ -181,7 +206,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
                  "NanoPU expects packets to have NanoPU App Header!");
     
   NS_ASSERT_MSG (apphdr.GetPayloadSize()/ m_payloadSize < BITMAP_SIZE,
-                 "NanoPU can not handle messages larger than "<<BITMAP_SIZE<<" packets!")
+                 "NanoPU can not handle messages larger than "<<BITMAP_SIZE<<" packets!");
   
   uint16_t txMsgId;
   if (m_txMsgIdFreeList.size() > 0)
@@ -192,7 +217,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     
     NS_ASSERT_MSG (apphdr.GetPayloadSize() == (uint16_t) cmsg->GetSize (),
                    "The payload size in the NanoPU App header doesn't match real payload size.");
-    m_appHeaders.insert({txMsgId,apphdr});
+    m_appHeaders.emplace(txMsgId,apphdr);
      
     std::map<uint16_t,Ptr<Packet>> buffer;
     uint32_t remainingBytes = cmsg->GetSize ();
@@ -208,7 +233,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       remainingBytes -= nextPktSize;
       numPkts ++;
     }
-    m_buffers.insert({txMsgId,buffer});
+    m_buffers.emplace(txMsgId,buffer);
     NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
                    "The message length in the NanoPU App header doesn't match number of packets for this message.");
       
@@ -304,6 +329,11 @@ NanoPuArchtTimer::~NanoPuArchtTimer ()
 }
     
 void NanoPuArchtTimer::ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+void NanoPuArchtTimer::CancelTimerEvent (uint16_t txMsgId)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }

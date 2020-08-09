@@ -275,8 +275,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       
     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
     {
-      bool isInterval = false;
-      m_packetize->DeliveredEvent (txMsgId, pktOffset, isInterval, msgLen);
+      m_packetize->DeliveredEvent (txMsgId, msgLen, (1<<pktOffset));
     }
     else if (ndph.GetFlags () & NdpHeader::Flags_t::PULL ||
              ndph.GetFlags () & NdpHeader::Flags_t::NACK)

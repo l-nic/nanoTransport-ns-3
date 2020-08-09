@@ -148,8 +148,8 @@ public:
   
   void SetTimerModule (Ptr<NanoPuArchtTimer> timer);
   
-  void DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
-                       bool isInterval, uint16_t msgLen);
+  void DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
+                       bitmap_t ackPkts);
   
   typedef enum CreditEventOpCode_t
   {
@@ -215,6 +215,8 @@ public:
   ~NanoPuArchtTimer (void);
   
   void ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta);
+  
+  void CancelTimerEvent (uint16_t txMsgId);
   
 protected:
   
