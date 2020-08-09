@@ -34,6 +34,8 @@
 // Note that bitmap_t is defined as uint64_t below
 #define BITMAP_SIZE 64
 
+#define NANOPU_APP_HEADER_TYPE 0x9999
+
 namespace ns3 {
     
 class Node;
@@ -43,6 +45,7 @@ typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIp;
     uint16_t srcPort;
+    uint16_t dstPort;
     uint16_t txMsgId;
     uint16_t msgLen;
     uint16_t pktOffset;

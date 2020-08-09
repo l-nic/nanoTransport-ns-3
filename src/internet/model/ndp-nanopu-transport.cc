@@ -243,6 +243,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       metaData.rxMsgId = rxMsgInfo.rxMsgId;
       metaData.srcIp = srcIp;
       metaData.srcPort = srcPort;
+      metaData.dstPort = dstPort;
       metaData.txMsgId = txMsgId;
       metaData.msgLen = msgLen;
       metaData.pktOffset = pktOffset;

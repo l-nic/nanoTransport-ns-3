@@ -64,22 +64,31 @@ public:
   uint16_t GetHeaderType (void) const;
   
   /**
-   * \param dstIp The destination address for the message
+   * \param remoteIp The remote address for the message
    */
-  void SetDstIp (Ipv4Address dstIp);
+  void SetRemoteIp (Ipv4Address remoteIp);
   /**
-   * \return The destination address for the message
+   * \return The remote address for the message
    */
-  Ipv4Address GetDstIp (void) const;
+  Ipv4Address GetRemoteIp (void) const;
   
   /**
-   * \param port The destination port for the message
+   * \param port The remote port for the message
    */
-  void SetDstPort (uint16_t port);
+  void SetRemotePort (uint16_t port);
   /**
-   * \return the destination port for the message
+   * \return the remote port for the message
    */
-  uint16_t GetDstPort (void) const;
+  uint16_t GetRemotePort (void) const;
+  
+  /**
+   * \param port The local port for the message
+   */
+  void SetLocalPort (uint16_t port);
+  /**
+   * \return the local port for the message
+   */
+  uint16_t GetLocalPort (void) const;
   
   /**
    * \param msgLen The message length for the message in packets
@@ -102,8 +111,9 @@ public:
 private:
 
   uint16_t m_headerType;   //!< Field to verify this header
-  Ipv4Address m_dstIp;     //!< Destination IP address
-  uint16_t m_dstPort;      //!< Destination port
+  Ipv4Address m_remoteIp;  //!< Remote IP address
+  uint16_t m_remotePort;   //!< Remote port
+  uint16_t m_localPort;    //!< Local port
   uint16_t m_msgLen;       //!< Length of the message in packets
   uint16_t m_payloadSize;  //!< Payload size in bytes
   

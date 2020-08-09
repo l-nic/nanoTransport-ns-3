@@ -31,8 +31,6 @@
 #include "ns3/ipv4-header.h"
 #include "ns3/nanopu-app-header.h"
 
-#define NANOPU_APP_HEADER_TYPE 0x9999
-
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
@@ -44,7 +42,7 @@ NS_OBJECT_ENSURE_REGISTERED (NanoPuArcht);
  * 
  * \returns Index of first 1 from right to left, in binary representation of a bitmap
  */
-uint16_t getFirstSetBitPos(bitmap_t n) { return (n!=0) ? log2(n & -n) : BITMAP_SIZE; };
+uint16_t getFirstSetBitPos(bitmap_t n) { return ((n!=0) ? log2(n & -n) : BITMAP_SIZE); };
     
 /******************************************************************************/
     
@@ -181,6 +179,9 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     
   NS_ASSERT_MSG (apphdr.GetHeaderType() != NANOPU_APP_HEADER_TYPE, 
                  "NanoPU expects packets to have NanoPU App Header!");
+    
+  NS_ASSERT_MSG (apphdr.GetPayloadSize()/ m_payloadSize < BITMAP_SIZE,
+                 "NanoPU can not handle messages larger than "<<BITMAP_SIZE<<" packets!")
   
   uint16_t txMsgId;
   if (m_txMsgIdFreeList.size() > 0)
@@ -248,6 +249,35 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
 void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << txMsgId << txPkts);
+  
+  egressMeta_t meta;
+  uint16_t pktOffset = getFirstSetBitPos(txPkts);
+  while (pktOffset != BITMAP_SIZE)
+  {
+    NS_LOG_DEBUG("NanoPU Packetization Buffer transmitting pkt " <<
+                 pktOffset << " from msg " << txMsgId);
+    
+    Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
+    
+    NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
+    meta.isData = true;
+    meta.dstIP = apphdr.GetRemoteIp();
+    meta.dstPort = apphdr.GetRemotePort();
+    meta.srcPort = apphdr.GetLocalPort();
+    meta.txMsgId = txMsgId;
+    meta.msgLen = apphdr.GetMsgLen();
+    meta.pktOffset = pktOffset;
+      
+    m_arbiter->Receive(p, meta);
+      
+    txPkts ^= (1<<pktOffset);
+    if (pktOffset > m_maxTxPktOffset[txMsgId])
+    {
+      m_maxTxPktOffset[txMsgId] = pktOffset;
+    }
+    
+    pktOffset = getFirstSetBitPos(txPkts);
+  }
 }
     
 /******************************************************************************/
@@ -412,8 +442,9 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       msg->AddAtEnd (buffer->second[i]);
     }
     NanoPuAppHeader apphdr;
-    apphdr.SetDstIp (meta.srcIp);
-    apphdr.SetDstPort (meta.srcPort);
+    apphdr.SetRemoteIp (meta.srcIp);
+    apphdr.SetRemotePort (meta.srcPort);
+    apphdr.SetLocalPort (meta.dstPort);
     apphdr.SetMsgLen (meta.msgLen);
     apphdr.SetPayloadSize (msg->GetSize ());
     msg->AddHeader (apphdr);

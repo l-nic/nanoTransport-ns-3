@@ -37,8 +37,9 @@ NS_OBJECT_ENSURE_REGISTERED (NanoPuAppHeader);
  */
 NanoPuAppHeader::NanoPuAppHeader ()
   : m_headerType (0x9999),
-    m_dstIp (Ipv4Address ()),
-    m_dstPort (0xfffd),
+    m_remoteIp (Ipv4Address ()),
+    m_remotePort (0xfffd),
+    m_localPort (0xfffd),
     m_msgLen (0),
     m_payloadSize (0)
 {
@@ -68,7 +69,8 @@ void
 NanoPuAppHeader::Print (std::ostream &os) const
 {
   os << "length: " << m_payloadSize + GetSerializedSize ()
-     << "Dst: " << m_dstIp.Get() << ":" << m_dstPort
+     << " remote: " << m_remoteIp.Get() << ":" << m_remotePort
+     << " local: " << m_localPort
      << " msgLen: " << m_msgLen
      << " type: " << m_headerType
   ;
@@ -77,7 +79,7 @@ NanoPuAppHeader::Print (std::ostream &os) const
 uint32_t 
 NanoPuAppHeader::GetSerializedSize (void) const
 {
-  return 12; 
+  return 14; 
 }
     
 void
@@ -86,8 +88,9 @@ NanoPuAppHeader::Serialize (Buffer::Iterator start) const
   Buffer::Iterator i = start;
 
   i.WriteHtonU16 (m_headerType);
-  i.WriteHtonU32 (m_dstIp.Get());
-  i.WriteHtonU16 (m_dstPort);
+  i.WriteHtonU32 (m_remoteIp.Get());
+  i.WriteHtonU16 (m_remotePort);
+  i.WriteHtonU16 (m_localPort);
   i.WriteHtonU16 (m_msgLen);
   i.WriteHtonU16 (m_payloadSize);
 }
@@ -96,8 +99,9 @@ NanoPuAppHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   m_headerType = i.ReadNtohU16 ();
-  m_dstIp.Set(i.ReadNtohU32 ());
-  m_dstPort = i.ReadNtohU16 ();
+  m_remoteIp.Set(i.ReadNtohU32 ());
+  m_remotePort = i.ReadNtohU16 ();
+  m_localPort = i.ReadNtohU16 ();
   m_msgLen = i.ReadNtohU16 ();
   m_payloadSize = i.ReadNtohU16 ();
 
@@ -117,25 +121,36 @@ NanoPuAppHeader::GetHeaderType (void) const
 }
     
 void 
-NanoPuAppHeader::SetDstIp (Ipv4Address dstIp)
+NanoPuAppHeader::SetRemoteIp (Ipv4Address remoteIp)
 {
-  m_dstIp = dstIp;
+  m_remoteIp = remoteIp;
 }
 Ipv4Address 
-NanoPuAppHeader::GetDstIp (void) const
+NanoPuAppHeader::GetRemoteIp (void) const
 {
-  return m_dstIp;
+  return m_remoteIp;
 }
     
 void 
-NanoPuAppHeader::SetDstPort (uint16_t port)
+NanoPuAppHeader::SetRemotePort (uint16_t port)
 {
-  m_dstPort = port;
+  m_remotePort = port;
 }
 uint16_t 
-NanoPuAppHeader::GetDstPort (void) const
+NanoPuAppHeader::GetRemotePort (void) const
 {
-  return m_dstPort;
+  return m_remotePort;
+}
+    
+void 
+NanoPuAppHeader::SetLocalPort (uint16_t port)
+{
+  m_localPort = port;
+}
+uint16_t 
+NanoPuAppHeader::GetLocalPort (void) const
+{
+  return m_localPort;
 }
       
 void 
