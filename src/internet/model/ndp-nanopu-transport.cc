@@ -189,6 +189,9 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
                " NanoPU NDP IngressPipe received: " << 
                 cp->ToString ());
+  
+  NS_ASSERT_MSG (protocol==0x0800,
+                 "NdpNanoPuArcht works only with IPv4 packets!");
     
   Ipv4Header iph;
   cp->RemoveHeader (iph);  
@@ -352,7 +355,7 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
                " NanoPU NDP EgressPipe sending: " << 
                 cp->ToString ());
     
-  return m_nanoPuArcht->Send(cp, boundnetdevice->GetAddress ());
+  return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
 }
     
 /******************************************************************************/
@@ -369,9 +372,11 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
 NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
                                 Ptr<NetDevice> device,
                                 uint16_t maxMessages,
+                                uint16_t payloadSize,
                                 uint16_t initialCredit) : NanoPuArcht (node,
                                                                        device,
                                                                        maxMessages,
+                                                                       payloadSize,
                                                                        initialCredit)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);

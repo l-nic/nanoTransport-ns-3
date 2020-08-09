@@ -55,6 +55,15 @@ public:
   virtual uint32_t Deserialize (Buffer::Iterator start);
   
   /**
+   * \param type The type of the header (Should be 0x9999)
+   */
+  void SetHeaderType (uint16_t type);
+  /**
+   * \return The type of the header (Should be 0x9999)
+   */
+  uint16_t GetHeaderType (void) const;
+  
+  /**
    * \param dstIp The destination address for the message
    */
   void SetDstIp (Ipv4Address dstIp);
@@ -92,7 +101,8 @@ public:
   
 private:
 
-  Ipv4Address m_dstIp;      //!< Destination IP address
+  uint16_t m_headerType;   //!< Field to verify this header
+  Ipv4Address m_dstIp;     //!< Destination IP address
   uint16_t m_dstPort;      //!< Destination port
   uint16_t m_msgLen;       //!< Length of the message in packets
   uint16_t m_payloadSize;  //!< Payload size in bytes

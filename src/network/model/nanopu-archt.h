@@ -28,6 +28,7 @@
 
 #include "ns3/object.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/nanopu-app-header.h"
 #include "ns3/callback.h"
 
 // Note that bitmap_t is defined as uint64_t below
@@ -120,7 +121,9 @@ protected:
 };
     
 /******************************************************************************/
-   
+
+class NanoPuArchtTimer; // Forward declaration so packetize can access timer
+    
 /**
  * \ingroup nanopu-archt
  *
@@ -136,9 +139,11 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
-                        uint16_t initialCredit);
+  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter, uint16_t maxMessages,
+                        uint16_t initialCredit, uint16_t payloadSize);
   ~NanoPuArchtPacketize (void);
+  
+  void SetTimerModule (Ptr<NanoPuArchtTimer> timer);
   
   void DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
                        bool isInterval, uint16_t msgLen);
@@ -157,11 +162,33 @@ public:
   
   void CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, int newCredit, int compVal, 
                          CreditEventOpCode_t opCode, std::function<bool(int,int)> relOp);
+                         
+  bool ProcessNewMessage (Ptr<Packet> msg);
+ 
+private:
+
+  void Dequeue (uint16_t txMsgId, bitmap_t txPkts);
   
 protected:
   
   Ptr<NanoPuArchtArbiter> m_arbiter;
-  uint16_t m_initialCredit;
+  Ptr<NanoPuArchtTimer> m_timer;
+  uint16_t m_initialCredit; //!< Initial window of packets to be sent
+  uint16_t m_payloadSize; //!< Max size of packet payloads
+  
+  std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
+  std::unordered_map<uint16_t, 
+                     NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {tx_msg_id => appHeader}
+  std::unordered_map<uint16_t,
+                     std::map<uint16_t, 
+                              Ptr<Packet>>> m_buffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet}}
+  std::unordered_map<uint16_t, 
+                       bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {tx_msg_id => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {tx_msg_id => credit} 
+  std::unordered_map<uint16_t, 
+                       bitmap_t> m_toBeTxBitmap; //!< bitmap to determine which packet to send, {tx_msg_id => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_maxTxPktOffset; //!< State to track max pktOffset sent so far {tx_msg_id => offset}
+  std::unordered_map<uint16_t, uint16_t> m_timeoutCnt; //!< State to track number of timeouts {tx_msg_id => timeout count}
 };
     
 /******************************************************************************/
@@ -183,6 +210,8 @@ public:
 
   NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize);
   ~NanoPuArchtTimer (void);
+  
+  void ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta);
   
 protected:
   
@@ -292,6 +321,7 @@ public:
   NanoPuArcht (Ptr<Node> node,
                Ptr<NetDevice> device,
                uint16_t m_maxMessages=100,
+               uint16_t payloadSize=1400,
                uint16_t initialCredit=10);
   ~NanoPuArcht (void);
   
@@ -348,11 +378,18 @@ public:
    * \returns Pointer to the arbiter.
    */
   Ptr<NanoPuArchtArbiter> GetArbiter (void);
-  
-  virtual bool Send (Ptr<Packet> p, const Address &dest);
-  
+
   virtual bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                             uint16_t protocol, const Address &from);
+                            
+  virtual bool SendToNetwork (Ptr<Packet> p, const Address &dest);
+  
+  /**
+   * \brief The API for applications to send their messages
+   * 
+   * \returns whether the msg is accepted by the architecture.
+   */
+  virtual bool Send (Ptr<Packet> msg);
   
 protected:
 

@@ -112,8 +112,14 @@ main (int argc, char *argv[])
   
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
   uint16_t maxMessages = 100;
-  NdpNanoPuArcht nanoPu = NdpNanoPuArcht(nodes.Get (1), devices.Get (1), maxMessages);
+  NdpHeader ndph;
+  uint16_t ndpHeaderSize = (uint16_t) ndph.GetSerializedSize ();
+  uint16_t payloadSize = devices.Get (1)->GetMtu () - 40 - ndpHeaderSize;
+  NdpNanoPuArcht nanoPu = NdpNanoPuArcht(nodes.Get (1), devices.Get (1), 
+                                         maxMessages, payloadSize);
 //   nanoPu.BindToNetDevice (devices.Get (1));
+    
+//   NS_LOG_UNCOND("MTU of the device: "<<devices.Get (1)->GetMtu());
     
   /*
    * In order for an application to bind to the nanoPu architecture:

@@ -141,6 +141,7 @@ public:
   NdpNanoPuArcht (Ptr<Node> node,
                   Ptr<NetDevice> device,
                   uint16_t maxMessages=100,
+                  uint16_t payloadSize=1445,
                   uint16_t initialCredit=10);
   virtual ~NdpNanoPuArcht (void);
   

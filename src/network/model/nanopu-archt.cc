@@ -31,6 +31,8 @@
 #include "ns3/ipv4-header.h"
 #include "ns3/nanopu-app-header.h"
 
+#define NANOPU_APP_HEADER_TYPE 0x9999
+
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("NanoPuArcht");
@@ -128,17 +130,31 @@ TypeId NanoPuArchtPacketize::GetTypeId (void)
 }
 
 NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
-                                            uint16_t initialCredit)
+                                            uint16_t maxMessages,
+                                            uint16_t initialCredit,
+                                            uint16_t payloadSize)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_arbiter = arbiter;
+    
+  m_txMsgIdFreeList.resize(maxMessages);
+  std::iota(m_txMsgIdFreeList.begin(), m_txMsgIdFreeList.end(), 0);
+    
   m_initialCredit = initialCredit;
+  m_payloadSize = payloadSize;
 }
 
 NanoPuArchtPacketize::~NanoPuArchtPacketize ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+void NanoPuArchtPacketize::SetTimerModule (Ptr<NanoPuArchtTimer> timer)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  m_timer = timer;
 }
     
 void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t pktOffset,
@@ -153,6 +169,85 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
                                              std::function<bool(int,int)> relOp)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
+{
+  Ptr<Packet> cmsg = msg->Copy ();
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << cmsg);
+    
+  NanoPuAppHeader apphdr;
+  cmsg->RemoveHeader (apphdr);
+    
+  NS_ASSERT_MSG (apphdr.GetHeaderType() != NANOPU_APP_HEADER_TYPE, 
+                 "NanoPU expects packets to have NanoPU App Header!");
+  
+  uint16_t txMsgId;
+  if (m_txMsgIdFreeList.size() > 0)
+  {
+    txMsgId = m_txMsgIdFreeList.front ();
+    NS_LOG_LOGIC("NanoPU Packetization Buffer allocating txMsgId: " << txMsgId);
+    m_txMsgIdFreeList.pop_front ();
+    
+    NS_ASSERT_MSG (apphdr.GetPayloadSize() == (uint16_t) cmsg->GetSize (),
+                   "The payload size in the NanoPU App header doesn't match real payload size.");
+    m_appHeaders.insert({txMsgId,apphdr});
+     
+    std::map<uint16_t,Ptr<Packet>> buffer;
+    uint32_t remainingBytes = cmsg->GetSize ();
+    uint16_t numPkts = 0;
+    uint32_t nextPktSize;
+    Ptr<Packet> nextPkt;
+    while (remainingBytes > 0)
+    {
+      nextPktSize = std::min(remainingBytes, (uint32_t) m_payloadSize);
+      nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes,
+                                      cmsg->GetSize () - remainingBytes + nextPktSize);
+      buffer.emplace(numPkts, nextPkt);
+      remainingBytes -= nextPktSize;
+      numPkts ++;
+    }
+    m_buffers.insert({txMsgId,buffer});
+    NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
+                   "The message length in the NanoPU App header doesn't match number of packets for this message.");
+      
+    m_deliveredBitmap.emplace(txMsgId,0);
+      
+    m_credits.emplace(txMsgId, m_initialCredit);
+      
+    m_toBeTxBitmap.emplace(txMsgId,(1<<numPkts)-1);
+      
+    m_maxTxPktOffset.emplace(txMsgId, 0);
+      
+    m_timeoutCnt.emplace(txMsgId, 0);
+    
+    m_timer->ScheduleTimerEvent (txMsgId, 0);
+      
+    bitmap_t txPkts = m_toBeTxBitmap[txMsgId] \
+                      &  ((1<<m_credits[txMsgId])-1);
+    // TODO: txPkts should be placed in a fifo queue where schedulings
+    //       from other events also place packets to. Since this is just
+    //       a discrete event simulator, direct function calls would also
+    //       work as a fifo.
+    Dequeue (txMsgId, txPkts);
+      
+    m_toBeTxBitmap.emplace(txMsgId,~txPkts);
+    
+  }
+  else
+  {
+    NS_LOG_ERROR(Simulator::Now ().GetSeconds () << 
+                 " Error: NanoPU allocate a new txMsgId for the new message. " << 
+                 this << " " << msg);
+    return false;
+  }
+    
+  return true;
+}
+    
+void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << txMsgId << txPkts);
 }
     
 /******************************************************************************/
@@ -174,6 +269,11 @@ NanoPuArchtTimer::NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize)
 }
 
 NanoPuArchtTimer::~NanoPuArchtTimer ()
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+void NanoPuArchtTimer::ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
@@ -345,7 +445,8 @@ TypeId NanoPuArcht::GetTypeId (void)
  */
 NanoPuArcht::NanoPuArcht (Ptr<Node> node,
                           Ptr<NetDevice> device,
-                          uint16_t maxMessages, 
+                          uint16_t maxMessages,
+                          uint16_t payloadSize, 
                           uint16_t initialCredit)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
@@ -360,8 +461,12 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   m_reassemble = CreateObject<NanoPuArchtReassemble> (m_maxMessages);
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
   m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
-                                                    m_initialCredit);
+                                                    m_maxMessages,
+                                                    m_initialCredit,
+                                                    payloadSize);
   m_timer = CreateObject<NanoPuArchtTimer> (m_packetize);
+    
+  m_packetize->SetTimerModule (m_timer);
 }
 
 /*
@@ -428,15 +533,6 @@ Ptr<NanoPuArchtArbiter> NanoPuArcht::GetArbiter (void)
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   return m_arbiter;
 }
-    
-bool
-NanoPuArcht::Send (Ptr<Packet> p, const Address &dest)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
-  NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
-
-  return m_boundnetdevice->Send (p, dest, 0x0800);
-}
 
 /*
  * NanoPu Architecture requires a transport module. The function below
@@ -448,9 +544,27 @@ bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
   NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetSeconds () << 
-               " NanoPU received a packet of size " << p->GetSize ());
+               " NanoPU received a packet of size " << p->GetSize () <<
+               ", but no transport protocol has been programmed.");
     
   return false;
+}
+    
+bool
+NanoPuArcht::SendToNetwork (Ptr<Packet> p, const Address &dest)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << p);
+  NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
+
+  return m_boundnetdevice->Send (p, dest, 0x0800);
+}
+
+bool
+NanoPuArcht::Send (Ptr<Packet> msg)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << msg);
+    
+  return m_packetize->ProcessNewMessage (msg);
 }
     
 } // namespace ns3

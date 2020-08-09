@@ -85,6 +85,8 @@ NdpHeader::GetSerializedSize (void) const
    *       That would require another 15 bytes to be appended to the packet
    */
   return 15; 
+  // TODO: If the above value is updated, update the default palod size
+  //       in the declaration of NDP nanoPU implementation.
 }
     
 std::string
