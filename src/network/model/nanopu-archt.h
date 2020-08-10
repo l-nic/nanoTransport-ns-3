@@ -143,7 +143,8 @@ public:
   static TypeId GetTypeId (void);
 
   NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter, uint16_t maxMessages,
-                        uint16_t initialCredit, uint16_t payloadSize);
+                        uint16_t initialCredit, uint16_t payloadSize, 
+                        uint16_t maxTimeoutCnt);
   ~NanoPuArchtPacketize (void);
   
   void SetTimerModule (Ptr<NanoPuArchtTimer> timer);
@@ -175,6 +176,14 @@ public:
    */
   void CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, int newCredit, int compVal, 
                          CreditEventOpCode_t opCode, std::function<bool(int,int)> relOp);
+   
+  /**
+   * \brief The event to reschedule packets after a timeout.
+   *
+   * \param txMsgId ID of the message to be processed
+   * \param rtxOffset The timer metadata 
+   */
+  void TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset);
                          
   bool ProcessNewMessage (Ptr<Packet> msg);
  
@@ -188,6 +197,7 @@ protected:
   Ptr<NanoPuArchtTimer> m_timer;
   uint16_t m_initialCredit; //!< Initial window of packets to be sent
   uint16_t m_payloadSize; //!< Max size of packet payloads
+  uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
   
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
   std::unordered_map<uint16_t, 
@@ -224,9 +234,11 @@ public:
   NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize);
   ~NanoPuArchtTimer (void);
   
-  void ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta);
+  void ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
   
   void CancelTimerEvent (uint16_t txMsgId);
+  
+  void RescheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
   
 protected:
   
@@ -337,7 +349,8 @@ public:
                Ptr<NetDevice> device,
                uint16_t m_maxMessages=100,
                uint16_t payloadSize=1400,
-               uint16_t initialCredit=10);
+               uint16_t initialCredit=10,
+               uint16_t maxTimeoutCnt=5);
   ~NanoPuArcht (void);
   
   /**

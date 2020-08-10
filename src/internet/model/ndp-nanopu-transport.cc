@@ -373,11 +373,13 @@ NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
                                 Ptr<NetDevice> device,
                                 uint16_t maxMessages,
                                 uint16_t payloadSize,
-                                uint16_t initialCredit) : NanoPuArcht (node,
+                                uint16_t initialCredit,
+                                uint16_t maxTimeoutCnt) : NanoPuArcht (node,
                                                                        device,
                                                                        maxMessages,
                                                                        payloadSize,
-                                                                       initialCredit)
+                                                                       initialCredit,
+                                                                       maxTimeoutCnt)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
   

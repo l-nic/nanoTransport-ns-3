@@ -132,7 +132,8 @@ TypeId NanoPuArchtPacketize::GetTypeId (void)
 NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
                                             uint16_t maxMessages,
                                             uint16_t initialCredit,
-                                            uint16_t payloadSize)
+                                            uint16_t payloadSize,
+                                            uint16_t maxTimeoutCnt)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
@@ -143,6 +144,7 @@ NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
     
   m_initialCredit = initialCredit;
   m_payloadSize = payloadSize;
+  m_maxTimeoutCnt = maxTimeoutCnt;
 }
 
 NanoPuArchtPacketize::~NanoPuArchtPacketize ()
@@ -162,7 +164,8 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
-  NS_LOG_DEBUG("NanoPU DeliveredEvent for msg " << txMsgId <<
+  NS_LOG_DEBUG(Simulator::Now ().GetSeconds () <<
+               "NanoPU DeliveredEvent for msg " << txMsgId <<
                " packets (bitmap) " << std::bitset<BITMAP_SIZE>(ackPkts) );
     
   if (m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end() \
@@ -203,8 +206,9 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
   {
     if (rtxPkt != -1 && m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
     {
-      NS_LOG_LOGIC("Marking msg " << txMsgId << ", pkt " << rtxPkt <<
-                 " for retransmission.");
+      NS_LOG_LOGIC(Simulator::Now ().GetSeconds () <<
+                   "Marking msg " << txMsgId << ", pkt " << rtxPkt <<
+                   " for retransmission.");
       m_deliveredBitmap[txMsgId] |= (1<<rtxPkt);
     }
       
@@ -240,6 +244,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
         Dequeue (txMsgId, txPkts);
       
         m_toBeTxBitmap[txMsgId] &= ~txPkts;
+        m_maxTxPktOffset[txMsgId] = m_credits[txMsgId];
       }
     }
   }
@@ -247,6 +252,45 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
   {
     NS_LOG_ERROR(Simulator::Now ().GetSeconds () <<
                  "ERROR: CreditToBtxEvent was triggered for unknown tx_msg_id: "
+                 << txMsgId);
+  }
+}
+    
+void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG(Simulator::Now ().GetSeconds () << 
+               " NanoPU Timeout for msg " << txMsgId );
+    
+  if (std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end() \
+      && txMsgId < m_txMsgIdFreeList.size())
+  {
+    if (m_timeoutCnt[txMsgId] >= m_maxTimeoutCnt)
+    {
+      NS_LOG_DEBUG(Simulator::Now ().GetSeconds () <<
+                   " Msg " << txMsgId << " expired.");
+        
+      /* Free the txMsgId*/
+      m_txMsgIdFreeList.push_back (txMsgId);
+    }
+    else
+    {
+      m_timeoutCnt[txMsgId] ++;
+      bitmap_t rtxPkts = ~m_deliveredBitmap[txMsgId] & ((1<<rtxOffset)-1);
+      
+      NS_LOG_LOGIC(Simulator::Now ().GetSeconds () <<
+                   "NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
+      
+      Dequeue (txMsgId, rtxPkts);
+      m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
+      m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
+    }
+  }
+  else
+  {
+    NS_LOG_DEBUG(Simulator::Now ().GetSeconds () <<
+                 " TimeoutEvent was triggered for unknown tx_msg_id: "
                  << txMsgId);
   }
 }
@@ -336,7 +380,8 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
   uint16_t pktOffset = getFirstSetBitPos(txPkts);
   while (pktOffset != BITMAP_SIZE)
   {
-    NS_LOG_DEBUG("NanoPU Packetization Buffer transmitting pkt " <<
+    NS_LOG_DEBUG(Simulator::Now ().GetSeconds () <<
+                 "NanoPU Packetization Buffer transmitting pkt " <<
                  pktOffset << " from msg " << txMsgId);
     
     Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
@@ -352,7 +397,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
       
     m_arbiter->Receive(p, meta);
       
-    txPkts ^= (1<<pktOffset);
+    txPkts &= ~(1<<pktOffset);
     if (pktOffset > m_maxTxPktOffset[txMsgId])
     {
       m_maxTxPktOffset[txMsgId] = pktOffset;
@@ -385,12 +430,17 @@ NanoPuArchtTimer::~NanoPuArchtTimer ()
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
-void NanoPuArchtTimer::ScheduleTimerEvent (uint16_t txMsgId, uint32_t meta)
+void NanoPuArchtTimer::ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
     
 void NanoPuArchtTimer::CancelTimerEvent (uint16_t txMsgId)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+}
+    
+void NanoPuArchtTimer::RescheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
 }
@@ -565,7 +615,8 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
                           Ptr<NetDevice> device,
                           uint16_t maxMessages,
                           uint16_t payloadSize, 
-                          uint16_t initialCredit)
+                          uint16_t initialCredit,
+                          uint16_t maxTimeoutCnt)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
@@ -581,7 +632,8 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
                                                     m_maxMessages,
                                                     m_initialCredit,
-                                                    payloadSize);
+                                                    payloadSize,
+                                                    maxTimeoutCnt);
   m_timer = CreateObject<NanoPuArchtTimer> (m_packetize);
     
   m_packetize->SetTimerModule (m_timer);
