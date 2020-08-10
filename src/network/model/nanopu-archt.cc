@@ -23,6 +23,7 @@
 #include <numeric>
 #include <functional>
 #include <bitset>
+#include <algorithm>
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
@@ -164,7 +165,8 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
   NS_LOG_DEBUG("NanoPU DeliveredEvent for msg " << txMsgId <<
                " packets (bitmap) " << std::bitset<BITMAP_SIZE>(ackPkts) );
     
-  if (m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
+  if (m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end() \
+      && std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
     m_deliveredBitmap[txMsgId] |= ackPkts;
       
@@ -192,6 +194,61 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
                                              std::function<bool(int,int)> relOp)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG(Simulator::Now ().GetSeconds () << 
+               " NanoPU CreditToBtxEvent for msg " << txMsgId );
+    
+  if (std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end() \
+      && txMsgId < m_txMsgIdFreeList.size())
+  {
+    if (rtxPkt != -1 && m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
+    {
+      NS_LOG_LOGIC("Marking msg " << txMsgId << ", pkt " << rtxPkt <<
+                 " for retransmission.");
+      m_deliveredBitmap[txMsgId] |= (1<<rtxPkt);
+    }
+      
+    if (newCredit != -1 && m_credits.find(txMsgId) != m_credits.end())
+    {
+      uint16_t curCredit = m_credits[txMsgId];
+      if (relOp(compVal,curCredit))
+      {
+        if (opCode == CreditEventOpCode_t::WRITE)
+        {
+          m_credits[txMsgId] = newCredit;
+        }
+        else if (opCode == CreditEventOpCode_t::ADD)
+        {
+          m_credits[txMsgId] += newCredit;
+        }
+        else if (opCode == CreditEventOpCode_t::SHIFT_RIGHT)
+        {
+          m_credits[txMsgId] >>= newCredit;
+        }
+          
+        NS_LOG_LOGIC(Simulator::Now ().GetSeconds () <<
+                     " Changed credit for msg " << txMsgId <<
+                     " from " << curCredit << " to " << m_credits[txMsgId]);
+      }
+    }
+      
+    if (m_toBeTxBitmap.find(txMsgId) != m_toBeTxBitmap.end())
+    {
+      bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((1<<m_credits[txMsgId])-1);
+      if (txPkts)
+      {
+        Dequeue (txMsgId, txPkts);
+      
+        m_toBeTxBitmap[txMsgId] &= ~txPkts;
+      }
+    }
+  }
+  else
+  {
+    NS_LOG_ERROR(Simulator::Now ().GetSeconds () <<
+                 "ERROR: CreditToBtxEvent was triggered for unknown tx_msg_id: "
+                 << txMsgId);
+  }
 }
     
 bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
@@ -257,7 +314,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     //       work as a fifo.
     Dequeue (txMsgId, txPkts);
       
-    m_toBeTxBitmap.emplace(txMsgId,~txPkts);
+    m_toBeTxBitmap[txMsgId] &= ~txPkts;
     
   }
   else

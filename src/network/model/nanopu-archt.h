@@ -163,6 +163,16 @@ public:
     O5  = 128         //!< Empty for future reference
   } CreditEventOpCode_t;
   
+  /**
+   * \brief The event to update credit of a message.
+   *
+   * \param txMsgId ID of the message to be processed
+   * \param rtxPkt Offset of the packet to be retransmitted (-1 if no RTX is required)
+   * \param newCredit Candidate to be the new credit value of the message (-1 if no new credit will be assigned)
+   * \param compVal The value to compare to the current credit value
+   * \param opCode The code of operation to be applied
+   * \param relOp the comparison function to compare compVal and the current credit value
+   */
   void CreditToBtxEvent (uint16_t txMsgId, int rtxPkt, int newCredit, int compVal, 
                          CreditEventOpCode_t opCode, std::function<bool(int,int)> relOp);
                          
