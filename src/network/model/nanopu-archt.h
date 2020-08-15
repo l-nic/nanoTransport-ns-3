@@ -231,7 +231,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize);
+  NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize, Time timeoutInterval);
   ~NanoPuArchtTimer (void);
   
   void ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
@@ -240,9 +240,14 @@ public:
   
   void RescheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
   
+  void InvokeTimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset);
+  
 protected:
   
   Ptr<NanoPuArchtPacketize> m_packetize;
+  Time m_timeoutInterval; //!< time interval for each timeout to take
+  
+  std::unordered_map<uint16_t,EventId> m_timers; //!< state to keep timer meta, {txMsgId => timerMeta}
 };
     
 /******************************************************************************/
@@ -347,7 +352,8 @@ public:
 
   NanoPuArcht (Ptr<Node> node,
                Ptr<NetDevice> device,
-               uint16_t m_maxMessages=100,
+               Time timeoutInterval,
+               uint16_t maxMessages=100,
                uint16_t payloadSize=1400,
                uint16_t initialCredit=10,
                uint16_t maxTimeoutCnt=5);

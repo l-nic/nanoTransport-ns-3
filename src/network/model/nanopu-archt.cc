@@ -274,12 +274,12 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     else
     {
       m_timeoutCnt[txMsgId] ++;
-      bitmap_t rtxPkts = ~m_deliveredBitmap[txMsgId] & ((1<<rtxOffset)-1);
+      bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((1<<rtxOffset)-1);
       
       NS_LOG_LOGIC(Simulator::Now ().GetSeconds () <<
                    "NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
       
-      Dequeue (txMsgId, rtxPkts);
+      if (rtxPkts) Dequeue (txMsgId, rtxPkts);
       m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
       m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
     }
@@ -315,7 +315,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     
     NS_ASSERT_MSG (apphdr.GetPayloadSize() == (uint16_t) cmsg->GetSize (),
                    "The payload size in the NanoPU App header doesn't match real payload size.");
-    m_appHeaders.emplace(txMsgId,apphdr);
+    m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
     uint32_t remainingBytes = cmsg->GetSize ();
@@ -327,23 +327,23 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       nextPktSize = std::min(remainingBytes, (uint32_t) m_payloadSize);
       nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes,
                                       cmsg->GetSize () - remainingBytes + nextPktSize);
-      buffer.emplace(numPkts, nextPkt);
+      buffer[numPkts] = nextPkt;
       remainingBytes -= nextPktSize;
       numPkts ++;
     }
-    m_buffers.emplace(txMsgId,buffer);
+    m_buffers[txMsgId] = buffer;
     NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
                    "The message length in the NanoPU App header doesn't match number of packets for this message.");
       
-    m_deliveredBitmap.emplace(txMsgId,0);
+    m_deliveredBitmap[txMsgId] = 0;
       
-    m_credits.emplace(txMsgId, m_initialCredit);
+    m_credits[txMsgId] = m_initialCredit;
       
-    m_toBeTxBitmap.emplace(txMsgId,(1<<numPkts)-1);
+    m_toBeTxBitmap[txMsgId] = (1<<numPkts)-1;
       
-    m_maxTxPktOffset.emplace(txMsgId, 0);
+    m_maxTxPktOffset[txMsgId] = 0;
       
-    m_timeoutCnt.emplace(txMsgId, 0);
+    m_timeoutCnt[txMsgId] = 0;
     
     m_timer->ScheduleTimerEvent (txMsgId, 0);
       
@@ -415,11 +415,13 @@ TypeId NanoPuArchtTimer::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtTimer::NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize)
+NanoPuArchtTimer::NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize,
+                                    Time timeoutInterval)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
     
   m_packetize = packetize;
+  m_timeoutInterval = timeoutInterval;
 }
 
 NanoPuArchtTimer::~NanoPuArchtTimer ()
@@ -430,16 +432,49 @@ NanoPuArchtTimer::~NanoPuArchtTimer ()
 void NanoPuArchtTimer::ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () <<
+                "NanoPU ScheduleTimer Event for msg " << txMsgId <<
+                " rtxOffset " << rtxOffset);
+  
+  m_timers[txMsgId] = Simulator::Schedule (m_timeoutInterval,
+                                               &NanoPuArchtTimer::InvokeTimeoutEvent, 
+                                               this, txMsgId, rtxOffset);
 }
     
 void NanoPuArchtTimer::CancelTimerEvent (uint16_t txMsgId)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () <<
+                "NanoPU CancelTimer Event for msg " << txMsgId);
+    
+  Simulator::Cancel (m_timers[txMsgId]);
+//   m_timers.erase(txMsgId);
 }
     
 void NanoPuArchtTimer::RescheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () <<
+                "NanoPU RescheduleTimer Event for msg " << txMsgId <<
+                " rtxOffset " << rtxOffset);
+    
+  m_timers[txMsgId] = Simulator::Schedule (m_timeoutInterval,
+                                               &NanoPuArchtTimer::InvokeTimeoutEvent, 
+                                               this, txMsgId, rtxOffset);
+}
+    
+void NanoPuArchtTimer::InvokeTimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+    
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () <<
+                "NanoPU InvokeTimeoutEvent Event for msg " << txMsgId <<
+                " rtxOffset " << rtxOffset);
+    
+  m_packetize->TimeoutEvent (txMsgId, rtxOffset);
 }
     
 /******************************************************************************/
@@ -610,6 +645,7 @@ TypeId NanoPuArcht::GetTypeId (void)
  */
 NanoPuArcht::NanoPuArcht (Ptr<Node> node,
                           Ptr<NetDevice> device,
+                          Time timeoutInterval,
                           uint16_t maxMessages,
                           uint16_t payloadSize, 
                           uint16_t initialCredit,
@@ -631,7 +667,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
                                                     m_initialCredit,
                                                     payloadSize,
                                                     maxTimeoutCnt);
-  m_timer = CreateObject<NanoPuArchtTimer> (m_packetize);
+  m_timer = CreateObject<NanoPuArchtTimer> (m_packetize, timeoutInterval);
     
   m_packetize->SetTimerModule (m_timer);
 }

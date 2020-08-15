@@ -256,7 +256,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     uint16_t pullOffset = 0;
     if (rxMsgInfo.isNewMsg)
     {
-      m_credits.emplace(rxMsgInfo.rxMsgId, m_rttPkts + pullOffsetDiff);
+      m_credits[rxMsgInfo.rxMsgId] = m_rttPkts + pullOffsetDiff;
     }
     else
     {
@@ -277,8 +277,8 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     {
       m_packetize->DeliveredEvent (txMsgId, msgLen, (1<<pktOffset));
     }
-    else if (ndph.GetFlags () & NdpHeader::Flags_t::PULL ||
-             ndph.GetFlags () & NdpHeader::Flags_t::NACK)
+    if (ndph.GetFlags () & NdpHeader::Flags_t::PULL ||
+        ndph.GetFlags () & NdpHeader::Flags_t::NACK)
     {
       int rtxPkt = (ndph.GetFlags () & NdpHeader::Flags_t::NACK) ? (int) pktOffset : -1;
       int credit = (ndph.GetFlags () & NdpHeader::Flags_t::PULL) ? (int) ndph.GetPullOffset () : -1;
@@ -371,11 +371,13 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
 
 NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
                                 Ptr<NetDevice> device,
+                                Time timeoutInterval,
                                 uint16_t maxMessages,
                                 uint16_t payloadSize,
                                 uint16_t initialCredit,
                                 uint16_t maxTimeoutCnt) : NanoPuArcht (node,
                                                                        device,
+                                                                       timeoutInterval,
                                                                        maxMessages,
                                                                        payloadSize,
                                                                        initialCredit,
