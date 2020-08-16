@@ -349,13 +349,15 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
   iph.SetSource (srcIP);
   iph.SetDestination (meta.dstIP);
+  iph.SetPayloadSize (cp->GetSize ());
   cp-> AddHeader (iph);
   
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
                " NanoPU NDP EgressPipe sending: " << 
                 cp->ToString ());
     
-  return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
+//   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
+  return m_nanoPuArcht->SendToNetwork(cp);
 }
     
 /******************************************************************************/

@@ -416,7 +416,7 @@ public:
   virtual bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                             uint16_t protocol, const Address &from);
                             
-  virtual bool SendToNetwork (Ptr<Packet> p, const Address &dest);
+  virtual bool SendToNetwork (Ptr<Packet> p);
   
   /**
    * \brief The API for applications to send their messages
