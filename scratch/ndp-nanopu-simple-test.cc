@@ -35,6 +35,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/traffic-control-module.h"
 
 using namespace ns3;
 
@@ -82,6 +83,7 @@ main (int argc, char *argv[])
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
+    LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
 
@@ -108,6 +110,13 @@ main (int argc, char *argv[])
 
   InternetStackHelper stack;
   stack.InstallAll ();
+    
+  // Bottleneck link traffic control configuration for NDP compatibility
+  TrafficControlHelper tchPfifo;
+  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("10p"));
+  for( uint16_t i = 0 ; i < numEndPoints ; i++){
+    tchPfifo.Install (deviceContainers[i]);
+  }
 
   Ipv4AddressHelper address;
   char ipAddress[8];
@@ -119,7 +128,7 @@ main (int argc, char *argv[])
     interfaceContainers[i] = address.Assign (deviceContainers[i]);
   }
     
-//   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
+  Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
   
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
   Time timeoutInterval = Time("100us");
