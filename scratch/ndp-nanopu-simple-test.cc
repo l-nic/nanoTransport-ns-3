@@ -79,8 +79,8 @@ main (int argc, char *argv[])
   Time::SetResolution (Time::FS);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
-  LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
+//   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
+//   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
@@ -110,10 +110,12 @@ main (int argc, char *argv[])
   stack.InstallAll ();
 
   Ipv4AddressHelper address;
-  address.SetBase ("10.1.1.0", "255.255.255.0");
+  char ipAddress[8];
 
   Ipv4InterfaceContainer interfaceContainers[numEndPoints]; 
   for( uint16_t i = 0 ; i < numEndPoints ; i++){
+    sprintf(ipAddress,"10.1.%d.0",i+1);
+    address.SetBase (ipAddress, "255.255.255.0");
     interfaceContainers[i] = address.Assign (deviceContainers[i]);
   }
     
