@@ -85,8 +85,6 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
     
   Time delay = Time(0);
     
-  Ptr<Packet> p = Create<Packet> ();
-    
   egressMeta_t meta;
   meta.isData = false;
   meta.dstIP = dstIp;
@@ -127,7 +125,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::NACK);
       genNACK = false;
     }
-      
+    
+    Ptr<Packet> p = Create<Packet> ();
     p-> AddHeader (ndph);
     
     Ptr<NanoPuArchtArbiter> arbiter = m_nanoPuArcht->GetArbiter ();
@@ -136,17 +135,22 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
 //     NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
 //                   " NanoPU NDP PktGen generated: " << 
 //                   p->ToString ());
+     
   }
     
   if (genACK)
-  {
+  {   
     ndph.SetFlags (NdpHeader::Flags_t::ACK);
+      
+    Ptr<Packet> p = Create<Packet> ();
     p-> AddHeader (ndph);
     m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
   }
   if (genNACK)
   {
     ndph.SetFlags (NdpHeader::Flags_t::NACK);
+      
+    Ptr<Packet> p = Create<Packet> ();
     p-> AddHeader (ndph);
     m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
   }

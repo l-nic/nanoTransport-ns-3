@@ -79,7 +79,8 @@ PacketsInQueueTrace (Ptr<OutputStreamWrapper> stream,
                      Ptr<Queue<Packet>> queue, 
                      uint32_t oldval, uint32_t newval)
 {
-  NS_LOG_INFO ("Queue size from " << oldval << " to " << newval);
+  NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () <<
+               " Queue size from " << oldval << " to " << newval);
   *stream->GetStream () << Simulator::Now ().GetNanoSeconds () 
                         << "\t" << newval << std::endl;
 }
@@ -100,13 +101,13 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
     
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_INFO);
+  LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_DEBUG);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
-//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
+  LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_DEBUG);
     
   if(!disablePacketTrimming){
-    NS_LOG_INFO("Packet trimming enabled");
+    NS_LOG_DEBUG("Packet trimming enabled");
   }
     
   if(enablePcap){
@@ -138,6 +139,8 @@ main (int argc, char *argv[])
                                    StringValue ("200Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", 
                                     TimeValue (NanoSeconds (delay)));
+  if(disablePacketTrimming)
+    pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("74p"));
     
   NetDeviceContainer senderDeviceContainers[numSenders];
   for(uint16_t i = 0 ; i < numSenders ; i++){
@@ -155,13 +158,16 @@ main (int argc, char *argv[])
   /* Bottleneck link traffic control configuration for NDP compatibility */
     
   TrafficControlHelper tchPfifo;
-  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", 
-                             "MaxSize", StringValue("74p"));
-  for(uint16_t i = 0 ; i < numSenders ; i++){
-    tchPfifo.Install (senderDeviceContainers[i]);
+  if(!disablePacketTrimming)
+  {
+    tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", 
+                             "MaxSize", StringValue("4p"));
+    for(uint16_t i = 0 ; i < numSenders ; i++){
+      tchPfifo.Install (senderDeviceContainers[i]);
+    }
+    tchPfifo.Install (receiverDeviceContainer);
   }
-  tchPfifo.Install (receiverDeviceContainer);
-    
+   
   /* Collect instantaneous queue occupancy */
     
   Ptr<NetDevice> switchDevice = receiverDeviceContainer.Get (0);
@@ -218,7 +224,7 @@ main (int argc, char *argv[])
                                                         timeoutInterval, 
                                                         maxMessages, 
                                                         payloadSize));
-    NS_LOG_UNCOND("**** Sender architecture "<< i <<" is created.");
+    NS_LOG_INFO("**** Sender architecture "<< i <<" is created.");
   }   
   Ptr<NdpNanoPuArcht> receiverArcht =  CreateObject<NdpNanoPuArcht>(
                                                  switch2receiver.Get (1), 
@@ -226,14 +232,14 @@ main (int argc, char *argv[])
                                                  timeoutInterval, 
                                                  maxMessages, 
                                                  payloadSize);
-  NS_LOG_UNCOND("**** Receiver architecture is created.");
+  NS_LOG_INFO("**** Receiver architecture is created.");
    
   /* Schedule senders to create incast */
     
   Ipv4Address dstIp = receiverIfContainer.GetAddress (1);
 
   for(uint16_t i = 0 ; i < numSenders ; i++){
-    Simulator::Schedule (Seconds (0.0+i*1e-9), 
+    Simulator::Schedule (Seconds (0.0), 
                          &SendSingleNdpPacket, 
                          senderArchts[i], 
                          dstIp, i+1);

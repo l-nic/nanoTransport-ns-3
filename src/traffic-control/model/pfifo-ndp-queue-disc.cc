@@ -74,6 +74,9 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     
   if (ndph.GetFlags () & NdpHeader::Flags_t::DATA)
   {
+    NS_LOG_DEBUG("Num Packets in Data queue: " << 
+                 GetCurrentSize ().GetValue () <<
+                 " Max Size: " << GetMaxSize ().GetValue ());
     if (GetInternalQueue (1)->GetNPackets () >= GetMaxSize ().GetValue ())
     {
       NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
@@ -88,6 +91,8 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     }
     else
     {
+      NS_LOG_LOGIC (Simulator::Now ().GetSeconds () << 
+                    " PfifoNdpQueueDisc DATA queue accepts a packet.");
       bandToEnqueue = 1;
     }
   }
@@ -115,7 +120,7 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
       NS_LOG_WARN ("Packet enqueue failed. Check the size of the internal queues");
     }
 
-  NS_LOG_LOGIC ("Number packets band " << bandToEnqueue << ": " 
+  NS_LOG_LOGIC ("Number of packets in band " << bandToEnqueue << ": " 
                 << GetInternalQueue (bandToEnqueue)->GetNPackets ());
 
   return retval;
