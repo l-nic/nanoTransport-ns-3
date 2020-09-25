@@ -74,12 +74,12 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     
   if (ndph.GetFlags () & NdpHeader::Flags_t::DATA)
   {
-    NS_LOG_DEBUG("Num Packets in Data queue: " << 
-                 GetCurrentSize ().GetValue () <<
-                 " Max Size: " << GetMaxSize ().GetValue ());
+    NS_LOG_DEBUG("Num Packets in Data queue: " << GetCurrentSize () <<
+                 " Max Size: " << GetMaxSize () <<
+                 " (" << GetInternalQueue (1) << ", " << GetNetDeviceQueueInterface() << ")");
     if (GetInternalQueue (1)->GetNPackets () >= GetMaxSize ().GetValue ())
     {
-      NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << 
+      NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                     " PfifoNdpQueueDisc DATA queue is full, trimming the packet.");
       p->RemoveAtEnd (ndph.GetPayloadSize ());
       IncreaseDroppedBytesBeforeEnqueueStats ((uint64_t) ndph.GetPayloadSize ());
@@ -91,7 +91,7 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     }
     else
     {
-      NS_LOG_LOGIC (Simulator::Now ().GetSeconds () << 
+      NS_LOG_LOGIC (Simulator::Now ().GetNanoSeconds () << 
                     " PfifoNdpQueueDisc DATA queue accepts a packet.");
       bandToEnqueue = 1;
     }
@@ -137,8 +137,8 @@ PfifoNdpQueueDisc::DoDequeue (void)
     {
       if ((item = GetInternalQueue (i)->Dequeue ()) != 0)
         {
-          NS_LOG_LOGIC ("Popped from band " << i << ": " << item);
-          NS_LOG_LOGIC ("Number packets band " << i << ": " << GetInternalQueue (i)->GetNPackets ());
+          NS_LOG_LOGIC ("Popped. Remaining packets in band " << 
+                        i << ": " << GetInternalQueue (i)->GetNPackets ());
           return item;
         }
     }
