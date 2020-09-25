@@ -304,7 +304,7 @@ TypeId NdpNanoPuArchtEgressPipe::GetTypeId (void)
 
 NdpNanoPuArchtEgressPipe::NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht)
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetSeconds () << this << nanoPuArcht);
     
   m_nanoPuArcht = nanoPuArcht;
 }

@@ -35,7 +35,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <fstream>
-#include <string>
+#include <vector>
 
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
@@ -50,12 +50,13 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE ("NanoPuSimpleIncast");
 
 void
-SendSingleNdpPacket (NdpNanoPuArcht ndpNanoPu, 
+SendSingleNdpPacket (Ptr<NdpNanoPuArcht> ndpNanoPu, 
                      Ipv4Address dstIp, uint16_t srcPort)
 {
-  NS_LOG_INFO(Simulator::Now ().GetSeconds () << 
-              "Sending a single packet long message " <<
-              "through NDP NanoPU Archt");
+  NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
+              " Sending a single packet long message" <<
+              " through NDP NanoPU Archt " << ndpNanoPu <<
+              " from port " << srcPort);
   
   uint32_t payloadSize = 1088-49; 
   Ptr<Packet> msg;
@@ -70,7 +71,7 @@ SendSingleNdpPacket (NdpNanoPuArcht ndpNanoPu,
   appHdr.SetPayloadSize((uint16_t) payloadSize);
   msg-> AddHeader (appHdr);
     
-  ndpNanoPu.Send (msg);
+  ndpNanoPu->Send (msg);
 }
 
 static void
@@ -86,13 +87,7 @@ PacketsInQueueTrace (Ptr<OutputStreamWrapper> stream,
 int
 main (int argc, char *argv[])
 {
-  Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_INFO);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_INFO);
-  LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_INFO);
-  LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
-    
-  CommandLine cmd (__FILE__);
+  CommandLine cmd;
     
   bool disablePacketTrimming = false;
   bool enablePcap = false;
@@ -104,17 +99,22 @@ main (int argc, char *argv[])
                 "Boolean to determine pcap tracing", enablePcap);
   cmd.Parse (argc, argv);
     
-  if(!disablePacketTrimming)
-  {
+  Time::SetResolution (Time::NS);
+  LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_INFO);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
+    
+  if(!disablePacketTrimming){
     NS_LOG_INFO("Packet trimming enabled");
   }
-  if(enablePcap)
-  {
+    
+  if(enablePcap){
     NS_LOG_INFO("Packet traces will be generated");
   }
   
   uint16_t numSenders = 80;
-  float delay = 0.75; // In microseconds
+  uint64_t delay = 750; // In nanoseconds
   
   /* Defining the star topology */
     
@@ -137,7 +137,7 @@ main (int argc, char *argv[])
   pointToPoint.SetDeviceAttribute ("DataRate", 
                                    StringValue ("200Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", 
-                                    TimeValue (MicroSeconds (delay)));
+                                    TimeValue (NanoSeconds (delay)));
     
   NetDeviceContainer senderDeviceContainers[numSenders];
   for(uint16_t i = 0 ; i < numSenders ; i++){
@@ -146,6 +146,11 @@ main (int argc, char *argv[])
     
   NetDeviceContainer receiverDeviceContainer;
   receiverDeviceContainer = pointToPoint.Install (switch2receiver);
+    
+  /* Install the Internet stack so that devices use IP */
+    
+  InternetStackHelper stack;
+  stack.InstallAll ();
     
   /* Bottleneck link traffic control configuration for NDP compatibility */
     
@@ -169,7 +174,7 @@ main (int argc, char *argv[])
   std::string qStreamName = "ndp-nanopu-simple-incast";
   if(disablePacketTrimming)
     qStreamName.append("-without-trimming");
-  qStreamName.append(".qlen")
+  qStreamName.append(".qlen");
       
   Ptr<OutputStreamWrapper> qStream;
   qStream = asciiTraceHelper.CreateFileStream (qStreamName);
@@ -177,25 +182,21 @@ main (int argc, char *argv[])
                                      MakeBoundCallback (&PacketsInQueueTrace, 
                                                         qStream, queue));
     
-  /* Install the Internet stack so that devices use IP */
-    
-  InternetStackHelper stack;
-  stack.InstallAll ();
-    
   /* Assign IP addresses */
     
-  Ipv4AddressHelper address;
+  Ipv4AddressHelper addressHelper;
+  char ipAddress[11];
     
   Ipv4InterfaceContainer senderIfContainers[numSenders]; 
   for(uint16_t i = 0 ; i < numSenders ; i++){
-    address.SetBase ("10.0." + std::to_string(i+1) + ".0",
-                     "255.255.255.0");
-    senderIfContainers[i] = address.Assign (senderDeviceContainers[i]);
+    sprintf(ipAddress,"10.1.%d.0",i+1);
+    addressHelper.SetBase (ipAddress, "255.255.255.0");
+    senderIfContainers[i] = addressHelper.Assign (senderDeviceContainers[i]);
   }
-  Ipv4InterfaceContainer receiverIfContainer; 
-  address.SetBase ("10.0." + std::to_string(numSenders+1) + ".0",
-                     "255.255.255.0");
-  receiverIfContainer = address.Assign (receiverDeviceContainer);
+  Ipv4InterfaceContainer receiverIfContainer;
+  sprintf(ipAddress,"10.1.%d.0",numSenders+1);
+  addressHelper.SetBase (ipAddress, "255.255.255.0");
+  receiverIfContainer = addressHelper.Assign (receiverDeviceContainer);
     
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
@@ -209,27 +210,30 @@ main (int argc, char *argv[])
     
   /* Enable the NanoPU Archt on the end points*/
   
-  NdpNanoPuArcht senderArchts[numSenders];
+  std::vector<Ptr<NdpNanoPuArcht>> senderArchts;
+//   senderArchts.reserve(numSenders);
   for(uint16_t i = 0 ; i < numSenders ; i++){
-    senderArchts[i] =  NdpNanoPuArcht(switch2senders[i].Get (1), 
-                                      senderDeviceContainers[i].Get (1),
-                                      timeoutInterval, 
-                                      maxMessages, 
-                                      payloadSize);
+    senderArchts.push_back(CreateObject<NdpNanoPuArcht>(switch2senders[i].Get (1), 
+                                                        senderDeviceContainers[i].Get (1),
+                                                        timeoutInterval, 
+                                                        maxMessages, 
+                                                        payloadSize));
+    NS_LOG_UNCOND("**** Sender architecture "<< i <<" is created.");
   }   
-  NdpNanoPuArcht receiverArcht =  NdpNanoPuArcht(switch2receiver[1].Get (1), 
-                                                 receiverDeviceContainer[1].Get (1),
+  Ptr<NdpNanoPuArcht> receiverArcht =  CreateObject<NdpNanoPuArcht>(
+                                                 switch2receiver.Get (1), 
+                                                 receiverDeviceContainer.Get (1),
                                                  timeoutInterval, 
                                                  maxMessages, 
                                                  payloadSize);
+  NS_LOG_UNCOND("**** Receiver architecture is created.");
    
   /* Schedule senders to create incast */
     
-  Ipv4Address dstIp = receiverIfContainer[1].GetAddress(1);
+  Ipv4Address dstIp = receiverIfContainer.GetAddress (1);
 
-  for(uint16_t i = 0 ; i < numSenders ; i++)
-  {
-    Simulator::Schedule (Seconds (0.0), 
+  for(uint16_t i = 0 ; i < numSenders ; i++){
+    Simulator::Schedule (Seconds (0.0+i*1e-9), 
                          &SendSingleNdpPacket, 
                          senderArchts[i], 
                          dstIp, i+1);
@@ -238,46 +242,21 @@ main (int argc, char *argv[])
   /* Generate output files */
     
   std::string pcapStreamName = "ndp-nanopu-simple-incast";
-  if(disablePacketTrimming)
+  if(disablePacketTrimming){
     pcapStreamName.append("-without-trimming");
+  }
     
   if (enablePcap){
     pointToPoint.EnablePcapAll (pcapStreamName, false);
   }
     
-  pcapStreamName.append(".tr")
+  pcapStreamName.append(".tr");
   pointToPoint.EnableAsciiAll (asciiTraceHelper.CreateFileStream (pcapStreamName));
   
   /* Run the actual simulation */
     
   Simulator::Run ();
   Simulator::Destroy ();
-  return 0;
   
+//   return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

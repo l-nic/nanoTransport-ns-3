@@ -379,7 +379,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
   while (pktOffset != BITMAP_SIZE)
   {
     NS_LOG_DEBUG(Simulator::Now ().GetSeconds () <<
-                 "NanoPU Packetization Buffer transmitting pkt " <<
+                 " NanoPU Packetization Buffer transmitting pkt " <<
                  pktOffset << " from msg " << txMsgId);
     
     Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
