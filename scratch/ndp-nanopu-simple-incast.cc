@@ -74,14 +74,26 @@ SendSingleNdpPacket (Ptr<NdpNanoPuArcht> ndpNanoPu,
   ndpNanoPu->Send (msg);
 }
 
+// static void
+// BytesInQueueTrace (Ptr<OutputStreamWrapper> stream, 
+//                      Ptr<Queue<Packet>> queue, 
+//                      uint32_t oldval, uint32_t newval)
+// {
+//   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+//                " Queue size from " << oldval << " to " << newval <<
+//                " ("<< queue << ")");
+//   *stream->GetStream () << Simulator::Now ().GetNanoSeconds () 
+//                         << "\t" << newval << std::endl;
+// }
+
 static void
-PacketsInQueueTrace (Ptr<OutputStreamWrapper> stream, 
-                     Ptr<Queue<Packet>> queue, 
-                     uint32_t oldval, uint32_t newval)
+BytesInQueueDiscTrace (Ptr<OutputStreamWrapper> stream, 
+                       Ptr<QueueDisc> queue_disc, 
+                       uint32_t oldval, uint32_t newval)
 {
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
-               " Queue size from " << oldval << " to " << newval <<
-               " ("<< queue << ")");
+               " Queue Disc size from " << oldval << " to " << newval <<
+               " ("<< queue_disc << ")");
   *stream->GetStream () << Simulator::Now ().GetNanoSeconds () 
                         << "\t" << newval << std::endl;
 }
@@ -102,11 +114,11 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
     
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_DEBUG);
+//   LogComponentEnable ("NanoPuSimpleIncast", LOG_LEVEL_DEBUG);
 //   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
 //   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_LOGIC);
-  LogComponentEnable ("Queue", LOG_LEVEL_LOGIC);
+//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_LOGIC);
+//   LogComponentEnable ("Queue", LOG_LEVEL_INFO);
     
   if(!disablePacketTrimming){
     NS_LOG_DEBUG("Packet trimming enabled");
@@ -141,16 +153,8 @@ main (int argc, char *argv[])
                                    StringValue ("200Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", 
                                     TimeValue (NanoSeconds (delay)));
-  if(disablePacketTrimming){
-    pointToPoint.SetQueue ("ns3::DropTailQueue", 
-                           "MaxSize", StringValue ("81KB"));
-  }
-  else
-  {
-    pointToPoint.SetQueue ("ns3::NdpTrimQueue", 
-                           "MaxSize", StringValue ("100KB"),
-                           "MaxDataSize", StringValue ("81KB"));
-  }
+  pointToPoint.SetQueue ("ns3::DropTailQueue", 
+                           "MaxSize", StringValue ("1p"));
     
   NetDeviceContainer senderDeviceContainers[numSenders];
   for(uint16_t i = 0 ; i < numSenders ; i++){
@@ -167,23 +171,29 @@ main (int argc, char *argv[])
     
   /* Bottleneck link traffic control configuration for NDP compatibility */
     
-//   TrafficControlHelper tchPfifo;
-//   if(!disablePacketTrimming)
-//   {
-//     tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", 
-//                              "MaxSize", StringValue("74p"));
-//     for(uint16_t i = 0 ; i < numSenders ; i++){
-//       tchPfifo.Install (senderDeviceContainers[i]);
-//     }
-//     tchPfifo.Install (receiverDeviceContainer);
-//   }
+  TrafficControlHelper tchPfifo;
+  if(disablePacketTrimming)
+  {
+    tchPfifo.SetRootQueueDisc ("ns3::PfifoFastQueueDisc", 
+                             "MaxSize", StringValue("73p"));
+  }
+  else
+  {
+    tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", 
+                             "MaxSize", StringValue("73p"));
+  }
+  for(uint16_t i = 0 ; i < numSenders ; i++){
+    tchPfifo.Install (senderDeviceContainers[i]);
+  }
+  QueueDiscContainer qdc = tchPfifo.Install (receiverDeviceContainer);
    
   /* Collect instantaneous queue occupancy */
     
-  Ptr<NetDevice> switchDevice = receiverDeviceContainer.Get (0);
-  Ptr<PointToPointNetDevice> ptpSwitchDevice = 
-      DynamicCast<PointToPointNetDevice> (switchDevice);
-  Ptr<Queue<Packet>> queue = ptpSwitchDevice->GetQueue ();
+//   Ptr<NetDevice> switchDevice = receiverDeviceContainer.Get (0);
+//   Ptr<PointToPointNetDevice> ptpSwitchDevice = 
+//       DynamicCast<PointToPointNetDevice> (switchDevice);
+//   Ptr<Queue<Packet>> queue = ptpSwitchDevice->GetQueue ();
+  Ptr< QueueDisc > queue_disc = qdc.Get (0);
     
   AsciiTraceHelper asciiTraceHelper; // for creating streams of traces
 
@@ -194,9 +204,12 @@ main (int argc, char *argv[])
       
   Ptr<OutputStreamWrapper> qStream;
   qStream = asciiTraceHelper.CreateFileStream (qStreamName);
-  queue->TraceConnectWithoutContext ("BytesInQueue", 
-                                     MakeBoundCallback (&PacketsInQueueTrace, 
-                                                        qStream, queue));
+//   queue->TraceConnectWithoutContext ("BytesInQueue", 
+//                                      MakeBoundCallback (&BytesInQueueTrace, 
+//                                                         qStream, queue));
+  queue_disc->TraceConnectWithoutContext ("BytesInQueue", 
+                                          MakeBoundCallback (&BytesInQueueDiscTrace, 
+                                                             qStream, queue_disc));
     
   /* Assign IP addresses */
     

@@ -482,11 +482,11 @@ bool
 Queue<Item>::DoEnqueue (ConstIterator pos, Ptr<Item> item)
 {
   NS_LOG_FUNCTION (this << item);
-  NS_LOG_LOGIC ("Current Queue Size: " << GetCurrentSize () <<
+  NS_LOG_INFO ("Current Queue Size: " << GetCurrentSize () <<
                 " Item Size: " << item->GetSize () << " MaxSize: " <<
                 GetMaxSize () << " (" << this << ")");
 
-  if (GetCurrentSize () + item + item > GetMaxSize ())
+  if (GetCurrentSize () + item  > GetMaxSize ())
     {
       NS_LOG_LOGIC ("Queue full -- dropping pkt");
       DropBeforeEnqueue (item);

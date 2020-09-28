@@ -65,6 +65,8 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
 {
   NS_LOG_FUNCTION (this << item);
     
+  NS_LOG_LOGIC("*** The corresponding net device queue: " << GetNetDeviceQueueInterface ()->GetTxQueue (0));
+    
   bool retval = false;
   uint32_t bandToEnqueue;
 
@@ -77,7 +79,7 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     NS_LOG_DEBUG("Num Packets in Data queue: " << GetCurrentSize () <<
                  " Max Size: " << GetMaxSize () <<
                  " (" << GetInternalQueue (1) << ", " << GetNetDeviceQueueInterface() << ")");
-    if (GetInternalQueue (1)->GetNPackets () >= GetMaxSize ().GetValue ())
+    if (GetInternalQueue (1)->GetNPackets () +1 >= GetMaxSize ().GetValue ())
     {
       NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                     " PfifoNdpQueueDisc DATA queue is full, trimming the packet.");
@@ -85,7 +87,7 @@ PfifoNdpQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
       IncreaseDroppedBytesBeforeEnqueueStats ((uint64_t) ndph.GetPayloadSize ());
         
       ndph.SetPayloadSize ( (uint16_t) (p->GetSize ()) );
-      ndph.SetFlags (NdpHeader::Flags_t::CHOP);
+      ndph.SetFlags (NdpHeader::Flags_t::DATA | NdpHeader::Flags_t::CHOP);
         
       bandToEnqueue = 0;
     }
