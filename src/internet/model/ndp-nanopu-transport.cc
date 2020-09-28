@@ -239,9 +239,9 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing data packet.");
       genACK = true;
-      // TODO: No need to generate new PULL packets if this was the last
-      //       packet of the message (ie. if ackNo > msgLen)
-      genPULL = true;
+    
+      if (pktOffset + m_rttPkts <= msgLen )
+          genPULL = true;
         
       reassembleMeta_t metaData;
       metaData.rxMsgId = rxMsgInfo.rxMsgId;
