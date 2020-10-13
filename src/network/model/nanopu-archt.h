@@ -129,7 +129,7 @@ protected:
     
 /******************************************************************************/
 
-class NanoPuArchtTimer; // Forward declaration so packetize can access timer
+class NanoPuArchtEgressTimer; // Forward declaration so packetize can access timer
     
 /**
  * \ingroup nanopu-archt
@@ -151,7 +151,7 @@ public:
                         uint16_t maxTimeoutCnt);
   ~NanoPuArchtPacketize (void);
   
-  void SetTimerModule (Ptr<NanoPuArchtTimer> timer);
+  void SetTimerModule (Ptr<NanoPuArchtEgressTimer> timer);
   
   void DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
                        bitmap_t ackPkts);
@@ -198,7 +198,7 @@ private:
 protected:
   
   Ptr<NanoPuArchtArbiter> m_arbiter;
-  Ptr<NanoPuArchtTimer> m_timer;
+  Ptr<NanoPuArchtEgressTimer> m_timer;
   uint16_t m_initialCredit; //!< Initial window of packets to be sent
   uint16_t m_payloadSize; //!< Max size of packet payloads
   uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
@@ -223,10 +223,10 @@ protected:
 /**
  * \ingroup nanopu-archt
  *
- * \brief Timer Module for NanoPU Architecture
+ * \brief Egress Timer Module for NanoPU Architecture
  *
  */
-class NanoPuArchtTimer : public Object
+class NanoPuArchtEgressTimer : public Object
 {
 public:
   /**
@@ -235,8 +235,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtTimer (Ptr<NanoPuArchtPacketize> packetize, Time timeoutInterval);
-  ~NanoPuArchtTimer (void);
+  NanoPuArchtEgressTimer (Ptr<NanoPuArchtPacketize> packetize, Time timeoutInterval);
+  ~NanoPuArchtEgressTimer (void);
   
   void ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
   
@@ -255,6 +255,8 @@ protected:
 };
     
 /******************************************************************************/
+    
+class NanoPuArchtIngressTimer; // Forward declaration so reassemble can access timer
 
 /* The rxMsgIdTable in the Reassembly Buffer requires a lookup table with multiple
  * key values. Thus we define appropriate template functions below for the 
@@ -298,6 +300,8 @@ public:
   NanoPuArchtReassemble (uint16_t maxMessages);
   ~NanoPuArchtReassemble (void);
   
+  void SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer);
+  
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
    * \param reassembledMsgCb Callback provided by application
@@ -314,22 +318,64 @@ public:
                                 
   void ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta);
   
+  /**
+   * \brief The event to free the buffer after a timeout.
+   *
+   * \param rxMsgId ID of the message to be processed
+   */
+  void TimeoutEvent (uint16_t rxMsgId);
+  
 protected:
 
-    std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
-    std::unordered_map<const rxMsgIdTableKey_t, 
-                       uint16_t, 
-                       rxMsgIdTable_hash, 
-                       rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
-    std::unordered_map<uint16_t,
-                       std::map<uint16_t, 
-                                Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
-    std::unordered_map<uint16_t, 
-                       bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+  Ptr<NanoPuArchtIngressTimer> m_timer;
+  std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
+  std::unordered_map<const rxMsgIdTableKey_t, 
+                     uint16_t, 
+                     rxMsgIdTable_hash, 
+                     rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
+  std::unordered_map<uint16_t,
+                     std::map<uint16_t, 
+                              Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
+  std::unordered_map<uint16_t, 
+                     bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
     
-    Callback<void, 
-             Ptr<NanoPuArchtReassemble>, 
-             Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
+  Callback<void, 
+           Ptr<NanoPuArchtReassemble>, 
+           Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
+};
+    
+/******************************************************************************/
+
+/**
+ * \ingroup nanopu-archt
+ *
+ * \brief Ingress Timer Module for NanoPU Architecture
+ *
+ */
+class NanoPuArchtIngressTimer : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  NanoPuArchtIngressTimer (Ptr<NanoPuArchtReassemble> reassemble, Time timeoutInterval);
+  ~NanoPuArchtIngressTimer (void);
+  
+  void ScheduleTimerEvent (uint16_t rxMsgId);
+  
+  void CancelTimerEvent (uint16_t rxMsgId);
+  
+  void InvokeTimeoutEvent (uint16_t rxMsgId);
+  
+protected:
+  
+  Ptr<NanoPuArchtReassemble> m_reassemble;
+  Time m_timeoutInterval; //!< time interval for each timeout to take
+  
+  std::unordered_map<uint16_t,EventId> m_timers; //!< state to keep timer meta, {txMsgId => timerMeta}
 };
     
 /******************************************************************************/
@@ -441,7 +487,8 @@ protected:
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
     Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization block of the architecture
-    Ptr<NanoPuArchtTimer> m_timer; //!< the timer module of the architecture
+    Ptr<NanoPuArchtEgressTimer> m_egressTimer; //!< the egress timer module of the architecture
+    Ptr<NanoPuArchtIngressTimer> m_ingressTimer; //!< the ingress timer module of the architecture
 };
     
 } // namespace ns3
