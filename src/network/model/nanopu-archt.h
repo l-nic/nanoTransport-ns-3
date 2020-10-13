@@ -31,6 +31,10 @@
 #include "ns3/nanopu-app-header.h"
 #include "ns3/callback.h"
 
+// Define module delay in nano seconds
+#define REASSEMBLE_DELAY 2
+#define PACKETIZATION_DELAY 1
+
 // Note that bitmap_t is defined as uint64_t below
 #define BITMAP_SIZE 64
 
@@ -89,7 +93,7 @@ public:
   NanoPuArchtEgressPipe ();
   ~NanoPuArchtEgressPipe (void);
   
-  virtual bool EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
+  virtual void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
 };

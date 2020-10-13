@@ -253,7 +253,10 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       metaData.pktOffset = pktOffset;
         
       pullOffsetDiff = 1;
-      m_reassemble->ProcessNewPacket (cp, metaData);
+//       m_reassemble->ProcessNewPacket (cp, metaData);
+      Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+                           &NanoPuArchtReassemble::ProcessNewPacket, 
+                           m_reassemble, cp, metaData);
     }
       
     // Compute pullOffset with a PRAW extern
@@ -318,7 +321,7 @@ NdpNanoPuArchtEgressPipe::~NdpNanoPuArchtEgressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
+void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
@@ -361,7 +364,11 @@ bool NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
                 cp->ToString ());
     
 //   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
-  return m_nanoPuArcht->SendToNetwork(cp);
+//   m_nanoPuArcht->SendToNetwork(cp);
+  Simulator::Schedule (NanoSeconds(EGRESS_PIPE_DELAY), 
+                       &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
+
+  return;
 }
     
 /******************************************************************************/

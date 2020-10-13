@@ -67,7 +67,7 @@ NanoPuArchtEgressPipe::~NanoPuArchtEgressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-bool NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
+void NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
@@ -75,7 +75,7 @@ bool NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
                 "ERROR: NanoPU wants to send a packet of size " << 
                 p->GetSize () << ", but te egress pipe can not be found!");
     
-  return false;
+  return;
 }
     
 /******************************************************************************/
@@ -115,7 +115,10 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
   //       Then the arbiter should prioritize control packets over
   //       data packets for higher performance.
     
-  m_egressPipe->EgressPipe(p, meta);
+//   m_egressPipe->EgressPipe(p, meta);
+  Simulator::Schedule (NanoSeconds(PACKETIZATION_DELAY),
+                       &NanoPuArchtEgressPipe::EgressPipe, 
+                       m_egressPipe, p, meta);
 }
     
 /******************************************************************************/
@@ -618,7 +621,11 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     apphdr.SetMsgLen (meta.msgLen);
     apphdr.SetPayloadSize (msg->GetSize ());
     msg->AddHeader (apphdr);
-    NotifyApplications (msg);
+    
+//     NotifyApplications (msg);
+    Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
+                         &NanoPuArchtReassemble::NotifyApplications, 
+                         this, msg);
       
     /* Free the rxMsgId*/
     rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);

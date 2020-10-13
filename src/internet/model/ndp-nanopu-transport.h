@@ -26,6 +26,10 @@
 #include "ns3/object.h"
 #include "ns3/nanopu-archt.h"
 
+// Define module delay in nano seconds
+#define INGRESS_PIPE_DELAY 5
+#define EGRESS_PIPE_DELAY 1
+
 namespace ns3 {
 
 /**
@@ -114,7 +118,7 @@ public:
   NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
   ~NdpNanoPuArchtEgressPipe (void);
   
-  bool EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
+  void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
