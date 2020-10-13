@@ -214,17 +214,20 @@ main (int argc, char *argv[])
   /* Assign IP addresses */
     
   Ipv4AddressHelper addressHelper;
-  char ipAddress[11];
+//   char ipAddress[11];
+  addressHelper.SetBase ("10.0.0.0", "255.255.255.0");
     
   Ipv4InterfaceContainer senderIfContainers[numSenders]; 
   for(uint16_t i = 0 ; i < numSenders ; i++){
-    sprintf(ipAddress,"10.1.%d.0",i+1);
-    addressHelper.SetBase (ipAddress, "255.255.255.0");
+//     sprintf(ipAddress,"10.1.%d.0",i+1);
+//     addressHelper.SetBase (ipAddress, "255.255.255.0");
+    addressHelper.NewNetwork ();
     senderIfContainers[i] = addressHelper.Assign (senderDeviceContainers[i]);
   }
   Ipv4InterfaceContainer receiverIfContainer;
-  sprintf(ipAddress,"10.1.%d.0",numSenders+1);
-  addressHelper.SetBase (ipAddress, "255.255.255.0");
+//   sprintf(ipAddress,"10.1.%d.0",numSenders+1);
+//   addressHelper.SetBase (ipAddress, "255.255.255.0");
+  addressHelper.NewNetwork ();
   receiverIfContainer = addressHelper.Assign (receiverDeviceContainer);
     
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();

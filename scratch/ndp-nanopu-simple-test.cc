@@ -83,7 +83,7 @@ main (int argc, char *argv[])
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
-    LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
+//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
 
@@ -102,6 +102,8 @@ main (int argc, char *argv[])
   PointToPointHelper pointToPoint;
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("10us"));
+  pointToPoint.SetQueue ("ns3::DropTailQueue", 
+                         "MaxSize", StringValue ("1p"));
 
   NetDeviceContainer deviceContainers[numEndPoints];
   for( uint16_t i = 0 ; i < numEndPoints ; i++){
@@ -113,18 +115,20 @@ main (int argc, char *argv[])
     
   // Bottleneck link traffic control configuration for NDP compatibility
   TrafficControlHelper tchPfifo;
-  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("10p"));
+  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("9p"));
   for( uint16_t i = 0 ; i < numEndPoints ; i++){
     tchPfifo.Install (deviceContainers[i]);
   }
 
   Ipv4AddressHelper address;
-  char ipAddress[8];
+//   char ipAddress[8];
+  address.SetBase ("10.0.0.0", "255.255.255.0");
 
   Ipv4InterfaceContainer interfaceContainers[numEndPoints]; 
   for( uint16_t i = 0 ; i < numEndPoints ; i++){
-    sprintf(ipAddress,"10.1.%d.0",i+1);
-    address.SetBase (ipAddress, "255.255.255.0");
+//     sprintf(ipAddress,"10.1.%d.0",i+1);
+//     address.SetBase (ipAddress, "255.255.255.0"); 
+    address.NewNetwork ();
     interfaceContainers[i] = address.Assign (deviceContainers[i]);
   }
     
