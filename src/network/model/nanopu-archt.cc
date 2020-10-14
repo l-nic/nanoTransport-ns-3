@@ -209,7 +209,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
     if (rtxPkt != -1 && m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
     {
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
-                   "Marking msg " << txMsgId << ", pkt " << rtxPkt <<
+                   " Marking msg " << txMsgId << ", pkt " << rtxPkt <<
                    " for retransmission.");
       m_toBeTxBitmap[txMsgId] |= (1<<rtxPkt);
     }
@@ -275,10 +275,10 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     else
     {
       m_timeoutCnt[txMsgId] ++;
-      bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((1<<rtxOffset));
+      bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((1<<(rtxOffset+1))-1);
       
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
-                   "NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
+                   " NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
       
       if (rtxPkts) Dequeue (txMsgId, rtxPkts);
       m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
@@ -326,9 +326,11 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     Ptr<Packet> nextPkt;
     while (remainingBytes > 0)
     {
+//       NS_LOG_DEBUG("Remaining bytes to be packetized: "<<remainingBytes<<
+//                    " Max payload size: "<<m_payloadSize<<
+//                    " Org. Msg Size: "<<cmsg->GetSize ());
       nextPktSize = std::min(remainingBytes, (uint32_t) m_payloadSize);
-      nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes,
-                                      cmsg->GetSize () - remainingBytes + nextPktSize);
+      nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
       buffer[numPkts] = nextPkt;
       remainingBytes -= nextPktSize;
       numPkts ++;
@@ -363,7 +365,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   else
   {
     NS_LOG_ERROR(Simulator::Now ().GetNanoSeconds () << 
-                 " Error: NanoPU allocate a new txMsgId for the new message. " << 
+                 " Error: NanoPU could not allocate a new txMsgId for the new message. " << 
                  this << " " << msg);
     return false;
   }
@@ -779,7 +781,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, timeoutInterval);
   m_packetize->SetTimerModule (m_egressTimer);
     
-  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, timeoutInterval);
+  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, timeoutInterval*2);
   m_reassemble->SetTimerModule (m_ingressTimer);
 }
 
