@@ -69,10 +69,10 @@ void
 NanoPuAppHeader::Print (std::ostream &os) const
 {
   os << "length: " << m_payloadSize + GetSerializedSize ()
-     << " remote: " << m_remoteIp.Get() << ":" << m_remotePort
+     << " remote: " << m_remoteIp << ":" << m_remotePort
      << " local: " << m_localPort
      << " msgLen: " << m_msgLen
-     << " type: " << m_headerType
+//      << " type: " << m_headerType
   ;
 }
 

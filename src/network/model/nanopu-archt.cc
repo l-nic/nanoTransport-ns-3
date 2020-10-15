@@ -514,9 +514,7 @@ void NanoPuArchtReassemble::SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer)
 }
     
 void 
-NanoPuArchtReassemble::SetRecvCallback (Callback<void, 
-                                                 Ptr<NanoPuArchtReassemble>, 
-                                                 Ptr<Packet> > reassembledMsgCb)
+NanoPuArchtReassemble::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << &reassembledMsgCb);
   NS_ASSERT_MSG(m_reassembledMsgCb.IsNull (),
@@ -529,7 +527,7 @@ void NanoPuArchtReassemble::NotifyApplications (Ptr<Packet> msg)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
   if (!m_reassembledMsgCb.IsNull ())
     {
-      m_reassembledMsgCb (this, msg);
+      m_reassembledMsgCb (msg);
     }
   else
     {
@@ -771,6 +769,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   BindToNetDevice ();
     
   m_maxMessages = maxMessages;
+  m_payloadSize = payloadSize;
   m_initialCredit = initialCredit;
     
   m_reassemble = CreateObject<NanoPuArchtReassemble> (m_maxMessages);
@@ -778,7 +777,7 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
                                                     m_maxMessages,
                                                     m_initialCredit,
-                                                    payloadSize,
+                                                    m_payloadSize,
                                                     maxTimeoutCnt);
   m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, timeoutInterval);
   m_packetize->SetTimerModule (m_egressTimer);
@@ -801,6 +800,11 @@ Ptr<Node>
 NanoPuArcht::GetNode (void)
 {
   return m_node;
+}
+    
+uint16_t NanoPuArcht::GetPayloadSize (void)
+{
+  return m_payloadSize;
 }
 
 /*

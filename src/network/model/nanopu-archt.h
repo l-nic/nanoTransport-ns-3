@@ -306,7 +306,7 @@ public:
    * \brief Allows applications to set a callback for every reassembled msg on RX
    * \param reassembledMsgCb Callback provided by application
    */
-  void SetRecvCallback (Callback<void, Ptr<NanoPuArchtReassemble>, Ptr<Packet> > reassembledMsgCb);
+  void SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb);
   /**
    * \brief Notifies the application every time a message is reassembled
    * \param msg The message that is reassembled with application header and should be given to the application
@@ -339,9 +339,7 @@ protected:
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
     
-  Callback<void, 
-           Ptr<NanoPuArchtReassemble>, 
-           Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
+  Callback<void, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
 };
     
 /******************************************************************************/
@@ -416,6 +414,12 @@ public:
   Ptr<Node> GetNode (void);
   
   /**
+   * \brief Return the MTU size without the header sizes
+   * \returns the payloadSize
+   */
+  uint16_t GetPayloadSize (void);
+  
+  /**
    * \brief Bind the architecture to the device.
    *
    * This method corresponds to using setsockopt() SO_BINDTODEVICE
@@ -482,6 +486,7 @@ protected:
     
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
     uint16_t m_maxMessages; //!< Max number of msg Reassembly and Packetize modules can handle at a time
+    uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
     uint16_t m_initialCredit; //!< Initial credit to be given to new messages (in packets)
     
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture

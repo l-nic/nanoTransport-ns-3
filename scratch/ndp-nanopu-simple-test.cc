@@ -41,35 +41,35 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("NanoPuSimpleTest");
 
-void
-SendNdpMsg (NdpNanoPuArcht ndpNanoPu, Ipv4Address dstIp, 
-            uint16_t srcPort, uint16_t numPkts, uint16_t payloadSize)
-{
-  NS_LOG_UNCOND("Sending a message through NDP NanoPU Archt");
+// void
+// SendNdpMsg (Ptr<NanoPuArcht> ndpNanoPu, Ipv4Address dstIp, 
+//             uint16_t srcPort, uint16_t numPkts, uint16_t payloadSize)
+// {
+//   NS_LOG_UNCOND("Sending a message through NDP NanoPU Archt");
   
-//   uint32_t payloadSize = 1400; 
-  Ptr<Packet> msg;
-  msg = Create<Packet> (numPkts*payloadSize);
-    
-//   std::string payload = "NDP Payload";
-//   uint32_t payloadSize = payload.size () + 1; 
-//   uint8_t *buffer;
-//   buffer = new uint8_t [payloadSize];
-//   memcpy (buffer, payload.c_str (), payloadSize);
+// //   uint32_t payloadSize = 1400; 
 //   Ptr<Packet> msg;
-//   msg = Create<Packet> (buffer, payloadSize);
+//   msg = Create<Packet> (numPkts*payloadSize);
     
-  NanoPuAppHeader appHdr;
-  appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
-  appHdr.SetRemoteIp(dstIp);
-  appHdr.SetRemotePort(999);
-  appHdr.SetLocalPort(srcPort);
-  appHdr.SetMsgLen(numPkts);
-  appHdr.SetPayloadSize(numPkts*payloadSize);
-  msg-> AddHeader (appHdr);
+// //   std::string payload = "NDP Payload";
+// //   uint32_t payloadSize = payload.size () + 1; 
+// //   uint8_t *buffer;
+// //   buffer = new uint8_t [payloadSize];
+// //   memcpy (buffer, payload.c_str (), payloadSize);
+// //   Ptr<Packet> msg;
+// //   msg = Create<Packet> (buffer, payloadSize);
     
-  ndpNanoPu.Send (msg);
-}
+//   NanoPuAppHeader appHdr;
+//   appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
+//   appHdr.SetRemoteIp(dstIp);
+//   appHdr.SetRemotePort(999);
+//   appHdr.SetLocalPort(srcPort);
+//   appHdr.SetMsgLen(numPkts);
+//   appHdr.SetPayloadSize(numPkts*payloadSize);
+//   msg-> AddHeader (appHdr);
+    
+//   ndpNanoPu->Send (msg);
+// }
 
 int
 main (int argc, char *argv[])
@@ -78,8 +78,9 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::FS);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
@@ -157,38 +158,52 @@ main (int argc, char *argv[])
       
 //     NS_LOG_UNCOND("Created NDP NanoPU Archt " << i);
 //   }
-   NdpNanoPuArcht srcArcht =  NdpNanoPuArcht(nodeContainers[0].Get (1), 
-                                             deviceContainers[0].Get (1),
-                                             timeoutInterval, maxMessages, payloadSize);
-   NdpNanoPuArcht dstArcht =  NdpNanoPuArcht(nodeContainers[1].Get (1), 
-                                             deviceContainers[1].Get (1),
-                                             timeoutInterval, maxMessages, payloadSize);
+   Ptr<NdpNanoPuArcht> srcArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[0].Get (1), 
+                                                           deviceContainers[0].Get (1),
+                                                           timeoutInterval, maxMessages, 
+                                                           payloadSize);
+   Ptr<NdpNanoPuArcht> dstArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[1].Get (1), 
+                                                           deviceContainers[1].Get (1),
+                                                           timeoutInterval, maxMessages, 
+                                                           payloadSize);
     
   /*
    * In order for an application to bind to the nanoPu architecture:
-  nanoPu.GetReassemblyBuffer ()->SetRecvCallback (MakeCallback (&MyApplication::HandleMsg, this, msg));
+  nanoPu.GetReassemblyBuffer ()->SetRecvCallback (MakeCallback (&MyApplication::HandleMsg, this));
   
    * where MyApplication::HandleMsg is the method to handle each reassembled msg
    * The signature for the MyApplication::HandleMsg method should be:
-  void MyApplication::HandleMsg (Ptr<NanoPuArchtReassemble> reassemblyBuffer, Ptr<Packet> msg)
+  void MyApplication::HandleMsg (Ptr<Packet> msg)
   
    * Note that "msg" has a type of packet which will have only the 
    * NanoPuAppHeader and the payload (msg itself). The application 
    * should remove the header first and operate on the payload.
    
-   * Also note that every application on the same nanoPu will
-   * bind to the exact same RecvCallback. This means all the applications
+   * Currently each nanopu is able to connect to a single application only.
+   
+   * Also note that every application on the same nanoPu (if there are multiple)
+   * will bind to the exact same RecvCallback. This means all the applications
    * will be notified when a msg for a single application is received.
    * Applications should process the NanoPuAppHeader first to make sure
    * the incoming msg belongs to them.
    * TODO: implement a msg dispatching logic so that nanoPu delivers
    *       each msg only to the owner of the msg.
-  */
+   */
+  Ipv4Address senderIp = interfaceContainers[0].GetAddress(1);
+  Ipv4Address receiverIp = interfaceContainers[1].GetAddress(1);
+    
+  NanoPuTrafficGenerator sender = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
+  sender.SetLocalPort(111);
+  sender.SetMsgSize(1,1); //Deterministically set the message size
+  sender.SetMaxMsg(1);
+  sender.StartImmediately();
+  sender.Start(Seconds (3.0));
   
-  Ipv4Address dstIp = interfaceContainers[1].GetAddress(1);
+  NanoPuTrafficGenerator receiver = NanoPuTrafficGenerator(dstArcht, senderIp, 111);
+  receiver.SetLocalPort(222);
 
-  Simulator::Schedule (Seconds (3.0), &SendNdpMsg, 
-                       srcArcht, dstIp, 111, 4, payloadSize);
+//   Simulator::Schedule (Seconds (3.0), &SendNdpMsg, 
+//                        srcArcht, dstIp, 111, 4, payloadSize);
     
 //   pointToPoint.EnablePcapAll ("tmp.pcap", true);
 
