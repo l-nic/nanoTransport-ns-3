@@ -78,12 +78,12 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::FS);
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
-//   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
-  LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
+//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
 
@@ -118,7 +118,7 @@ main (int argc, char *argv[])
     
   // Bottleneck link traffic control configuration for NDP compatibility
   TrafficControlHelper tchPfifo;
-  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("2p"));
+  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("9p"));
 //   for( uint16_t i = 0 ; i < numEndPoints ; i++){
 //     tchPfifo.Install (deviceContainers[i]);
 //   }

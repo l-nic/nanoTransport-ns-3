@@ -519,6 +519,8 @@ NanoPuArchtReassemble::SetRecvCallback (Callback<void,
                                                  Ptr<Packet> > reassembledMsgCb)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << &reassembledMsgCb);
+  NS_ASSERT_MSG(m_reassembledMsgCb.IsNull (),
+                "An application has already been installed on this NanoPU!");
   m_reassembledMsgCb = reassembledMsgCb;
 }
     
