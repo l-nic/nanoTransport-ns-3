@@ -261,6 +261,13 @@ HomaHeader::GetPayloadSize (void) const
 {
   return m_payloadSize;
 }
+
+// TODO: Currently there is no way for the application to
+//       signal the generation information to the nanopu-archt.
+//       NanoPuAppHeader wouldn't work because "generation"
+//       information is not generic enough to be baked into the
+//       the architecture. Maybe applications insert this info
+//       as the first couple of bytes of the payload.
     
 void 
 HomaHeader::SetGeneration (uint16_t generation)
