@@ -129,7 +129,7 @@ public:
   uint16_t GetPayloadSize (void) const;
   
   /**
-   * \brief Converts an integer into a human readable list of Tcp flags
+   * \brief Converts an integer into a human readable list of NDP flags
    *
    * \param flags Bitfield of NDP flags to convert to a readable string
    * \param delimiter String to insert between flags

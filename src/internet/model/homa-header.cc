@@ -18,90 +18,101 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
+/*
+ * The heade implementation is partly based on the one provided by 
+ * https://github.com/PlatformLab/HomaModule/blob/master/homa_impl.h
+ * However it does not completely follow the way Home Linux Kernel is
+ * implemented for the sake of easier management
+ */
+
 #include <stdint.h>
 #include <iostream>
 
-#include "ndp-header.h"
+#include "homa-header.h"
 #include "ns3/log.h"
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE ("NdpHeader");
+NS_LOG_COMPONENT_DEFINE ("HomaHeader");
     
-NS_OBJECT_ENSURE_REGISTERED (NdpHeader);
+NS_OBJECT_ENSURE_REGISTERED (HomaHeader);
 
 /* The magic values below are used only for debugging.
  * They can be used to easily detect memory corruption
  * problems so you can see the patterns in memory.
  */
-NdpHeader::NdpHeader ()
+HomaHeader::HomaHeader ()
   : m_srcPort (0xfffd),
     m_dstPort (0xfffd),
     m_txMsgId (0),
     m_flags (0),
+    m_prio (0xff),
     m_msgLen (0),
     m_pktOffset (0),
-    m_pullOffset (0),
-    m_payloadSize (0)
+    m_grantOffset (0),
+    m_payloadSize (0),
+    m_generation (1)
 {
 }
 
-NdpHeader::~NdpHeader ()
+HomaHeader::~HomaHeader ()
 {
 }
     
 TypeId 
-NdpHeader::GetTypeId (void)
+HomaHeader::GetTypeId (void)
 {
-  static TypeId tid = TypeId ("ns3::NdpHeader")
+  static TypeId tid = TypeId ("ns3::HomaHeader")
     .SetParent<Header> ()
     .SetGroupName ("Internet")
-    .AddConstructor<NdpHeader> ()
+    .AddConstructor<HomaHeader> ()
   ;
   return tid;
 }
 TypeId 
-NdpHeader::GetInstanceTypeId (void) const
+HomaHeader::GetInstanceTypeId (void) const
 {
   return GetTypeId ();
 }
     
 void 
-NdpHeader::Print (std::ostream &os) const
+HomaHeader::Print (std::ostream &os) const
 {
   os << "length: " << m_payloadSize + GetSerializedSize ()
      << " " << m_srcPort << " > " << m_dstPort
      << " txMsgId: " << m_txMsgId
+     << " prio: " << m_prio
+     << " gen: " << m_generation
      << " msgLen: " << m_msgLen
      << " pktOffset: " << m_pktOffset
-     << " pullOffset: " << m_pullOffset
+     << " grantOffset: " << m_grantOffset
      << " " << FlagsToString (m_flags)
   ;
 }
 
 uint32_t 
-NdpHeader::GetSerializedSize (void) const
+HomaHeader::GetSerializedSize (void) const
 {
-  /* Note: In htsim implementation, control packets of NDP are 64 bytes
-   *       That would require another 15 bytes to be appended to the packet
+  /* Note: The original Homa implementation has a slighly different packet 
+   *       header format for every type of Homa packet.
    */
-  return 15; 
+  return 18; 
   // TODO: If the above value is updated, update the default payload size
-  //       in the declaration of NDP nanoPU implementation.
+  //       in the declaration of Homa nanoPU implementation.
 }
     
 std::string
-NdpHeader::FlagsToString (uint8_t flags, const std::string& delimiter)
+HomaHeader::FlagsToString (uint8_t flags, const std::string& delimiter)
 {
   static const char* flagNames[8] = {
     "DATA",
-    "ACK",
-    "NACK",
-    "PULL",
-    "CHOP",
-    "F1",
-    "F2",
-    "F3"
+    "GRANT",
+    "RESEND",
+    "UNKNOWN",
+    "BUSY",
+    "CUTOFFS",
+    "FREEZE",
+    "BOGUS"
   };
   std::string flagsDescription = "";
   for (uint8_t i = 0; i < 8; ++i)
@@ -119,7 +130,7 @@ NdpHeader::FlagsToString (uint8_t flags, const std::string& delimiter)
 }
     
 void
-NdpHeader::Serialize (Buffer::Iterator start) const
+HomaHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
 
@@ -127,113 +138,139 @@ NdpHeader::Serialize (Buffer::Iterator start) const
   i.WriteHtonU16 (m_dstPort);
   i.WriteHtonU16 (m_txMsgId);
   i.WriteU8 (m_flags);
+  i.WriteU8 (m_prio);
   i.WriteHtonU16 (m_msgLen);
   i.WriteHtonU16 (m_pktOffset);
-  i.WriteHtonU16 (m_pullOffset);
+  i.WriteHtonU16 (m_grantOffset);
   i.WriteHtonU16 (m_payloadSize);
+  i.WriteHtonU16 (m_generation);
 }
 uint32_t
-NdpHeader::Deserialize (Buffer::Iterator start)
+HomaHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   m_srcPort = i.ReadNtohU16 ();
   m_dstPort = i.ReadNtohU16 ();
   m_txMsgId = i.ReadNtohU16 ();
   m_flags = i.ReadU8 ();
+  m_prio = i.ReadU8 ();
   m_msgLen = i.ReadNtohU16 ();
   m_pktOffset = i.ReadNtohU16 ();
-  m_pullOffset = i.ReadNtohU16 ();
+  m_grantOffset = i.ReadNtohU16 ();
   m_payloadSize = i.ReadNtohU16 ();
+  m_generation = i.ReadNtohU16 ();
 
   return GetSerializedSize ();
 }
     
 void 
-NdpHeader::SetSrcPort (uint16_t port)
+HomaHeader::SetSrcPort (uint16_t port)
 {
   m_srcPort = port;
 }
 uint16_t 
-NdpHeader::GetSrcPort (void) const
+HomaHeader::GetSrcPort (void) const
 {
   return m_srcPort;
 }
     
 void 
-NdpHeader::SetDstPort (uint16_t port)
+HomaHeader::SetDstPort (uint16_t port)
 {
   m_dstPort = port;
 }
 uint16_t 
-NdpHeader::GetDstPort (void) const
+HomaHeader::GetDstPort (void) const
 {
   return m_dstPort;
 }
     
 void 
-NdpHeader::SetTxMsgId (uint16_t txMsgId)
+HomaHeader::SetTxMsgId (uint16_t txMsgId)
 {
   m_txMsgId = txMsgId;
 }
 uint16_t 
-NdpHeader::GetTxMsgId (void) const
+HomaHeader::GetTxMsgId (void) const
 {
   return m_txMsgId;
 }
 
 void
-NdpHeader::SetFlags (uint8_t flags)
+HomaHeader::SetFlags (uint8_t flags)
 {
   m_flags = flags;
 }
 uint8_t
-NdpHeader::GetFlags (void) const
+HomaHeader::GetFlags (void) const
 {
   return m_flags;
 }
     
+void
+HomaHeader::SetPrio (uint8_t prio)
+{
+  m_prio = prio;
+}
+uint8_t
+HomaHeader::GetPrio (void) const
+{
+  return m_prio;
+}
+    
 void 
-NdpHeader::SetMsgLen (uint16_t msgLen)
+HomaHeader::SetMsgLen (uint16_t msgLen)
 {
   m_msgLen = msgLen;
 }
 uint16_t 
-NdpHeader::GetMsgLen (void) const
+HomaHeader::GetMsgLen (void) const
 {
   return m_msgLen;
 }
     
 void 
-NdpHeader::SetPktOffset (uint16_t pktOffset)
+HomaHeader::SetPktOffset (uint16_t pktOffset)
 {
   m_pktOffset = pktOffset;
 }
 uint16_t 
-NdpHeader::GetPktOffset (void) const
+HomaHeader::GetPktOffset (void) const
 {
   return m_pktOffset;
 }
     
 void 
-NdpHeader::SetPullOffset (uint16_t pullOffset)
+HomaHeader::SetGrantOffset (uint16_t grantOffset)
 {
-  m_pullOffset = pullOffset;
+  m_grantOffset = grantOffset;
 }
 uint16_t 
-NdpHeader::GetPullOffset (void) const
+HomaHeader::GetGrantOffset (void) const
 {
-  return m_pullOffset;
+  return m_grantOffset;
 }
     
 void 
-NdpHeader::SetPayloadSize (uint16_t payloadSize)
+HomaHeader::SetPayloadSize (uint16_t payloadSize)
 {
   m_payloadSize = payloadSize;
 }
 uint16_t 
-NdpHeader::GetPayloadSize (void) const
+HomaHeader::GetPayloadSize (void) const
 {
   return m_payloadSize;
+}
+    
+void 
+HomaHeader::SetGeneration (uint16_t generation)
+{
+  m_generation = generation;
+}
+uint16_t 
+HomaHeader::GetGeneration (void) const
+{
+  return m_generation;
 }
     
 } // namespace ns3
