@@ -18,8 +18,8 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
-#ifndef NDP_NANOPU_TRANSPORT_H
-#define NDP_NANOPU_TRANSPORT_H
+#ifndef HOMA_NANOPU_TRANSPORT_H
+#define HOMA_NANOPU_TRANSPORT_H
 
 #include <unordered_map>
 
@@ -35,10 +35,10 @@ namespace ns3 {
 /**
  * \ingroup nanopu-archt
  *
- * \brief Programmable Packet Generator Architecture for NanoPU with NDP Transport
+ * \brief Programmable Packet Generator Architecture for NanoPU with Homa Transport
  *
  */
-class NdpNanoPuArchtPktGen : public Object
+class HomaNanoPuArchtPktGen : public Object
 {
 public:
   /**
@@ -47,13 +47,13 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
-  ~NdpNanoPuArchtPktGen (void);
+  HomaNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
+  ~HomaNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
+  void CtrlPktEvent (bool genGRANT, bool genBUSY,
                      Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
                      uint16_t txMsgId, uint16_t msgLen, uint16_t pktOffset, 
-                     uint16_t pullOffset);
+                     uint16_t grantOffset);
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
@@ -67,10 +67,10 @@ protected:
 /**
  * \ingroup nanopu-archt
  *
- * \brief Ingress Pipeline Architecture for NanoPU with NDP Transport
+ * \brief Ingress Pipeline Architecture for NanoPU with Homa Transport
  *
  */
-class NdpNanoPuArchtIngressPipe : public Object
+class HomaNanoPuArchtIngressPipe : public Object
 {
 public:
   /**
@@ -79,11 +79,11 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
+  HomaNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                              Ptr<NanoPuArchtPacketize> packetize,
                              Ptr<NdpNanoPuArchtPktGen> pktgen,
                              uint16_t rttPkts);
-  ~NdpNanoPuArchtIngressPipe (void);
+  ~HomaNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
@@ -92,7 +92,7 @@ protected:
 
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
-    Ptr<NdpNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
+    Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
     uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
     
     std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
@@ -103,10 +103,10 @@ protected:
 /**
  * \ingroup nanopu-archt
  *
- * \brief Egress Pipeline Architecture for NanoPU with NDP Transport
+ * \brief Egress Pipeline Architecture for NanoPU with Homa Transport
  *
  */
-class NdpNanoPuArchtEgressPipe : public NanoPuArchtEgressPipe
+class HomaNanoPuArchtEgressPipe : public NanoPuArchtEgressPipe
 {
 public:
   /**
@@ -115,8 +115,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
-  ~NdpNanoPuArchtEgressPipe (void);
+  HomaNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
+  ~HomaNanoPuArchtEgressPipe (void);
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
@@ -130,10 +130,10 @@ protected:
  * \ingroup nanopu-archt
  *
  * \brief Transport Specific Architecture for devices to replace internet and transport layers.
- *        This version of the architecture implements specifically the NDP transport protocol.
+ *        This version of the architecture implements specifically the Homa transport protocol.
  *
  */
-class NdpNanoPuArcht : public NanoPuArcht
+class HomaNanoPuArcht : public NanoPuArcht
 {
 public:
   /**
@@ -142,14 +142,14 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  NdpNanoPuArcht (Ptr<Node> node,
+  HomaNanoPuArcht (Ptr<Node> node,
                   Ptr<NetDevice> device,
                   Time timeoutInterval,
                   uint16_t maxMessages=100,
                   uint16_t payloadSize=1445,
                   uint16_t initialCredit=10,
                   uint16_t maxTimeoutCnt=5);
-  virtual ~NdpNanoPuArcht (void);
+  virtual ~HomaNanoPuArcht (void);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.
@@ -162,14 +162,17 @@ public:
    */
   bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
+                    
+  uint16_t m_priorities[3] = {5, 25, 100};
+  uint8_t GetPriority (uint16_t msgLen);
 
 protected:
 
-  Ptr<NdpNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
-  Ptr<NdpNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
-  Ptr<NdpNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator for the archt
+  Ptr<HomaNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
+  Ptr<HomaNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
+  Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator for the archt
 };   
 
 } // namespace ns3
 
-#endif /* NDP_NANOPU_TRANSPORT */
+#endif /* HOMA_NANOPU_TRANSPORT */
