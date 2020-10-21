@@ -274,6 +274,12 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     m_pktgen->CtrlPktEvent (genACK, genNACK, genPULL, 
                             srcIp, srcPort, dstPort, txMsgId,
                             msgLen, pktOffset, pullOffset);
+//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//                          &NdpNanoPuArchtPktGen::CtrlPktEvent, 
+//                          m_pktgen, genACK, genNACK, genPULL, 
+//                          srcIp, srcPort, dstPort, txMsgId,
+//                          msgLen, pktOffset, pullOffset);  
+    
   }  
   else // not a DATA packet
   {
@@ -283,6 +289,9 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
     {
       m_packetize->DeliveredEvent (txMsgId, msgLen, (1<<pktOffset));
+//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//                            &NanoPuArchtPacketize::DeliveredEvent, 
+//                            m_packetize, txMsgId, msgLen, (1<<pktOffset));
     }
     if (ndph.GetFlags () & NdpHeader::Flags_t::PULL ||
         ndph.GetFlags () & NdpHeader::Flags_t::NACK)
@@ -292,6 +301,11 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                      NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                      std::greater<int>());
+//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//                            &NanoPuArchtPacketize::CreditToBtxEvent, 
+//                            m_packetize, txMsgId, rtxPkt, credit, credit,
+//                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+//                            std::greater<int>());
     }
   }
     

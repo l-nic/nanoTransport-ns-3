@@ -22,6 +22,8 @@
 #define HOMA_NANOPU_TRANSPORT_H
 
 #include <unordered_map>
+#include <deque>
+#include <array>
 
 #include "ns3/object.h"
 #include "ns3/nanopu-archt.h"
@@ -81,7 +83,7 @@ public:
 
   HomaNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                              Ptr<NanoPuArchtPacketize> packetize,
-                             Ptr<NdpNanoPuArchtPktGen> pktgen,
+                             Ptr<HomaNanoPuArchtPktGen> pktgen,
                              uint16_t rttPkts);
   ~HomaNanoPuArchtIngressPipe (void);
   
@@ -90,12 +92,17 @@ public:
   
 protected:
 
-    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
-    Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
-    uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
+  Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
+  Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
+  Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the Homa architecture
+  uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
     
-    std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track grantOffset for each msg {rx_msg_id => credit}
+    
+  uint16_t m_priorities[3] = {5, 25, 100};
+  uint8_t GetPriority (uint16_t msgLen);
+  
+  std::array<std::deque<uint16_t>, 4> m_scheduledMsgs; //!< List of scheduled messages for every level of priorities
 };
  
 /******************************************************************************/
@@ -122,6 +129,9 @@ public:
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
+  
+  uint16_t m_priorities[3] = {5, 25, 100};
+  uint8_t GetPriority (uint16_t msgLen);
 };
  
 /******************************************************************************/
@@ -162,9 +172,6 @@ public:
    */
   bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
-                    
-  uint16_t m_priorities[3] = {5, 25, 100};
-  uint8_t GetPriority (uint16_t msgLen);
 
 protected:
 

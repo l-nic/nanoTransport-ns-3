@@ -181,7 +181,7 @@ public:
   {
     DATA = 1,     //!< DATA Packet
     GRANT = 2,    //!< GRANT
-    RESEND = 4,   //!< RESEND
+    RESEND = 4,   //!< RESEND (Only sent from senders)
     UNKNOWN = 8,  //!< Empty for future use
     BUSY = 16,    //!< Busy
     CUTOFFS = 32, //!< Priority cutoffs
