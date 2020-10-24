@@ -57,6 +57,7 @@ typedef struct reassembleMeta_t {
 typedef struct rxMsgInfoMeta_t {
     uint16_t rxMsgId;
     uint16_t ackNo; //!< Next expected packet
+    uint16_t numPkts; //!< Number of packets in the buffer
     bool isNewMsg;
     bool isNewPkt;
     bool success;

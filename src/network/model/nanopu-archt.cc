@@ -569,6 +569,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       rxMsgInfo.ackNo = msgLen;
     }
       
+    rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
+      
     rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second & (1<<pktOffset)) == 0;
     rxMsgInfo.success = true;
   }
