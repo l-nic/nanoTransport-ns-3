@@ -236,12 +236,16 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
 //                            srcIp, srcPort, dstPort, txMsgId,
 //                            msgLen, pktOffset, grantOffset);
         
-      if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
+//       if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
+//         // The active msg is fully granted, so unschedule it
+      // TODO: Then how do we make sure fully granted msgs complete
+      //       in the future? Should have timers for every grants sent.
+      if (!scheduledMsgsIsEmpty 
+          && rxMsgInfo.numPkts == msgLen-1
+          && rxMsgInfo.ackNo == pktOffset)
       {
-        // The active msg is fully granted, so unschedule it
+        // This was the last expected packet of the message
         m_scheduledMsgs[priority].pop_front();
-        // TODO: Then how do we make sure fully granted msgs complete
-        //       in the future? Should have timers for every grants sent.
       }
     }
     else
