@@ -25,8 +25,8 @@
  *           Tom Henderson <tomhend@u.washington.edu>
  */
 
-#ifndef PFIFO_NDP_H
-#define PFIFO_NDP_H
+#ifndef PFIFO_HOMA_H
+#define PFIFO_HOMA_H
 
 #include "ns3/queue-disc.h"
 
@@ -35,23 +35,23 @@ namespace ns3 {
 /**
  * \ingroup traffic-control
  *
- * Linux pfifo_ndp describes the switch behavior for an NDP Transport 
- * Protocol enabled network. Packets are enqueued in two FIFO droptail 
- * queues according to NDP flags on the packet. 
+ * Linux pfifo_fast is the default priority queue enabled on Linux
+ * systems. Packets are enqueued in three FIFO droptail queues according
+ * to given number of priority bands based on the packet priority.
  *
- * The system behaves similar to two ns3::DropTail queues operating
- * together, in which control packets or trimmed packets are always
- * dequeued before a data packet is dequeued.
+ * The system behaves similar to three ns3::DropTail queues operating
+ * together, in which packets from higher priority bands are always
+ * dequeued before a packet from a lower priority band is dequeued.
  *
  * The queue disc capacity, i.e., the maximum number of packets that can
  * be enqueued in the queue disc, is set through the limit attribute, which
  * plays the same role as txqueuelen in Linux. If no internal queue is
- * provided, two DropTail queues having each a capacity equal to limit are
- * created by default. User is allowed to provide queues, but they must be
- * two, operate in packet mode and each have a capacity not less
+ * provided, given number of DropTail queues having each a capacity equal to limit 
+ * are created by default. User is allowed to provide queues, but they must be
+ * three, operate in packet mode and each have a capacity not less
  * than limit. No packet filter can be provided.
  */
-class PfifoNdpQueueDisc : public QueueDisc {
+class PfifoHomaQueueDisc : public QueueDisc {
 public:
   /**
    * \brief Get the type ID.
@@ -59,13 +59,13 @@ public:
    */
   static TypeId GetTypeId (void);
   /**
-   * \brief PfifoNdpQueueDisc constructor
+   * \brief PfifoHomaQueueDisc constructor
    *
    * Creates a queue with a depth of 1000 packets per band by default
    */
-  PfifoNdpQueueDisc ();
+  PfifoHomaQueueDisc ();
 
-  virtual ~PfifoNdpQueueDisc();
+  virtual ~PfifoHomaQueueDisc();
 
   // Reasons for dropping packets
   static constexpr const char* LIMIT_EXCEEDED_DROP = "Queue disc limit exceeded";  //!< Packet dropped due to queue disc limit exceeded
@@ -77,8 +77,10 @@ private:
   virtual Ptr<const QueueDiscItem> DoPeek (void);
   virtual bool CheckConfig (void);
   virtual void InitializeParams (void);
+    
+  uint8_t m_numBands; //!< Number of bands to have
 };
 
 } // namespace ns3
 
-#endif /* PFIFO_NDP_H */
+#endif /* PFIFO_HOMA_H */
