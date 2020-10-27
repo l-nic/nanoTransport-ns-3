@@ -239,14 +239,15 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
         
 //       if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
 //         // The active msg is fully granted, so unschedule it
-      // TODO: Then how do we make sure fully granted msgs complete
-      //       in the future? Should have timers for every grants sent.
+//         // TODO: Then how do we make sure fully granted msgs complete
+//         //       in the future? Should have timers for every grants sent.
       if (!scheduledMsgsIsEmpty 
           && rxMsgInfo.numPkts == msgLen-1
           && rxMsgInfo.ackNo == pktOffset)
       {
         // This was the last expected packet of the message
         m_scheduledMsgs[priority].pop_front();
+        // TODO: Activate the next message and send a grant.
       }
     }
     else
