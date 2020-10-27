@@ -75,7 +75,7 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (bool genGRANT, bool genBUSY,
                                          Ipv4Address dstIp, uint16_t dstPort, 
                                          uint16_t srcPort, uint16_t txMsgId, 
                                          uint16_t msgLen, uint16_t pktOffset, 
-                                         uint16_t grantOffset)
+                                         uint16_t grantOffset, uint8_t priority)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
@@ -94,6 +94,7 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (bool genGRANT, bool genBUSY,
   homah.SetMsgLen (msgLen);
   homah.SetPktOffset (pktOffset);
   homah.SetGrantOffset (grantOffset);
+  homah.SetPriority (priority);
   homah.SetPayloadSize (0);
     
   if (genGRANT)
@@ -230,7 +231,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
        
       m_pktgen->CtrlPktEvent(genGRANT, genBUSY, 
                              srcIp, srcPort, dstPort, txMsgId,
-                             msgLen, pktOffset, grantOffset);
+                             msgLen, pktOffset, grantOffset, priority);
 //       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                            &HomaNanoPuArchtPktGen::CtrlPktEvent, 
 //                            m_pktgen, genGRANT, genBUSY, 
@@ -402,10 +403,10 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                  " NanoPU Homa EgressPipe processing control packet.");
     priority = 0; // Highest Priority
       
-    HomaHeader homah;
-    cp->RemoveHeader(homah);
-    homah.SetPrio(GetPriority (homah.GetMsgLen()));
-    cp->AddHeader (homah);
+//     HomaHeader homah;
+//     cp->RemoveHeader(homah);
+//     homah.SetPrio(GetPriority (homah.GetMsgLen()));
+//     cp->AddHeader (homah);
   }
   
   Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
