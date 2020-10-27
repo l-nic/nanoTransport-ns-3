@@ -81,7 +81,7 @@ HomaHeader::Print (std::ostream &os) const
   os << "length: " << m_payloadSize + GetSerializedSize ()
      << " " << m_srcPort << " > " << m_dstPort
      << " txMsgId: " << m_txMsgId
-     << " prio: " << m_prio
+     << " prio: " << (uint16_t)m_prio
      << " gen: " << m_generation
      << " msgLen: " << m_msgLen
      << " pktOffset: " << m_pktOffset

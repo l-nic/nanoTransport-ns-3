@@ -73,6 +73,7 @@ bool
 PfifoHomaQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
 {
   NS_LOG_FUNCTION (this << item);
+//   NS_LOG_DEBUG("The received packet is: " << item->GetPacket ()->ToString ());
 
   if (GetCurrentSize () >= GetMaxSize ())
     {
@@ -82,10 +83,12 @@ PfifoHomaQueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
     }
 
   uint8_t priority = 0;
-  SocketPriorityTag priorityTag;
+  SocketIpTosTag priorityTag;
   if (item->GetPacket ()->PeekPacketTag (priorityTag))
     {
-      priority = priorityTag.GetPriority ();
+//       NS_LOG_DEBUG("Found priority tag on the packet: " << 
+//                    (uint32_t)priorityTag.GetTos ());
+      priority = priorityTag.GetTos ();
     }
 
   uint32_t band = (uint32_t)priority;

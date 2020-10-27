@@ -81,10 +81,11 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (bool genGRANT, bool genBUSY,
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Homa PktGen processing CtrlPktEvent." <<
                " GenGrant: " << genGRANT << " GenBUSY: " << genBUSY);
-    
+  
   egressMeta_t meta;
   meta.isData = false;
   meta.dstIP = dstIp;
+  meta.msgLen = msgLen;
     
   HomaHeader homah;
   homah.SetSrcPort (srcPort);
@@ -369,7 +370,6 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
     
-  SocketPriorityTag priorityTag;
   uint8_t priority;
   
   if (meta.isData)
@@ -403,7 +403,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
       
     HomaHeader homah;
     cp->RemoveHeader(homah);
-    homah.SetPrio(GetPriority (meta.msgLen));
+    homah.SetPrio(GetPriority (homah.GetMsgLen()));
     cp->AddHeader (homah);
   }
   
@@ -420,8 +420,15 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   iph.SetTos (priority);
   cp-> AddHeader (iph);
     
-  priorityTag.SetPriority(priority);
+  SocketIpTosTag priorityTag;
+  priorityTag.SetTos(priority);
   cp-> AddPacketTag (priorityTag);
+//   NS_LOG_DEBUG("Adding priority tag on the packet: " << 
+//                (uint32_t)priorityTag.GetTos () << 
+//                " where intended priority is " << (uint32_t)priority);
+    
+  NS_ASSERT_MSG(cp->PeekPacketTag (priorityTag),
+               "The packet should have a priority tag before transmission!");
   
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Homa EgressPipe sending: " << 

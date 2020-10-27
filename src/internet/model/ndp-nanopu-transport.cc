@@ -79,8 +79,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-               " NanoPU NDP PktGen processing CtrlPktEvent. " <<
-               "GenACK: " << genACK << " GenNACK: " << genNACK <<
+               " NanoPU NDP PktGen processing CtrlPktEvent." <<
+               " GenACK: " << genACK << " GenNACK: " << genNACK <<
                " GenPULL: " << genPULL);
     
   Time delay = Time(0);

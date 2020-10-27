@@ -39,37 +39,7 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("NdpNanoPuSimpleTest");
-
-// void
-// SendNdpMsg (Ptr<NanoPuArcht> ndpNanoPu, Ipv4Address dstIp, 
-//             uint16_t srcPort, uint16_t numPkts, uint16_t payloadSize)
-// {
-//   NS_LOG_UNCOND("Sending a message through NDP NanoPU Archt");
-  
-// //   uint32_t payloadSize = 1400; 
-//   Ptr<Packet> msg;
-//   msg = Create<Packet> (numPkts*payloadSize);
-    
-// //   std::string payload = "NDP Payload";
-// //   uint32_t payloadSize = payload.size () + 1; 
-// //   uint8_t *buffer;
-// //   buffer = new uint8_t [payloadSize];
-// //   memcpy (buffer, payload.c_str (), payloadSize);
-// //   Ptr<Packet> msg;
-// //   msg = Create<Packet> (buffer, payloadSize);
-    
-//   NanoPuAppHeader appHdr;
-//   appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
-//   appHdr.SetRemoteIp(dstIp);
-//   appHdr.SetRemotePort(999);
-//   appHdr.SetLocalPort(srcPort);
-//   appHdr.SetMsgLen(numPkts);
-//   appHdr.SetPayloadSize(numPkts*payloadSize);
-//   msg-> AddHeader (appHdr);
-    
-//   ndpNanoPu->Send (msg);
-// }
+NS_LOG_COMPONENT_DEFINE ("HomaNanoPuSimpleTest");
 
 int
 main (int argc, char *argv[])
@@ -79,12 +49,10 @@ main (int argc, char *argv[])
   
   Time::SetResolution (Time::FS);
 //   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
-//   LogComponentEnable ("NdpNanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
-//   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
-//   LogComponentEnable ("Ipv4L3Protocol", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
-//   LogComponentEnable ("PfifoNdpQueueDisc", LOG_LEVEL_ALL);
+//   LogComponentEnable ("PfifoHomaQueueDisc", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
 
@@ -105,9 +73,6 @@ main (int argc, char *argv[])
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("10us"));
 
   NetDeviceContainer deviceContainers[numEndPoints];
-//   for( uint16_t i = 0 ; i < numEndPoints ; i++){
-//     deviceContainers[i] = pointToPoint.Install (nodeContainers[i]);
-//   }
   deviceContainers[0] = pointToPoint.Install (nodeContainers[0]);
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Gbps"));
   pointToPoint.SetQueue ("ns3::DropTailQueue", 
@@ -119,20 +84,16 @@ main (int argc, char *argv[])
     
   // Bottleneck link traffic control configuration for NDP compatibility
   TrafficControlHelper tchPfifo;
-  tchPfifo.SetRootQueueDisc ("ns3::PfifoNdpQueueDisc", "MaxSize", StringValue("9p"));
-//   for( uint16_t i = 0 ; i < numEndPoints ; i++){
-//     tchPfifo.Install (deviceContainers[i]);
-//   }
+  tchPfifo.SetRootQueueDisc ("ns3::PfifoHomaQueueDisc", 
+                             "MaxSize", StringValue("9p"),
+                             "NumBands", UintegerValue(4));
   tchPfifo.Install (deviceContainers[1].Get (0));
 
   Ipv4AddressHelper address;
-//   char ipAddress[8];
   address.SetBase ("10.0.0.0", "255.255.255.0");
 
   Ipv4InterfaceContainer interfaceContainers[numEndPoints]; 
   for( uint16_t i = 0 ; i < numEndPoints ; i++){
-//     sprintf(ipAddress,"10.1.%d.0",i+1);
-//     address.SetBase (ipAddress, "255.255.255.0"); 
     address.NewNetwork ();
     interfaceContainers[i] = address.Assign (deviceContainers[i]);
   }
@@ -142,45 +103,23 @@ main (int argc, char *argv[])
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
   Time timeoutInterval = Time("100us");
   uint16_t maxMessages = 100;
-  NdpHeader ndph;
-  uint16_t ndpHeaderSize = (uint16_t) ndph.GetSerializedSize ();
+  HomaHeader homah;
+  uint16_t homaHeaderSize = (uint16_t) homah.GetSerializedSize ();
   Ipv4Header ipv4h;
   uint16_t ipv4HeaderSize = (uint16_t) ipv4h.GetSerializedSize ();
-  uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () - ipv4HeaderSize - ndpHeaderSize;
+  uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () - ipv4HeaderSize - homaHeaderSize;
    
-  /* Enable the NanoPU Archt on the end points*/
-//   std::vector<NdpNanoPuArcht> ndpNanoPus;
-//   for (uint16_t i=0; i<numNodes; i++)
-//   {
-//     NS_LOG_UNCOND("Creating NDP NanoPU Archt " << i);
-//     ndpNanoPus[i] = NdpNanoPuArcht(nodes.Get (i), devices.Get (i), 
-//                                 timeoutInterval, maxMessages, payloadSize);
-      
-//     NS_LOG_UNCOND("Created NDP NanoPU Archt " << i);
-//   }
-   Ptr<NdpNanoPuArcht> srcArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[0].Get (1), 
+  Ptr<HomaNanoPuArcht> srcArcht =  CreateObject<HomaNanoPuArcht>(nodeContainers[0].Get (1), 
                                                            deviceContainers[0].Get (1),
                                                            timeoutInterval, maxMessages, 
                                                            payloadSize);
-   Ptr<NdpNanoPuArcht> dstArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[1].Get (1), 
+  Ptr<HomaNanoPuArcht> dstArcht =  CreateObject<HomaNanoPuArcht>(nodeContainers[1].Get (1), 
                                                            deviceContainers[1].Get (1),
                                                            timeoutInterval, maxMessages, 
                                                            payloadSize);
     
-  /*
-   * In order for an application to bind to the nanoPu architecture:
-  nanoPu.GetReassemblyBuffer ()->SetRecvCallback (MakeCallback (&MyApplication::HandleMsg, this));
-  
-   * where MyApplication::HandleMsg is the method to handle each reassembled msg
-   * The signature for the MyApplication::HandleMsg method should be:
-  void MyApplication::HandleMsg (Ptr<Packet> msg)
-  
-   * Note that "msg" has a type of packet which will have only the 
-   * NanoPuAppHeader and the payload (msg itself). The application 
-   * should remove the header first and operate on the payload.
-   
-   * Currently each nanopu is able to connect to a single application only.
-   
+  /* Currently each nanopu is able to connect to a single application only.
+   *
    * Also note that every application on the same nanoPu (if there are multiple)
    * will bind to the exact same RecvCallback. This means all the applications
    * will be notified when a msg for a single application is received.
@@ -194,16 +133,16 @@ main (int argc, char *argv[])
     
   NanoPuTrafficGenerator sender = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   sender.SetLocalPort(111);
-  sender.SetMsgSize(1,1); //Deterministically set the message size
+  // TODO: Currectly NanoPU archt can handle msgLen of 64 max due to the 
+  //       bitmap size limitations. Ideally, it should be able to tolerate
+  //       much longer messages.
+  sender.SetMsgSize(6,6); // Deterministically set the message size
   sender.SetMaxMsg(1);
   sender.StartImmediately();
   sender.Start(Seconds (3.0));
   
   NanoPuTrafficGenerator receiver = NanoPuTrafficGenerator(dstArcht, senderIp, 111);
   receiver.SetLocalPort(222);
-
-//   Simulator::Schedule (Seconds (3.0), &SendNdpMsg, 
-//                        srcArcht, dstIp, 111, 4, payloadSize);
     
 //   pointToPoint.EnablePcapAll ("tmp.pcap", true);
 

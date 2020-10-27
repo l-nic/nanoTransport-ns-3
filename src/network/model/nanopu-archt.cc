@@ -452,9 +452,16 @@ void NanoPuArchtEgressTimer::CancelTimerEvent (uint16_t txMsgId)
     
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
                 " NanoPU Egress CancelTimer Event for msg " << txMsgId);
-    
-  Simulator::Cancel (m_timers[txMsgId]);
-  m_timers.erase(txMsgId);
+  
+  if (m_timers.find(txMsgId) != m_timers.end() )
+  {
+    Simulator::Cancel (m_timers[txMsgId]);
+    m_timers.erase(txMsgId);
+  }
+  else
+  {
+    NS_LOG_WARN("NanoPU Egress CancelTimer Event for an unknown timer!");
+  }
 }
     
 void NanoPuArchtEgressTimer::RescheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset)
@@ -478,8 +485,8 @@ void NanoPuArchtEgressTimer::InvokeTimeoutEvent (uint16_t txMsgId, uint16_t rtxO
                 " NanoPU Egress InvokeTimeoutEvent Event for msg " << txMsgId <<
                 " rtxOffset " << rtxOffset);
   
-  m_packetize->TimeoutEvent (txMsgId, rtxOffset);
   m_timers.erase(txMsgId);
+  m_packetize->TimeoutEvent (txMsgId, rtxOffset);
 }
     
 /******************************************************************************/
