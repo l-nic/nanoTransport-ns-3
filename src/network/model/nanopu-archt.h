@@ -64,6 +64,7 @@ typedef struct rxMsgInfoMeta_t {
 }rxMsgInfoMeta_t;
 typedef struct egressMeta_t {
     bool isData;
+    bool isRtx;
     Ipv4Address dstIP;
     uint16_t srcPort;
     uint16_t dstPort;
@@ -194,7 +195,7 @@ public:
  
 private:
 
-  void Dequeue (uint16_t txMsgId, bitmap_t txPkts);
+  void Dequeue (uint16_t txMsgId, bitmap_t txPkts, bool isRtx=false);
   
 protected:
   

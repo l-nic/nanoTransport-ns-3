@@ -242,7 +242,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
     {
       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((1<<m_credits[txMsgId])-1);
       
-      Dequeue (txMsgId, txPkts);
+      Dequeue (txMsgId, txPkts, false);
       
       m_toBeTxBitmap[txMsgId] &= ~txPkts;
     }
@@ -280,7 +280,7 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
                    " NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
       
-      if (rtxPkts) Dequeue (txMsgId, rtxPkts);
+      if (rtxPkts) Dequeue (txMsgId, rtxPkts, true);
       m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
       m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
     }
@@ -357,7 +357,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     //       from other events also place packets to. Since this is just
     //       a discrete event simulator, direct function calls would also
     //       work as a fifo.
-    Dequeue (txMsgId, txPkts);
+    Dequeue (txMsgId, txPkts, false);
       
     m_toBeTxBitmap[txMsgId] &= ~txPkts;
     
@@ -373,7 +373,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   return true;
 }
     
-void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
+void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, bool isRtx)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << txMsgId << txPkts);
   
@@ -389,6 +389,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts)
     
     NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
     meta.isData = true;
+    meta.isRtx = isRtx;
     meta.dstIP = apphdr.GetRemoteIp();
     meta.dstPort = apphdr.GetRemotePort();
     meta.srcPort = apphdr.GetLocalPort();
