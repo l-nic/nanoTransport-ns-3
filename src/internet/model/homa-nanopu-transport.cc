@@ -94,7 +94,7 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (bool genGRANT, bool genBUSY,
   homah.SetMsgLen (msgLen);
   homah.SetPktOffset (pktOffset);
   homah.SetGrantOffset (grantOffset);
-  homah.SetPriority (priority);
+  homah.SetPrio (priority);
   homah.SetPayloadSize (0);
     
   if (genGRANT)
@@ -259,7 +259,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
         
       m_pktgen->CtrlPktEvent(genGRANT, genBUSY, 
                              srcIp, srcPort, dstPort, txMsgId,
-                             msgLen, pktOffset, grantOffset);
+                             msgLen, pktOffset, grantOffset, priority);
 //       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                            &HomaNanoPuArchtPktGen::CtrlPktEvent, 
 //                            m_pktgen, genGRANT, genBUSY, 
