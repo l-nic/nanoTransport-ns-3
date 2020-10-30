@@ -119,4 +119,4 @@ private:
   
 };
 } // namespace ns3
-#endif /* NDP_HEADER */
+#endif /* NANOPU_APP_HEADER */
