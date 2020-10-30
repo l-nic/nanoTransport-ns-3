@@ -78,6 +78,12 @@ IntHeader::GetSerializedSize (void) const
   return m_nHops * sizeof(intHop_t) + 4; 
 }
     
+uint32_t 
+IntHeader::GetMaxSerializedSize (void) const
+{
+  return m_maxHop * sizeof(intHop_t) + 4; 
+}
+    
 void
 IntHeader::Serialize (Buffer::Iterator start) const
 {

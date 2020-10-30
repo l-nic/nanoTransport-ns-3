@@ -65,6 +65,8 @@ public:
   virtual void Serialize (Buffer::Iterator start) const;
   virtual uint32_t Deserialize (Buffer::Iterator start);
   
+  uint32_t GetMaxSerializedSize (void) const;
+  
   /**
    * \return the number of hops travelled by the packet.
    */
