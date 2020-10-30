@@ -210,6 +210,9 @@ main (int argc, char *argv[])
   queue_disc->TraceConnectWithoutContext ("BytesInQueue", 
                                           MakeBoundCallback (&BytesInQueueDiscTrace, 
                                                              qStream, queue_disc));
+  // Enable multi-path routing
+  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
     
   /* Assign IP addresses */
     

@@ -124,6 +124,10 @@ main (int argc, char *argv[])
 //     tchPfifo.Install (deviceContainers[i]);
 //   }
   tchPfifo.Install (deviceContainers[1].Get (0));
+    
+  // Enable multi-path routing
+  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
 
   Ipv4AddressHelper address;
 //   char ipAddress[8];
