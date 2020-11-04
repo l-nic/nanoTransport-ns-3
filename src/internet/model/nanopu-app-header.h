@@ -100,6 +100,15 @@ public:
   uint16_t GetMsgLen (void) const;
   
   /**
+   * \param initWinSize The initial congestion window size requested by the application
+   */
+  void SetInitWinSize (uint16_t initWinSize);
+  /**
+   * \return The initial congestion window size requested by the application
+   */
+  uint16_t GetInitWinSize (void) const;
+  
+  /**
    * \param payloadSize The payload size for the message in bytes
    */
   void SetPayloadSize (uint16_t payloadSize);
@@ -115,6 +124,7 @@ private:
   uint16_t m_remotePort;   //!< Remote port
   uint16_t m_localPort;    //!< Local port
   uint16_t m_msgLen;       //!< Length of the message in packets
+  uint16_t m_initWinSize;  //!< The initial cwnd size requested by the application
   uint16_t m_payloadSize;  //!< Payload size in bytes
   
 };

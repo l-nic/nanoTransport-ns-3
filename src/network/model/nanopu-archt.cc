@@ -339,9 +339,10 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
                    "The message length in the NanoPU App header doesn't match number of packets for this message.");
       
-    m_deliveredBitmap[txMsgId] = 0;
+    uint16_t requestedCredit = apphdr.GetInitWinSize ();  
+    m_credits[txMsgId] = (requestedCredit < m_initialCredit) ? requestedCredit : m_initialCredit;
       
-    m_credits[txMsgId] = m_initialCredit;
+    m_deliveredBitmap[txMsgId] = 0;
       
     m_toBeTxBitmap[txMsgId] = (1<<numPkts)-1;
       

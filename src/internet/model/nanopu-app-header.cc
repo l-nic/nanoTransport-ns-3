@@ -41,6 +41,7 @@ NanoPuAppHeader::NanoPuAppHeader ()
     m_remotePort (0xfffd),
     m_localPort (0xfffd),
     m_msgLen (0),
+    m_initWinSize (10),
     m_payloadSize (0)
 {
 }
@@ -72,6 +73,7 @@ NanoPuAppHeader::Print (std::ostream &os) const
      << " remote: " << m_remoteIp << ":" << m_remotePort
      << " local: " << m_localPort
      << " msgLen: " << m_msgLen
+     << " initWinSize: " << m_initWinSize
 //      << " type: " << m_headerType
   ;
 }
@@ -79,7 +81,7 @@ NanoPuAppHeader::Print (std::ostream &os) const
 uint32_t 
 NanoPuAppHeader::GetSerializedSize (void) const
 {
-  return 14; 
+  return 16; 
 }
     
 void
@@ -92,6 +94,7 @@ NanoPuAppHeader::Serialize (Buffer::Iterator start) const
   i.WriteHtonU16 (m_remotePort);
   i.WriteHtonU16 (m_localPort);
   i.WriteHtonU16 (m_msgLen);
+  i.WriteHtonU16 (m_initWinSize);
   i.WriteHtonU16 (m_payloadSize);
 }
 uint32_t
@@ -103,6 +106,7 @@ NanoPuAppHeader::Deserialize (Buffer::Iterator start)
   m_remotePort = i.ReadNtohU16 ();
   m_localPort = i.ReadNtohU16 ();
   m_msgLen = i.ReadNtohU16 ();
+  m_initWinSize = i.ReadNtohU16 ();
   m_payloadSize = i.ReadNtohU16 ();
 
   return GetSerializedSize ();
@@ -162,6 +166,17 @@ uint16_t
 NanoPuAppHeader::GetMsgLen (void) const
 {
   return m_msgLen;
+}
+    
+void 
+NanoPuAppHeader::SetInitWinSize (uint16_t initWinSize)
+{
+  m_initWinSize = initWinSize;
+}
+uint16_t 
+NanoPuAppHeader::GetInitWinSize (void) const
+{
+  return m_initWinSize;
 }
    
 void 
