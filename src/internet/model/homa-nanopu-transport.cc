@@ -419,6 +419,8 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   iph.SetSource (srcIP);
   iph.SetDestination (meta.dstIP);
   iph.SetPayloadSize (cp->GetSize ());
+  iph.SetTtl (64);
+  iph.SetProtocol (HomaHeader::PROT_NUMBER);
   iph.SetTos (priority);
   cp-> AddHeader (iph);
     

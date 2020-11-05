@@ -153,6 +153,8 @@ public:
     F3  = 128   //!< Empty for future reference
   } Flags_t;
   
+  static const uint8_t PROT_NUMBER = 199; //!< Protocol number of NDP to be used in IP packets
+  
 private:
 
   uint16_t m_srcPort;      //!< Source port

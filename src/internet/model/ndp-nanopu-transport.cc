@@ -371,6 +371,8 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   iph.SetSource (srcIP);
   iph.SetDestination (meta.dstIP);
   iph.SetPayloadSize (cp->GetSize ());
+  iph.SetTtl (64);
+  iph.SetProtocol (NdpHeader::PROT_NUMBER);
   cp-> AddHeader (iph);
   
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 

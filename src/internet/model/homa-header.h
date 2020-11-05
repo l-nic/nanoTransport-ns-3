@@ -189,6 +189,8 @@ public:
     BOGUS = 128   //!< Used only in unit tests.
   } Flags_t;
   
+  static const uint8_t PROT_NUMBER = 198; //!< Protocol number of HOMA to be used in IP packets
+  
 private:
 
   uint16_t m_srcPort;     //!< Source port
