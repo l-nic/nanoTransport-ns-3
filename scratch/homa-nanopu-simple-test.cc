@@ -69,6 +69,7 @@ main (int argc, char *argv[])
   }
 
   PointToPointHelper pointToPoint;
+//   pointToPoint.SetDeviceAttribute ("EnableInt", BooleanValue (true));
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("10Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("10us"));
 

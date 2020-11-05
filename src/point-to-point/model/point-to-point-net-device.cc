@@ -24,10 +24,14 @@
 #include "ns3/error-model.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/uinteger.h"
+#include "ns3/boolean.h"
 #include "ns3/pointer.h"
 #include "point-to-point-net-device.h"
 #include "point-to-point-channel.h"
 #include "ppp-header.h"
+#include "ns3/ipv4-header.h"
+#include "ns3/udp-header.h"
+#include "ns3/int-header.h"
 
 namespace ns3 {
 
@@ -67,6 +71,11 @@ PointToPointNetDevice::GetTypeId (void)
                    TimeValue (Seconds (0.0)),
                    MakeTimeAccessor (&PointToPointNetDevice::m_tInterframeGap),
                    MakeTimeChecker ())
+    .AddAttribute ("EnableInt", 
+                   "Whether the INT header should be modified (if exists) before tx",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&PointToPointNetDevice::m_intEnabled),
+                   MakeBooleanChecker  ())
 
     //
     // Transmit queueing discipline for the device which includes its own set
@@ -252,6 +261,47 @@ PointToPointNetDevice::TransmitStart (Ptr<Packet> p)
   //
   NS_ASSERT_MSG (m_txMachineState == READY, "Must be READY to transmit");
   m_txMachineState = BUSY;
+  
+  if (m_intEnabled)
+  {
+    NS_LOG_UNCOND(p->ToString());
+    PppHeader ppphdr;
+    p->RemoveHeader(ppphdr);
+    NS_ASSERT_MSG(ppphdr.GetProtocol() == 0x0021,
+                  "INT currently works only for IPv4 Packets");
+    
+    Ipv4Header iph;
+    p->RemoveHeader(iph);
+    uint8_t protNumber = iph.GetProtocol();
+    NS_ASSERT_MSG(protNumber == 17 /*UDP*/,
+                  "Currently INT works only over UDP packets");
+    
+    UdpHeader udph;
+    p->RemoveHeader(udph);
+     
+    IntHeader inth;
+    p->RemoveHeader(inth);
+      
+    if(inth.GetIntIdentifier()==IntHeader::IDENTIFIER)
+    {
+      NS_LOG_LOGIC("Appending INT info onto the packet");
+      
+      uint64_t time = Simulator::Now ().GetNanoSeconds ();
+      uint32_t bytes = m_queue->GetTotalReceivedBytes () - m_queue->GetTotalDroppedBytes();
+      uint32_t qlen = m_queue->GetNBytes ();
+      uint64_t rate = m_bps.GetBitRate();
+      if (!inth.PushHop(time, bytes, qlen,rate))
+        NS_LOG_WARN("The packet doesn't accept INT info anymore");
+    }
+    else
+      NS_LOG_WARN("Non-INT packet is received by an INT enabled device.");
+      
+    p->AddHeader(inth);
+    p->AddHeader(udph);
+    p->AddHeader(iph);
+    p->AddHeader(ppphdr);
+  }
+    
   m_currentPkt = p;
   m_phyTxBeginTrace (m_currentPkt);
 

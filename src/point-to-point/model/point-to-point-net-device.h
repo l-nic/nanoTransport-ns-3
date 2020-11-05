@@ -463,6 +463,8 @@ private:
   uint32_t m_mtu;
 
   Ptr<Packet> m_currentPkt; //!< Current packet processed
+  
+  bool m_intEnabled; //!< Flag to determine whether INT header should be modified (if exists)
 
   /**
    * \brief PPP to Ethernet protocol number mapping

@@ -164,7 +164,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                  "HomaNanoPuArcht works only with IPv4 packets!");
     
   Ipv4Header iph;
-  cp->RemoveHeader (iph);  
+  cp->RemoveHeader (iph); 
+    
+  NS_ASSERT_MSG(iph.GetProtocol() == HomaHeader::PROT_NUMBER,
+                  "This ingress pipeline only works for Homa Transport");
+    
   HomaHeader homah;
   cp->RemoveHeader (homah);
     

@@ -32,7 +32,8 @@ NS_OBJECT_ENSURE_REGISTERED (IntHeader);
 
 
 IntHeader::IntHeader ()
-  : m_nHops (0)
+  : m_intIdentifier (IDENTIFIER),
+    m_nHops (0)
 {
 }
 
@@ -75,13 +76,13 @@ IntHeader::Print (std::ostream &os) const
 uint32_t 
 IntHeader::GetSerializedSize (void) const
 {
-  return m_nHops * sizeof(intHop_t) + 4; 
+  return m_nHops * sizeof(intHop_t) + 5; 
 }
     
 uint32_t 
 IntHeader::GetMaxSerializedSize (void) const
 {
-  return m_maxHop * sizeof(intHop_t) + 4; 
+  return m_maxHop * sizeof(intHop_t) + 5; 
 }
     
 void
@@ -89,6 +90,7 @@ IntHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
 
+  i.WriteU8 (m_intIdentifier);
   i.WriteHtonU16 (m_nHops);
   for (uint16_t j=0; j < m_nHops; j++)
   {
@@ -103,7 +105,8 @@ uint32_t
 IntHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-    
+  
+  m_intIdentifier = i.ReadU8();
   m_nHops = i.ReadNtohU16 ();
   for (uint16_t j=0; j < m_nHops; j++)
   {
@@ -116,13 +119,19 @@ IntHeader::Deserialize (Buffer::Iterator start)
 
   return GetSerializedSize ();
 }
-    
+
+uint8_t 
+IntHeader::GetIntIdentifier (void) const
+{
+  return m_intIdentifier;
+}
+      
 uint16_t 
 IntHeader::GetNHops (void) const
 {
   return m_nHops;
 }
-    
+      
 bool 
 IntHeader::PushHop (uint64_t time, uint32_t bytes, uint32_t qlen, uint64_t rate)
 {

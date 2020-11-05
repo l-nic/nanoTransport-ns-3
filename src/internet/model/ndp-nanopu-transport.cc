@@ -199,6 +199,10 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     
   Ipv4Header iph;
   cp->RemoveHeader (iph);  
+    
+  NS_ASSERT_MSG(iph.GetProtocol() == NdpHeader::PROT_NUMBER,
+                  "This ingress pipeline only works for NDP Transport");
+    
   NdpHeader ndph;
   cp->RemoveHeader (ndph);
     
