@@ -292,7 +292,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       
     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
     {
-      m_packetize->DeliveredEvent (txMsgId, msgLen, (1<<pktOffset));
+      m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
 //       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                            &NanoPuArchtPacketize::DeliveredEvent, 
 //                            m_packetize, txMsgId, msgLen, (1<<pktOffset));

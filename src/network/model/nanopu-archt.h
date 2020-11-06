@@ -25,6 +25,7 @@
 #include <list>
 #include <math.h>
 #include <functional>
+#include <bitset>
 
 #include "ns3/object.h"
 #include "ns3/ipv4-header.h"
@@ -35,16 +36,16 @@
 #define REASSEMBLE_DELAY 2
 #define PACKETIZATION_DELAY 1
 
-// Note that bitmap_t is defined as uint64_t below
-#define BITMAP_SIZE 64
-
 #define NANOPU_APP_HEADER_TYPE 0x9999
 
 namespace ns3 {
     
 class Node;
     
-typedef uint64_t bitmap_t ;
+typedef std::bitset<1024> bitmap_t ;
+// typedef uint64_t bitmap_t ;
+#define BITMAP_SIZE sizeof(bitmap_t)*8
+    
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIp;

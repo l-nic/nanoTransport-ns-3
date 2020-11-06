@@ -22,7 +22,6 @@
 #include <list>
 #include <numeric>
 #include <functional>
-#include <bitset>
 #include <algorithm>
 
 #include "ns3/log.h"
@@ -44,7 +43,18 @@ NS_OBJECT_ENSURE_REGISTERED (NanoPuArcht);
  * 
  * \returns Index of first 1 from right to left, in binary representation of a bitmap
  */
-uint16_t getFirstSetBitPos(bitmap_t n) { return ((n!=0) ? log2(n & -n) : BITMAP_SIZE); };
+uint16_t getFirstSetBitPos(bitmap_t n) { 
+//   return ((n!=0) ? log2(n & -n) : BITMAP_SIZE); 
+  return n._Find_first();
+};
+    
+bitmap_t setBitMapUntil(uint16_t n) {
+  bitmap_t result;
+  for (uint16_t i=0; i<n; i++){
+    result.set(i);
+  }
+  return result;
+};
     
 /******************************************************************************/
     
@@ -176,7 +186,8 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
   {
     m_deliveredBitmap[txMsgId] |= ackPkts;
       
-    if (m_deliveredBitmap[txMsgId] == (bitmap_t)((1<<msgLen)-1))
+//     if (m_deliveredBitmap[txMsgId] == (((bitmap_t)1)<<msgLen)-1)
+    if (m_deliveredBitmap[txMsgId] == setBitMapUntil(msgLen))
     {
       NS_LOG_LOGIC("The whole message is delivered.");
         
@@ -240,7 +251,8 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
       
     if (m_toBeTxBitmap.find(txMsgId) != m_toBeTxBitmap.end())
     {
-      bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((1<<m_credits[txMsgId])-1);
+//       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
+      bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
       
       Dequeue (txMsgId, txPkts, false);
       
@@ -275,12 +287,13 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     else
     {
       m_timeoutCnt[txMsgId] ++;
-      bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((1<<(rtxOffset+1))-1);
+//       bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((((bitmap_t)1)<<(rtxOffset+1))-1);
+      bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & setBitMapUntil(rtxOffset+1);
       
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
                    " NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
       
-      if (rtxPkts) Dequeue (txMsgId, rtxPkts, true);
+      if (rtxPkts.any()) Dequeue (txMsgId, rtxPkts, true);
       m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
       m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
     }
@@ -344,7 +357,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       
     m_deliveredBitmap[txMsgId] = 0;
       
-    m_toBeTxBitmap[txMsgId] = (1<<numPkts)-1;
+    m_toBeTxBitmap[txMsgId] = setBitMapUntil(numPkts);
       
     m_maxTxPktOffset[txMsgId] = 0;
       
@@ -352,8 +365,8 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     
     m_timer->ScheduleTimerEvent (txMsgId, 0);
       
-    bitmap_t txPkts = m_toBeTxBitmap[txMsgId] \
-                      &  ((1<<m_credits[txMsgId])-1);
+//     bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
+    bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
     // TODO: txPkts should be placed in a fifo queue where schedulings
     //       from other events also place packets to. Since this is just
     //       a discrete event simulator, direct function calls would also
@@ -400,7 +413,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, bool isRt
       
     m_arbiter->Receive(p, meta);
       
-    txPkts &= ~(1<<pktOffset);
+    txPkts &= ~(((bitmap_t)1)<<pktOffset);
     if (pktOffset > m_maxTxPktOffset[txMsgId])
     {
       m_maxTxPktOffset[txMsgId] = pktOffset;
@@ -580,7 +593,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       
     rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
       
-    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second & (1<<pktOffset)) == 0;
+    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second & (((bitmap_t)1)<<pktOffset)) == 0;
     rxMsgInfo.success = true;
   }
   // try to allocate an rx_msg_id
@@ -623,7 +636,8 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
   m_receivedBitmap [meta.rxMsgId] |= (1<<meta.pktOffset);
     
   /* Check if all pkts have been received*/
-  if (m_receivedBitmap [meta.rxMsgId] == static_cast<bitmap_t>((1<<meta.msgLen)-1))
+//   if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
+  if (m_receivedBitmap [meta.rxMsgId] == setBitMapUntil(meta.msgLen))
   {
     NS_LOG_LOGIC ("All packets have been received for msg " << meta.rxMsgId);
       

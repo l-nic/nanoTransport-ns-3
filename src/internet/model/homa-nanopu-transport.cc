@@ -301,7 +301,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                  " NanoPU Homa IngressPipe processing a "
                  << homah.FlagsToString(homah.GetFlags ()) << " packet.");
     
-    m_packetize->DeliveredEvent (txMsgId, msgLen, (1<<pktOffset));
+    m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
 //     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtPacketize::DeliveredEvent, m_packetize, 
 //                          txMsgId, msgLen, (1<<pktOffset));

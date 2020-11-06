@@ -48,8 +48,8 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::FS);
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
 //   LogComponentEnable ("Packet", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PfifoHomaQueueDisc", LOG_LEVEL_ALL);
@@ -141,7 +141,7 @@ main (int argc, char *argv[])
   // TODO: Currectly NanoPU archt can handle msgLen of 64 max due to the 
   //       bitmap size limitations. Ideally, it should be able to tolerate
   //       much longer messages.
-  sender.SetMsgSize(6,6); // Deterministically set the message size
+  sender.SetMsgSize(1,1); // Deterministically set the message size
   sender.SetMaxMsg(1);
   sender.StartImmediately();
   sender.Start(Seconds (3.0));
