@@ -253,8 +253,8 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
     {
 //       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
-      
-      Dequeue (txMsgId, txPkts, false);
+    
+      if (txPkts.any()) Dequeue (txMsgId, txPkts, false);
       
       m_toBeTxBitmap[txMsgId] &= ~txPkts;
     }
