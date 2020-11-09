@@ -65,7 +65,19 @@ protected:
 };
  
 /******************************************************************************/
- 
+
+typedef struct scheduledMsgMeta_t {
+    uint16_t rxMsgId;
+    Ipv4Address srcIp;
+    uint16_t srcPort;
+    uint16_t dstPort;
+    uint16_t txMsgId;
+    uint16_t msgLen;
+    uint16_t pktOffset;
+    uint16_t grantOffset;
+    uint8_t priority;
+}scheduledMsgMeta_t;
+    
 /**
  * \ingroup nanopu-archt
  *

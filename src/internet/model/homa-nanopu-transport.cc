@@ -224,8 +224,8 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     uint8_t priority = GetPriority (msgLen);
       
     // Begin Read-Modify-(Delete/Write) Operation
-    uint16_t activeRxMsgId = m_scheduledMsgs[priority].front();
     bool scheduledMsgsIsEmpty = m_scheduledMsgs[priority].empty();
+    uint16_t activeRxMsgId = m_scheduledMsgs[priority].front();
       
     if (scheduledMsgsIsEmpty || activeRxMsgId==rxMsgInfo.rxMsgId)
     {
@@ -242,13 +242,12 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
 //                            srcIp, srcPort, dstPort, txMsgId,
 //                            msgLen, pktOffset, grantOffset);
         
-//       if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
-//         // The active msg is fully granted, so unschedule it
-//         // TODO: Then how do we make sure fully granted msgs complete
-//         //       in the future? Should have timers for every grants sent.
-      if (!scheduledMsgsIsEmpty 
-          && rxMsgInfo.numPkts == msgLen-1
-          && rxMsgInfo.ackNo == pktOffset)
+      if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
+        // The active msg is fully granted, so unschedule it. 
+        // BUSY packets will be used to ACK remaining packets.
+//       if (!scheduledMsgsIsEmpty 
+//           && rxMsgInfo.numPkts == msgLen-1
+//           && rxMsgInfo.ackNo == pktOffset)
       {
         // This was the last expected packet of the message
         m_scheduledMsgs[priority].pop_front();
