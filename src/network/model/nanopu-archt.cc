@@ -222,7 +222,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
                    " Marking msg " << txMsgId << ", pkt " << rtxPkt <<
                    " for retransmission.");
-      m_toBeTxBitmap[txMsgId] |= (1<<rtxPkt);
+      m_toBeTxBitmap[txMsgId] |= (((bitmap_t)1)<<rtxPkt);
     }
       
     if (newCredit != -1 && m_credits.find(txMsgId) != m_credits.end())
@@ -254,9 +254,11 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
 //       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
     
-      if (txPkts.any()) Dequeue (txMsgId, txPkts, false);
-      
-      m_toBeTxBitmap[txMsgId] &= ~txPkts;
+      if (txPkts.any()) 
+      {
+        Dequeue (txMsgId, txPkts, false);
+        m_toBeTxBitmap[txMsgId] &= ~txPkts;
+      }
     }
   }
   else
@@ -290,12 +292,16 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
 //       bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((((bitmap_t)1)<<(rtxOffset+1))-1);
       bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & setBitMapUntil(rtxOffset+1);
       
-      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
+      if (rtxPkts.any()) 
+      { 
+        NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
                    " NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
-      
-      if (rtxPkts.any()) Dequeue (txMsgId, rtxPkts, true);
+        
+        Dequeue (txMsgId, rtxPkts, true);
+        m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
+      }
+        
       m_timer->RescheduleTimerEvent (txMsgId, m_maxTxPktOffset[txMsgId]);
-      m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
     }
   }
   else
@@ -633,7 +639,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     
   /* Mark the packet as received*/
   // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
-  m_receivedBitmap [meta.rxMsgId] |= (1<<meta.pktOffset);
+  m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
     
   /* Check if all pkts have been received*/
 //   if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)

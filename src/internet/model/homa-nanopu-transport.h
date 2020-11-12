@@ -52,10 +52,9 @@ public:
   HomaNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (bool genGRANT, bool genBUSY,
-                     Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
-                     uint16_t txMsgId, uint16_t msgLen, uint16_t pktOffset, 
-                     uint16_t grantOffset, uint8_t priority);
+  void CtrlPktEvent (uint8_t flag, Ipv4Address dstIp, uint16_t dstPort, 
+                     uint16_t srcPort, uint16_t txMsgId, uint16_t msgLen, 
+                     uint16_t pktOffset, uint16_t grantOffset, uint8_t priority);
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer

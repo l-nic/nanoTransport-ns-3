@@ -182,7 +182,7 @@ public:
     DATA = 1,     //!< DATA Packet
     GRANT = 2,    //!< GRANT
     RESEND = 4,   //!< RESEND (Only sent from senders)
-    UNKNOWN = 8,  //!< Empty for future use
+    RSNDRSPNS = 8,//!< Response to RESEND (sent from receivers)
     BUSY = 16,    //!< Busy
     CUTOFFS = 32, //!< Priority cutoffs
     FREEZE = 64,  //!< 
