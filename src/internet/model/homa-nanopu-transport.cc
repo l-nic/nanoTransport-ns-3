@@ -360,7 +360,7 @@ uint8_t HomaNanoPuArchtEgressPipe::GetPriority (uint16_t msgLen)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
   uint8_t prio = 0;
-  for (auto & threshold : m_priorities)
+  for (auto & threshold : m_priorityCutoffs)
   {
     if (msgLen <= threshold)
       return prio;

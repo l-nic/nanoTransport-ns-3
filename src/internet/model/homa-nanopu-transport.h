@@ -143,7 +143,7 @@ protected:
   
   std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each {txMsgId => prio}
   
-  uint16_t m_priorities[3] = {5, 25, 100};
+  uint16_t m_priorityCutoffs[3] = {5, 25, 100};
   uint8_t GetPriority (uint16_t msgLen);
 };
  
