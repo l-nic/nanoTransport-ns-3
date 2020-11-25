@@ -256,7 +256,9 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
     
       if (txPkts.any()) 
       {
-        Dequeue (txMsgId, txPkts, false);
+        bool isRtx = false;
+        bool isNewMsg = false;
+        Dequeue (txMsgId, txPkts, isRtx, isNewMsg);
         m_toBeTxBitmap[txMsgId] &= ~txPkts;
       }
     }
@@ -297,7 +299,9 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
         NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
                    " NanoPU will retransmit " << std::bitset<BITMAP_SIZE>(rtxPkts) );
         
-        Dequeue (txMsgId, rtxPkts, true);
+        bool isRtx = true;
+        bool isNewMsg = false;
+        Dequeue (txMsgId, rtxPkts, isRtx, isNewMsg);
         m_toBeTxBitmap[txMsgId] &= ~rtxPkts;
       }
         
@@ -377,7 +381,9 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     //       from other events also place packets to. Since this is just
     //       a discrete event simulator, direct function calls would also
     //       work as a fifo.
-    Dequeue (txMsgId, txPkts, false);
+    bool isRtx = false;
+    bool isNewMsg = true;
+    Dequeue (txMsgId, txPkts, isRtx, isNewMsg);
       
     m_toBeTxBitmap[txMsgId] &= ~txPkts;
     
@@ -393,7 +399,8 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   return true;
 }
     
-void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, bool isRtx)
+void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, 
+                                    bool isRtx, bool isNewMsg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << txMsgId << txPkts);
   
@@ -408,6 +415,9 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, bool isRt
     Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
     
     NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
+    meta.isNewMsg = isNewMsg;
+    isNewMsg = false;
+      
     meta.isData = true;
     meta.isRtx = isRtx;
     meta.dstIP = apphdr.GetRemoteIp();

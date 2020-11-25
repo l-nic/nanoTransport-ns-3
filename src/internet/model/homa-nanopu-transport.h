@@ -108,7 +108,7 @@ protected:
   Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the Homa architecture
   uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
     
-  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track grantOffset for each msg {rx_msg_id => credit}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< grantOffset state for each {rxMsgId => credit}
     
   uint16_t m_priorities[3] = {5, 25, 100};
   uint8_t GetPriority (uint16_t msgLen);
@@ -141,7 +141,9 @@ public:
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
   
-  uint16_t m_priorities[3] = {5, 25, 100};
+  std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each {txMsgId => prio}
+  
+  uint16_t m_priorityCutoffs[3] = {5, 25, 100};
   uint8_t GetPriority (uint16_t msgLen);
 };
  
