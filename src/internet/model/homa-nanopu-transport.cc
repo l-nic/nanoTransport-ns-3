@@ -199,7 +199,8 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU Homa IngressPipe processing RESEND request.");
       grantOffsetDiff = 0;
-      responseFlag |= HomaHeader::Flags_t::RSNDRSPNS;
+      if (rxMsgInfo.isNewPkt)
+        responseFlag |= HomaHeader::Flags_t::RSNDRSPNS;
     } 
     else 
     {
@@ -311,7 +312,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
         //       BUSY packet.
         // TODO: Should keep a list of active msgs for tx direction as well.
       }
-      else if (rxFlag & HomaHeader::Flags_t::BUSY)
+      else if (rxFlag & HomaHeader::Flags_t::BUSY && credit < msgLen)
       {
         // TODO: Deactivate the current msg (should be keeping a list of active msgs)
       }
@@ -381,6 +382,9 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa EgressPipe processing data packet.");
       
+    if (meta.isNewMsg)
+      m_priorities[meta.txMsgId] = GetPriority (meta.msgLen);
+      
     HomaHeader homah;
     homah.SetSrcPort (meta.srcPort);
     homah.SetDstPort (meta.dstPort);
@@ -406,7 +410,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
       // Priority of Data packets are determined by the packet tags
       // TODO: Determine the priority of response packets based on the 
       //       priority signalled by the control packets.
-      priority = GetPriority (meta.msgLen);
+      priority = m_priorities[meta.txMsgId];
     }
       
     cp-> AddHeader (homah);
