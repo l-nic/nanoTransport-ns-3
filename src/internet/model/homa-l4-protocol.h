@@ -172,6 +172,8 @@ private:
     
   std::vector<Ptr<HomaSocket> > m_sockets;      //!< list of sockets
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
+
+};
     
 } // namespace ns3
 
