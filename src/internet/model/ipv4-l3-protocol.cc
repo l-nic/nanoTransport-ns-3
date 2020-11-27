@@ -770,7 +770,7 @@ Ipv4L3Protocol::Send (Ptr<Packet> packet,
 
   uint8_t tos = 0;
   SocketIpTosTag ipTosTag;
-  bool ipTosTagFound = packet->RemovePacketTag (ipTosTag);
+  bool ipTosTagFound = packet->PeekPacketTag (ipTosTag);
   if (ipTosTagFound)
     {
       tos = ipTosTag.GetTos ();
