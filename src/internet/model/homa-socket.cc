@@ -50,7 +50,7 @@ NS_OBJECT_ENSURE_REGISTERED (HomaSocket);
 static const uint32_t MAX_IPV4_HOMA_MESSAGE_SIZE = std::numeric_limits<uint32_t>::max(); //!< Maximum HOMA message size
 
 TypeId
-UdpSocket::GetTypeId (void)
+HomaSocket::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::HomaSocket")
     .SetParent<Socket> ()
@@ -226,6 +226,14 @@ HomaSocket::Bind (void)
       m_endPoint->BindToNetDevice (m_boundnetdevice);
     }
   return FinishBind ();
+}
+    
+int
+HomaSocket::Bind6 (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  NS_FATAL_ERROR_CONT("HomaSocket currently doesn't support IPv6. Use IPv4 instead.");
+  return -1;
 }
     
 int 

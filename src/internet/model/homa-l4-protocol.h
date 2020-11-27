@@ -141,11 +141,26 @@ public:
   void Send (Ptr<Packet> packet,
              Ipv4Address saddr, Ipv4Address daddr, 
              uint16_t sport, uint16_t dport);
+  /**
+   * \brief Send a packet via Homa (IPv4)
+   * \param packet The packet to send
+   * \param saddr The source Ipv4Address
+   * \param daddr The destination Ipv4Address
+   * \param sport The source port number
+   * \param dport The destination port number
+   * \param route The route
+   */
+  void Send (Ptr<Packet> packet,
+             Ipv4Address saddr, Ipv4Address daddr, 
+             uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route);
     
   // inherited from Ipv4L4Protocol
   virtual enum IpL4Protocol::RxStatus Receive (Ptr<Packet> p,
                                                Ipv4Header const &header,
                                                Ptr<Ipv4Interface> interface);
+  virtual enum IpL4Protocol::RxStatus Receive (Ptr<Packet> p,
+                                               Ipv6Header const &header,
+                                               Ptr<Ipv6Interface> interface);
     
   virtual void ReceiveIcmp (Ipv4Address icmpSource, uint8_t icmpTtl,
                             uint8_t icmpType, uint8_t icmpCode, uint32_t icmpInfo,
@@ -154,9 +169,11 @@ public:
     
   // From IpL4Protocol
   virtual void SetDownTarget (IpL4Protocol::DownTargetCallback cb);
+  virtual void SetDownTarget6 (IpL4Protocol::DownTargetCallback6 cb);
     
   // From IpL4Protocol
   virtual IpL4Protocol::DownTargetCallback GetDownTarget (void) const;
+  virtual IpL4Protocol::DownTargetCallback6 GetDownTarget6 (void) const;
 
 protected:
   virtual void DoDispose (void);
@@ -172,7 +189,7 @@ private:
     
   std::vector<Ptr<HomaSocket> > m_sockets;      //!< list of sockets
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
-
+  IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6 (Not supported)
 };
     
 } // namespace ns3

@@ -75,8 +75,8 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  UdpSocket (void);
-  virtual ~UdpSocket (void);
+  HomaSocket (void);
+  virtual ~HomaSocket (void);
 
   /**
    * \brief Set the associated node.
@@ -85,7 +85,7 @@ public:
   void SetNode (Ptr<Node> node);
   /**
    * \brief Set the associated HOMA L4 protocol.
-   * \param udp the HOMA L4 protocol
+   * \param homa the HOMA L4 protocol
    */
   void SetHoma (Ptr<HomaL4Protocol> homa);
 
@@ -95,6 +95,7 @@ public:
   virtual Ptr<Node> GetNode (void) const;
   
   virtual int Bind (void);
+  virtual int Bind6 (void); // Bind for IPv6 endpoints (not supported)
   virtual int Bind (const Address &address);
   
   virtual int ShutdownSend (void);

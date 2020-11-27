@@ -53,7 +53,7 @@ HomaL4Protocol::GetTypeId (void)
     .AddAttribute ("SocketList", "The list of sockets associated to this protocol.",
                    ObjectVectorValue (),
                    MakeObjectVectorAccessor (&HomaL4Protocol::m_sockets),
-                   MakeObjectVectorChecker<UdpSocketImpl> ())
+                   MakeObjectVectorChecker<HomaSocket> ())
   ;
   return tid;
 }
@@ -202,8 +202,6 @@ HomaL4Protocol::Send (Ptr<Packet> packet,
                      uint16_t sport, uint16_t dport)
 {
   NS_LOG_FUNCTION (this << packet << saddr << daddr << sport << dport);
-    
-  // TODO: Implement the protocol logic here!
   
 //   HomaHeader homaHeader;
   
@@ -212,7 +210,19 @@ HomaL4Protocol::Send (Ptr<Packet> packet,
 
 //   packet->AddHeader (homaHeader);
     
-//   m_downTarget (packet, saddr, daddr, PROT_NUMBER, 0);
+  Send(packet, saddr, daddr, sport, dport, 0);
+}
+    
+void
+HomaL4Protocol::Send (Ptr<Packet> packet, 
+                     Ipv4Address saddr, Ipv4Address daddr, 
+                     uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route)
+{
+  NS_LOG_FUNCTION (this << packet << saddr << daddr << sport << dport << route);
+    
+  // TODO: Implement the protocol logic here!
+
+//   m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
 }
     
 enum IpL4Protocol::RxStatus
@@ -222,10 +232,10 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
 {
   NS_LOG_FUNCTION (this << packet << header);
   
-//   UdpHeader homaHeader;
+//   HomaHeader homaHeader;
 //   packet->PeekHeader (homaHeader);
 
-//   NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << udpHeader.GetDestinationPort ()); 
+//   NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << homaHeader.GetDestinationPort ()); 
 //   Ipv4EndPointDemux::EndPoints endPoints =
 //     m_endPoints->Lookup (header.GetDestination (), homaHeader.GetDestinationPort (),
 //                          header.GetSource (), homaHeader.GetSourcePort (), interface);
@@ -245,6 +255,15 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
 //                               interface);
 //     }
   return IpL4Protocol::RX_OK;
+}
+    
+enum IpL4Protocol::RxStatus
+HomaL4Protocol::Receive (Ptr<Packet> packet,
+                        Ipv6Header const &header,
+                        Ptr<Ipv6Interface> interface)
+{
+  NS_FATAL_ERROR_CONT("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
+  return IpL4Protocol::RX_ENDPOINT_UNREACH;
 }
     
 void 
@@ -280,11 +299,26 @@ HomaL4Protocol::SetDownTarget (IpL4Protocol::DownTargetCallback callback)
   NS_LOG_FUNCTION (this);
   m_downTarget = callback;
 }
+    
+void
+HomaL4Protocol::SetDownTarget6 (IpL4Protocol::DownTargetCallback6 callback)
+{
+  NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
+  m_downTarget6 = callback;
+}
 
 IpL4Protocol::DownTargetCallback
 HomaL4Protocol::GetDownTarget (void) const
 {
   return m_downTarget;
+}
+    
+IpL4Protocol::DownTargetCallback6
+HomaL4Protocol::GetDownTarget6 (void) const
+{
+  NS_FATAL_ERROR("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
+  return m_downTarget6;
 }
     
 } // namespace ns3

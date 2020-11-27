@@ -49,8 +49,8 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  HomaSocketFactoryImpl ();
-  virtual ~HomaSocketFactoryImpl ();
+  HomaSocketFactory ();
+  virtual ~HomaSocketFactory ();
 
   /**
    * \brief Set the associated HOMA L4 protocol.
