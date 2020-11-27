@@ -221,6 +221,15 @@ HomaL4Protocol::Send (Ptr<Packet> packet,
   NS_LOG_FUNCTION (this << packet << saddr << daddr << sport << dport << route);
     
   // TODO: Implement the protocol logic here!
+    
+  // NOTE: Use the following SocketIpTosTag append strategy when 
+  //       sending packets out. This allows us to set the priority
+  //       of the packets correctly for the PfifoHomaQueueDisc way of 
+  //       priority queueing in the network.
+//   SocketIpTosTag ipTosTag;
+//   ipTosTag.SetTos (tos);
+//   // This packet may already have a SocketIpTosTag (see HomaSocket)
+//   msg->ReplacePacketTag (ipTosTag);
 
 //   m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
 }

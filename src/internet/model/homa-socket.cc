@@ -754,7 +754,7 @@ HomaSocket::ForwardUp (Ptr<Packet> msg, Ipv4Header header, uint16_t port,
     {
       SocketIpTosTag ipTosTag;
       ipTosTag.SetTos (header.GetTos ());
-      msg->AddPacketTag (ipTosTag);
+      msg->ReplacePacketTag (ipTosTag);
     }
 
   if (IsIpRecvTtl ())

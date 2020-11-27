@@ -303,8 +303,8 @@ private:
   Ptr<HomaL4Protocol>  m_homa;       //!< the associated HOMA L4 protocol
   Callback<void, Ipv4Address,uint8_t,uint8_t,uint8_t,uint32_t> m_icmpCallback;  //!< ICMP callback
 
-  Address m_defaultAddress; //!< Default address
-  uint16_t m_defaultPort;   //!< Default port
+  Address m_defaultAddress; //!< Default peer address
+  uint16_t m_defaultPort;   //!< Default peer port
   TracedCallback<Ptr<const Packet> > m_dropTrace; //!< Trace for dropped packets
 
   mutable enum SocketErrno m_errno;           //!< Socket error code
