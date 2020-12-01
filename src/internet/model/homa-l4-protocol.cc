@@ -18,21 +18,25 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
+#include <algorithm>
+
 #include "ns3/log.h"
 #include "ns3/assert.h"
 #include "ns3/packet.h"
 #include "ns3/node.h"
 #include "ns3/boolean.h"
 #include "ns3/object-vector.h"
+
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/ipv4-route.h"
 
 #include "homa-l4-protocol.h"
 #include "ns3/homa-header.h"
 #include "homa-socket-factory.h"
+#include "homa-socket.h"
 #include "ipv4-end-point-demux.h"
 #include "ipv4-end-point.h"
 #include "ipv4-l3-protocol.h"
-#include "homa-socket.h"
 
 namespace ns3 {
 
@@ -61,7 +65,9 @@ HomaL4Protocol::GetTypeId (void)
 HomaL4Protocol::HomaL4Protocol ()
   : m_endPoints (new Ipv4EndPointDemux ())
 {
-  NS_LOG_FUNCTION_NOARGS ();
+  NS_LOG_FUNCTION (this);
+      
+  m_sendController = CreateObject<HomaSendController> (this);
 }
 
 HomaL4Protocol::~HomaL4Protocol ()
@@ -73,6 +79,12 @@ void
 HomaL4Protocol::SetNode (Ptr<Node> node)
 {
   m_node = node;
+}
+    
+Ptr<Node> 
+HomaL4Protocol::GetNode(void) const
+{
+  return m_node;
 }
     
 int 
@@ -103,6 +115,8 @@ HomaL4Protocol::NotifyNewAggregate ()
           Ptr<HomaSocketFactory> homaFactory = CreateObject<HomaSocketFactory> ();
           homaFactory->SetHoma (this);
           node->AggregateObject (homaFactory);
+          
+          m_sendController->SetPacer();
         }
     }
   
@@ -336,6 +350,103 @@ HomaL4Protocol::GetDownTarget6 (void) const
 {
   NS_FATAL_ERROR("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
   return m_downTarget6;
+}
+
+/******************************************************************************/
+
+TypeId HomaOutboundMsg::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::HomaOutboundMsg")
+    .SetParent<Object> ()
+    .SetGroupName("Internet")
+  ;
+  return tid;
+}
+    
+HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message, 
+                                  Ipv4Address saddr, Ipv4Address daddr, 
+                                  uint16_t sport, uint16_t dport, 
+                                  uint32_t mtu, Ptr<Ipv4Route> route)
+{
+  NS_LOG_FUNCTION (this);
+      
+  m_saddr = saddr;
+  m_daddr = daddr;
+  m_sport = sport;
+  m_dport = dport;
+  m_route = route;
+    
+  m_msgSizeBytes = message->GetSize ();
+  m_remainingBytes = m_msgSizeBytes;
+    
+  HomaHeader homah;
+  Ipv4Header ipv4h;
+  m_maxPayloadSize = mtu - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
+    
+  uint32_t unpacketizedBytes = m_msgSizeBytes;
+  uint16_t numPkts = 0;
+  uint32_t nextPktSize;
+  Ptr<Packet> nextPkt;
+  while (unpacketizedBytes > 0)
+    {
+      nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
+      nextPkt = message->CreateFragment (message->GetSize () - unpacketizedBytes, nextPktSize);
+      m_packets[numPkts] = nextPkt;
+      unpacketizedBytes -= nextPktSize;
+      numPkts ++;
+    } 
+  m_msgSizePkts = numPkts;
+}
+
+HomaOutboundMsg::~HomaOutboundMsg ()
+{
+  NS_LOG_FUNCTION_NOARGS ();
+}
+    
+uint32_t HomaOutboundMsg::GetRemainingBytes()
+{
+  return m_remainingBytes;
+}
+    
+/******************************************************************************/
+    
+const uint8_t HomaSendController::MAX_N_MSG = 255;
+
+TypeId HomaSendController::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::HomaSendController")
+    .SetParent<Object> ()
+    .SetGroupName("Internet")
+  ;
+  return tid;
+}
+    
+HomaSendController::HomaSendController (Ptr<HomaL4Protocol> homaL4Protocol)
+{
+  NS_LOG_FUNCTION (this);
+      
+  m_homa = homaL4Protocol;
+    
+  m_txMsgIdFreeList.resize(MAX_N_MSG);
+  std::iota(m_txMsgIdFreeList.begin(), m_txMsgIdFreeList.end(), 0);
+}
+
+HomaSendController::~HomaSendController ()
+{
+  NS_LOG_FUNCTION_NOARGS ();
+}
+    
+void HomaSendController::SetPacer()
+{
+  NS_LOG_FUNCTION (this);
+    
+  Ptr<NetDevice> netDevice = m_homa->GetNode ()->GetDevice (0);
+  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
+  DataRate dataRate = p2pNetDevice->GetDataRate ();
+  uint16_t mtuBytes = netDevice->GetMtu ();
+    
+  m_packetTxTime = dataRate.CalculateBytesTxTime ((uint32_t) mtuBytes);
+  m_pacerLastTxTime = Simulator::Now () - m_packetTxTime;
 }
     
 } // namespace ns3

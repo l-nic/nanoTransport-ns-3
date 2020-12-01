@@ -22,8 +22,15 @@
 #define HOMA_L4_PROTOCOL_H
 
 #include <stdint.h>
+#include <map>
+#include <functional>
+#include <queue>
+#include <vector>
 
 #include "ns3/ptr.h"
+#include "ns3/log.h"
+#include "ns3/simulator.h"
+#include "ns3/node.h"
 #include "ip-l4-protocol.h"
 
 namespace ns3 {
@@ -34,6 +41,7 @@ class Ipv4EndPointDemux;
 class Ipv4EndPoint;
 class HomaSocket;
 class NetDevice;
+class HomaSendController;
     
 /**
  * \ingroup internet
@@ -75,6 +83,7 @@ public:
    * \param node the node
    */
   void SetNode (Ptr<Node> node);
+  Ptr<Node> GetNode(void) const;
 
   virtual int GetProtocolNumber (void) const;
     
@@ -190,6 +199,97 @@ private:
   std::vector<Ptr<HomaSocket> > m_sockets;      //!< list of sockets
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
   IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6 (Not supported)
+    
+  Ptr<HomaSendController> m_sendController;  //!< The controller that manages transmission of HomaOutboundMsg
+};
+    
+/******************************************************************************/
+    
+/**
+ * \ingroup homa
+ *
+ * \brief Stores the state for outbound Homa messages
+ *
+ */
+class HomaOutboundMsg : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  HomaOutboundMsg (Ptr<Packet> message, 
+                   Ipv4Address saddr, Ipv4Address daddr, 
+                   uint16_t sport, uint16_t dport, 
+                   uint32_t mtu, Ptr<Ipv4Route> route=0);
+  ~HomaOutboundMsg (void);
+  
+  uint32_t GetRemainingBytes(void);
+  
+private:
+  std::map<uint16_t, Ptr<Packet>> m_packets; //!< Packet buffer for the message
+  Ipv4Address m_saddr; //!< Source IP address of this message
+  Ipv4Address m_daddr; //!< Destination IP address of this message
+  uint16_t m_sport; //!< Source port of this message
+  uint16_t m_dport; //!< Destination port of this message
+  Ptr<Ipv4Route> m_route; //!< Route of the message determined by the sender socket 
+  
+  uint32_t m_maxPayloadSize; 
+  uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
+  uint32_t m_msgSizeBytes;
+  uint16_t m_msgSizePkts;
+  
+};
+ 
+/******************************************************************************/
+    
+/**
+ * \ingroup homa
+ *
+ * \brief Manages the transmission of all HomaOutboundMsg from HomaL4Protocol
+ *
+ * This class keeps the state necessary for transmisssion of the messages. 
+ * For every new message that arrives from the applications, this class is 
+ * responsible for sending the data packet as grants are received.
+ *
+ */
+class HomaSendController : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+  static const uint8_t MAX_N_MSG; //!< Maximum number of messages a HomaSendController can hold
+
+  HomaSendController (Ptr<HomaL4Protocol> homaL4Protocol);
+  ~HomaSendController (void);
+  
+  void SetPacer(void);
+  
+  struct OutboundMsgCompare
+  {
+    bool operator()(const Ptr<HomaOutboundMsg> left, 
+                    const Ptr<HomaOutboundMsg> right)
+    {
+        return left->GetRemainingBytes() > right->GetRemainingBytes();
+    }
+  };
+  
+private:
+  Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
+  
+  std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
+  
+  std::priority_queue<Ptr<HomaOutboundMsg>, 
+                      std::vector<Ptr<HomaOutboundMsg>>, 
+                      OutboundMsgCompare> m_outboundMsgs;
+  
+  Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
+  Time m_packetTxTime; //!< Time to transmit/receive a full MTU packet to/from the network
 };
     
 } // namespace ns3
