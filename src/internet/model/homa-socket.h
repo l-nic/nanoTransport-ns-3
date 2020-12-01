@@ -108,8 +108,8 @@ public:
   virtual int Listen (void);
   
   virtual uint32_t GetTxAvailable (void) const;
-  virtual int Send (Ptr<Packet> p, uint32_t flags);
-  virtual int SendTo (Ptr<Packet> p, uint32_t flags, const Address &address);
+  virtual int Send (Ptr<Packet> p);
+  virtual int SendTo (Ptr<Packet> p, const Address &address);
   
   virtual uint32_t GetRxAvailable (void) const;
   virtual Ptr<Packet> Recv (uint32_t maxSize, uint32_t flags);
