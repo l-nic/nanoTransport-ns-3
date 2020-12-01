@@ -197,30 +197,35 @@ HomaL4Protocol::DeAllocate (Ipv4EndPoint *endPoint)
 }
     
 void
-HomaL4Protocol::Send (Ptr<Packet> packet, 
+HomaL4Protocol::Send (Ptr<Packet> message, 
                      Ipv4Address saddr, Ipv4Address daddr, 
                      uint16_t sport, uint16_t dport)
 {
-  NS_LOG_FUNCTION (this << packet << saddr << daddr << sport << dport);
-  
-//   HomaHeader homaHeader;
-  
-//   homaHeader.SetDestinationPort (dport);
-//   homaHeader.SetSourcePort (sport);
-
-//   packet->AddHeader (homaHeader);
+  NS_LOG_FUNCTION (this << message << saddr << daddr << sport << dport);
     
-  Send(packet, saddr, daddr, sport, dport, 0);
+  Send(message, saddr, daddr, sport, dport, 0);
 }
     
 void
-HomaL4Protocol::Send (Ptr<Packet> packet, 
+HomaL4Protocol::Send (Ptr<Packet> message, 
                      Ipv4Address saddr, Ipv4Address daddr, 
                      uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route)
 {
-  NS_LOG_FUNCTION (this << packet << saddr << daddr << sport << dport << route);
+  NS_LOG_FUNCTION (this << message << saddr << daddr << sport << dport << route);
     
   // TODO: Implement the protocol logic here!
+    
+  HomaHeader homaHeader;
+  
+  homaHeader.SetDstPort (dport);
+  homaHeader.SetSrcPort (sport);
+  homaHeader.SetMsgLen (1);
+  homaHeader.SetFlags (HomaHeader::Flags_t::DATA);
+  homaHeader.SetPayloadSize (message->GetSize ());
+
+  message->AddHeader (homaHeader);
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+               " HomaL4Protocol sending: " << message->ToString ());
     
   // NOTE: Use the following SocketIpTosTag append strategy when 
   //       sending packets out. This allows us to set the priority
@@ -231,7 +236,7 @@ HomaL4Protocol::Send (Ptr<Packet> packet,
 //   // This packet may already have a SocketIpTosTag (see HomaSocket)
 //   msg->ReplacePacketTag (ipTosTag);
 
-//   m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
+  m_downTarget (message, saddr, daddr, PROT_NUMBER, route);
 }
     
 enum IpL4Protocol::RxStatus
@@ -240,29 +245,32 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
                         Ptr<Ipv4Interface> interface)
 {
   NS_LOG_FUNCTION (this << packet << header);
-  
-//   HomaHeader homaHeader;
-//   packet->PeekHeader (homaHeader);
-
-//   NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << homaHeader.GetDestinationPort ()); 
-//   Ipv4EndPointDemux::EndPoints endPoints =
-//     m_endPoints->Lookup (header.GetDestination (), homaHeader.GetDestinationPort (),
-//                          header.GetSource (), homaHeader.GetSourcePort (), interface);
-//   if (endPoints.empty ())
-//     {
-//       NS_LOG_LOGIC ("RX_ENDPOINT_UNREACH");
-//       return IpL4Protocol::RX_ENDPOINT_UNREACH;
-//     }
     
-    // TODO: Implement the protocol logic here!
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+               " HomaL4Protocol received: " << packet->ToString ());
+  
+  HomaHeader homaHeader;
+  packet->PeekHeader (homaHeader);
 
-//   packet->RemoveHeader(homaHeader);
-//   for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
-//        endPoint != endPoints.end (); endPoint++)
-//     {
-//       (*endPoint)->ForwardUp (packet->Copy (), header, homaHeader.GetSourcePort (), 
-//                               interface);
-//     }
+  NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << homaHeader.GetDstPort ()); 
+  Ipv4EndPointDemux::EndPoints endPoints =
+    m_endPoints->Lookup (header.GetDestination (), homaHeader.GetDstPort (),
+                         header.GetSource (), homaHeader.GetSrcPort (), interface);
+  if (endPoints.empty ())
+    {
+      NS_LOG_LOGIC ("RX_ENDPOINT_UNREACH");
+      return IpL4Protocol::RX_ENDPOINT_UNREACH;
+    }
+    
+  //  TODO: Implement the protocol logic here!
+
+  packet->RemoveHeader(homaHeader);
+  for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
+       endPoint != endPoints.end (); endPoint++)
+    {
+      (*endPoint)->ForwardUp (packet->Copy (), header, homaHeader.GetSrcPort (), 
+                              interface);
+    }
   return IpL4Protocol::RX_OK;
 }
     

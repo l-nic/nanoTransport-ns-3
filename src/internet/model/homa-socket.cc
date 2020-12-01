@@ -365,7 +365,7 @@ HomaSocket::GetTxAvailable (void) const
     
     
 int 
-HomaSocket::Send (Ptr<Packet> msg)
+HomaSocket::Send (Ptr<Packet> msg, uint32_t flags)
 {
   NS_LOG_FUNCTION (this << msg);
 
@@ -407,7 +407,7 @@ HomaSocket::DoSend (Ptr<Packet> msg)
 }
     
 int 
-HomaSocket::SendTo (Ptr<Packet> msg, const Address &address)
+HomaSocket::SendTo (Ptr<Packet> msg, uint32_t flags, const Address &address)
 {
   NS_LOG_FUNCTION (this << msg << address);
   if (InetSocketAddress::IsMatchingType (address))
