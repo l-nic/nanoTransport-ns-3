@@ -22,15 +22,14 @@
 #define HOMA_L4_PROTOCOL_H
 
 #include <stdint.h>
-#include <map>
-#include <functional>
-#include <queue>
 #include <vector>
+#include <unordered_map>
 
 #include "ns3/ptr.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/node.h"
+#include "ns3/data-rate.h"
 #include "ip-l4-protocol.h"
 
 namespace ns3 {
@@ -41,7 +40,8 @@ class Ipv4EndPointDemux;
 class Ipv4EndPoint;
 class HomaSocket;
 class NetDevice;
-class HomaSendController;
+class HomaSendScheduler;
+class HomaOutboundMsg;
     
 /**
  * \ingroup internet
@@ -163,6 +163,10 @@ public:
              Ipv4Address saddr, Ipv4Address daddr, 
              uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route);
     
+  void SendDown (Ptr<Packet> message, 
+                 Ipv4Address saddr, Ipv4Address daddr, 
+                 Ptr<Ipv4Route> route);
+    
   // inherited from Ipv4L4Protocol
   virtual enum IpL4Protocol::RxStatus Receive (Ptr<Packet> p,
                                                Ipv4Header const &header,
@@ -200,7 +204,8 @@ private:
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
   IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6 (Not supported)
     
-  Ptr<HomaSendController> m_sendController;  //!< The controller that manages transmission of HomaOutboundMsg
+  uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
+  Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
 };
     
 /******************************************************************************/
@@ -223,24 +228,43 @@ public:
   HomaOutboundMsg (Ptr<Packet> message, 
                    Ipv4Address saddr, Ipv4Address daddr, 
                    uint16_t sport, uint16_t dport, 
-                   uint32_t mtu, Ptr<Ipv4Route> route=0);
+                   uint32_t mtu, uint16_t bdp);
   ~HomaOutboundMsg (void);
   
+  void SetRoute(Ptr<Ipv4Route> route);
+  Ptr<Ipv4Route> GetRoute (void);
+  
   uint32_t GetRemainingBytes(void);
+  uint16_t GetMsgSizePkts(void);
+  
+  Ipv4Address GetSrcAddress (void);
+  Ipv4Address GetDstAddress (void);
+  uint16_t GetSrcPort (void);
+  uint16_t GetDstPort (void);
+  
+  void SetPrio(uint8_t prio);
+  uint8_t GetPrio (void);
+  
+  bool GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p);
   
 private:
-  std::map<uint16_t, Ptr<Packet>> m_packets; //!< Packet buffer for the message
   Ipv4Address m_saddr; //!< Source IP address of this message
   Ipv4Address m_daddr; //!< Destination IP address of this message
   uint16_t m_sport; //!< Source port of this message
   uint16_t m_dport; //!< Destination port of this message
   Ptr<Ipv4Route> m_route; //!< Route of the message determined by the sender socket 
   
+  std::vector<Ptr<Packet>> m_packets; //!< Packet buffer for the message
+  std::vector<bool> m_deliveredPackets; //!< State to store whether the packets are delivered to the receiver
+  std::vector<bool> m_toBeTxPackets; //!< State to store whether a packet is allowed to be transmitted, ie. not in flight
+  
   uint32_t m_maxPayloadSize; 
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
   uint32_t m_msgSizeBytes;
   uint16_t m_msgSizePkts;
+  uint16_t m_maxGrantedIdx; //!< Highest Grant Offset received so far (default: BDP in packets)
   
+  uint8_t m_prio;
 };
  
 /******************************************************************************/
@@ -255,7 +279,7 @@ private:
  * responsible for sending the data packet as grants are received.
  *
  */
-class HomaSendController : public Object
+class HomaSendScheduler : public Object
 {
 public:
   /**
@@ -263,33 +287,28 @@ public:
    * \return the object TypeId
    */
   static TypeId GetTypeId (void);
-  static const uint8_t MAX_N_MSG; //!< Maximum number of messages a HomaSendController can hold
+  static const uint8_t MAX_N_MSG; //!< Maximum number of messages a HomaSendScheduler can hold
 
-  HomaSendController (Ptr<HomaL4Protocol> homaL4Protocol);
-  ~HomaSendController (void);
+  HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
+  ~HomaSendScheduler (void);
   
-  void SetPacer(void);
+  void SetPacer (void);
   
-  struct OutboundMsgCompare
-  {
-    bool operator()(const Ptr<HomaOutboundMsg> left, 
-                    const Ptr<HomaOutboundMsg> right)
-    {
-        return left->GetRemainingBytes() > right->GetRemainingBytes();
-    }
-  };
+  bool ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg);
+  
+  void TxPacket(void);
+  
+  bool GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
+  Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
+  DataRate m_txRate; //!< Data Rate of the corresponding net device for this prototocol
+  EventId m_txEvent; //!< The EventID for the next scheduled transmission
   
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
-  
-  std::priority_queue<Ptr<HomaOutboundMsg>, 
-                      std::vector<Ptr<HomaOutboundMsg>>, 
-                      OutboundMsgCompare> m_outboundMsgs;
-  
-  Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
-  Time m_packetTxTime; //!< Time to transmit/receive a full MTU packet to/from the network
+  std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key of txMsgId
+  std::list<Ipv4Address> m_busyReceivers; //!< List of busy receivers that we shouldn't send packets to
 };
     
 } // namespace ns3

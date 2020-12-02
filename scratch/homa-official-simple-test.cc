@@ -111,6 +111,13 @@ main (int argc, char *argv[])
   receiveDevices = pointToPoint.Install (receiver2switch);
     
   /******** Install Internet Stack ********/
+    
+  /* Enable multi-path routing */
+  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
+  /* Set default BDP value in packets */
+  Config::SetDefault("ns3::HomaL4Protocol::RttPackets", UintegerValue(10));
+    
   InternetStackHelper stack;
   stack.InstallAll ();
     
@@ -122,10 +129,6 @@ main (int argc, char *argv[])
   tchPfifo.Install (switchDevices);
   tchPfifo.Install (senderDevices);
   tchPfifo.Install (receiveDevices);
-
-  /* Enable multi-path routing */
-  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
-                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
 
   Ipv4AddressHelper address;
   address.SetBase ("10.0.0.0", "255.255.255.0");
