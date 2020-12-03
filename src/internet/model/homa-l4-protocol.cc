@@ -29,15 +29,15 @@
 #include "ns3/uinteger.h"
 
 #include "ns3/point-to-point-net-device.h"
+#include "ns3/ppp-header.h"
 #include "ns3/ipv4-route.h"
-
+#include "ipv4-end-point-demux.h"
+#include "ipv4-end-point.h"
+#include "ipv4-l3-protocol.h"
 #include "homa-l4-protocol.h"
 #include "ns3/homa-header.h"
 #include "homa-socket-factory.h"
 #include "homa-socket.h"
-#include "ipv4-end-point-demux.h"
-#include "ipv4-end-point.h"
-#include "ipv4-l3-protocol.h"
 
 namespace ns3 {
 
@@ -125,11 +125,11 @@ HomaL4Protocol::NotifyNewAggregate ()
         }
     }
   
-  // We set our down target to the IPv4 send function.
-  
   if (ipv4 != 0 && m_downTarget.IsNull())
     {
+      // We register this HomaL4Protocol instance as one of the upper targets of the IP layer
       ipv4->Insert (this);
+      // We set our down target to the IPv4 send function.
       this->SetDownTarget (MakeCallback (&Ipv4::Send, ipv4));
     }
   IpL4Protocol::NotifyNewAggregate ();
@@ -158,7 +158,11 @@ HomaL4Protocol::DoDispose (void)
 */
   IpL4Protocol::DoDispose ();
 }
-    
+ 
+/*
+ * This method is called by HomaSocketFactory associated with m_node which 
+ * returns a socket that is tied to this HomaL4Protocol instance.
+ */
 Ptr<Socket>
 HomaL4Protocol::CreateSocket (void)
 {
@@ -239,17 +243,28 @@ HomaL4Protocol::Send (Ptr<Packet> message,
   outMsg->SetRoute (route); // This is mostly unnecessary
   m_sendScheduler->ScheduleNewMessage(outMsg);
 }
-    
+
+/*
+ * This method is called by the associated HomaSendScheduler after the  
+ * next data packet to transmit is selected. The selected packet is then
+ * pushed down to the lower IP layer.
+ */
 void
-HomaL4Protocol::SendDown (Ptr<Packet> message, 
+HomaL4Protocol::SendDown (Ptr<Packet> packet, 
                           Ipv4Address saddr, Ipv4Address daddr, 
                           Ptr<Ipv4Route> route)
 {
-  NS_LOG_FUNCTION (this << message << saddr << daddr << route);
+  NS_LOG_FUNCTION (this << packet << saddr << daddr << route);
     
-  m_downTarget (message, saddr, daddr, PROT_NUMBER, route);
+  m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
 }
-    
+
+/*
+ * This method is called by the lower IP layer to notify arrival of a 
+ * new packet from the network. The method then classifies the packet
+ * and forward it to the appropriate scheduler (send or receive) to have
+ * Homa Transport logic applied on it.
+ */
 enum IpL4Protocol::RxStatus
 HomaL4Protocol::Receive (Ptr<Packet> packet,
                         Ipv4Header const &header,
@@ -293,7 +308,8 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   NS_FATAL_ERROR_CONT("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
   return IpL4Protocol::RX_ENDPOINT_UNREACH;
 }
-    
+
+// inherited from Ipv4L4Protocol (Not used for Homa Transport Purposes)
 void 
 HomaL4Protocol::ReceiveIcmp (Ipv4Address icmpSource, uint8_t icmpTtl,
                             uint8_t icmpType, uint8_t icmpCode, uint32_t icmpInfo,
@@ -359,13 +375,17 @@ TypeId HomaOutboundMsg::GetTypeId (void)
   ;
   return tid;
 }
-    
+
+/*
+ * This method creates a new outbound message with the given information.
+ */
 HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message, 
                                   Ipv4Address saddr, Ipv4Address daddr, 
                                   uint16_t sport, uint16_t dport, 
                                   uint32_t mtu, uint16_t bdp)
     : m_route(0),
-      m_prio(0)
+      m_prio(0),
+      m_prioSetByReceiver(false)
 {
   NS_LOG_FUNCTION (this);
       
@@ -375,12 +395,14 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   m_dport = dport;
     
   m_msgSizeBytes = message->GetSize ();
+  // The remaining undelivered message size equals to the total message size in the beginning
   m_remainingBytes = m_msgSizeBytes;
     
   HomaHeader homah;
   Ipv4Header ipv4h;
   m_maxPayloadSize = mtu - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
     
+  // Packetize the message into MTU sized packets and store the corresponding state
   uint32_t unpacketizedBytes = m_msgSizeBytes;
   uint16_t numPkts = 0;
   uint32_t nextPktSize;
@@ -451,10 +473,16 @@ void HomaOutboundMsg::SetPrio (uint8_t prio)
   m_prio = prio;
 }
     
-uint8_t HomaOutboundMsg::GetPrio ()
+uint8_t HomaOutboundMsg::GetPrio (uint16_t pktOffset)
 {
-  // TODO: Determine priority of unscheduled packet according to
-  //       distribution of message sizes.
+  if (!m_prioSetByReceiver)
+  {
+    // Determine the priority of the unscheduled packet
+    
+    // TODO: Determine priority of unscheduled packet (index = pktOffset)
+    //       according to the distribution of message sizes.
+    return 0;
+  }
   return m_prio;
 }
     
@@ -467,6 +495,7 @@ bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
   {
     if (!m_deliveredPackets[i] && m_toBeTxPackets[i])
     {
+      // The selected packet is not delivered and not on flight
       NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                    << ") will send packet " << i << " next.");
       pktOffset = i;
@@ -475,7 +504,26 @@ bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
     }
     i++;
   }
+  NS_LOG_LOGIC("HomaOutboundMsg (" << this 
+               << ") doesn't have any packet to send!");
   return false;
+}
+
+/*
+ * This method is called when a packet is transmitted to note that it
+ * is no longer allowed to be transmitted again. If a timeout occurs 
+ * for this message, the corresponding m_toBeTxPackets entry will be
+ * set back to true.
+ */
+void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
+{
+  NS_LOG_FUNCTION (this << pktOffset);
+    
+  NS_LOG_DEBUG("HomaOutboundMsg (" << this 
+               << ") is marking packet " << pktOffset 
+               << " as not 'to be transmitted'.");
+    
+  m_toBeTxPackets[pktOffset] = false;
 }
     
 /******************************************************************************/
@@ -496,7 +544,8 @@ HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
   NS_LOG_FUNCTION (this);
       
   m_homa = homaL4Protocol;
-    
+  
+  // Initially, all the txMsgId values between 0 and MAX_N_MSG are listed as free
   m_txMsgIdFreeList.resize(MAX_N_MSG);
   std::iota(m_txMsgIdFreeList.begin(), m_txMsgIdFreeList.end(), 0);
 }
@@ -505,7 +554,16 @@ HomaSendScheduler::~HomaSendScheduler ()
 {
   NS_LOG_FUNCTION_NOARGS ();
 }
-    
+
+/*
+ * This method is called by the NotifyNewAggregate() method of the 
+ * associated HomaL4Protocol instance to calculate dataRate of the 
+ * corresponding NetDevice, so that TX decisions are made after the 
+ * previous packet is completely serialized. This allows scheduling 
+ * decisions to be made as late as possible which is valuable to make 
+ * sure the message with the shortest remaining size most recently is
+ * selected.
+ */
 void HomaSendScheduler::SetPacer ()
 {
   NS_LOG_FUNCTION (this);
@@ -525,6 +583,7 @@ HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
   uint16_t txMsgId;
   if (m_txMsgIdFreeList.size() > 0)
   {
+    // Assign a txMsgId which will be unique tothis message on this host while the message lasts
     txMsgId = m_txMsgIdFreeList.front ();
     NS_LOG_LOGIC("HomaSendScheduler allocating txMsgId: " << txMsgId);
     m_txMsgIdFreeList.pop_front ();
@@ -551,6 +610,80 @@ HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
   return true;
 }
     
+bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p)
+{
+  NS_LOG_FUNCTION (this);
+  
+  Ptr<HomaOutboundMsg> currentMsg;
+  Ptr<HomaOutboundMsg> candidateMsg;
+  uint32_t minRemainingBytes = std::numeric_limits<uint32_t>::max();
+  uint16_t pktOffset;
+  bool msgSelected = false;
+  /*
+   * Iterate over all pending outbound messages and select the one 
+   * that has the smallest remainingBytes, granted but not transmitted 
+   * packets, and a receiver that is not listed as busy.
+   */
+  for (auto& it: m_outboundMsgs) 
+  {
+    currentMsg = it.second;
+    uint32_t curRemainingBytes = currentMsg->GetRemainingBytes();
+    // Accept current msg if the remainig size is smaller than minRemainingBytes
+    if (curRemainingBytes < minRemainingBytes)
+    {
+      Ipv4Address daddr = currentMsg->GetDstAddress ();
+      // Accept current msg if the receiver is not busy
+      if (std::find(m_busyReceivers.begin(),m_busyReceivers.end(),daddr) == m_busyReceivers.end())
+      {
+        // Accept current msg if it has a granted but not transmitted packet
+        if (currentMsg->GetNextPacket(pktOffset, p))
+        {
+          candidateMsg = currentMsg;
+          txMsgId = it.first;
+          minRemainingBytes = curRemainingBytes;
+          msgSelected = true;
+        }
+      }
+    }
+  }
+  
+  if (msgSelected)
+  {
+    HomaHeader homaHeader;
+    homaHeader.SetDstPort (candidateMsg->GetDstPort ());
+    homaHeader.SetSrcPort (candidateMsg->GetSrcPort ());
+    homaHeader.SetTxMsgId (txMsgId);
+    homaHeader.SetFlags (HomaHeader::Flags_t::DATA); 
+    homaHeader.SetMsgLen (candidateMsg->GetMsgSizePkts ());
+    homaHeader.SetPktOffset (pktOffset);
+    homaHeader.SetPayloadSize (p->GetSize ());
+
+    p->AddHeader (homaHeader);
+    NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+               " HomaL4Protocol sending: " << p->ToString ());
+    
+    // NOTE: Use the following SocketIpTosTag append strategy when 
+    //       sending packets out. This allows us to set the priority
+    //       of the packets correctly for the PfifoHomaQueueDisc way of 
+    //       priority queueing in the network.
+    SocketIpTosTag ipTosTag;
+    ipTosTag.SetTos (candidateMsg->GetPrio (pktOffset)); 
+    // This packet may already have a SocketIpTosTag (see HomaSocket)
+    p->ReplacePacketTag (ipTosTag);
+    
+    /*
+     * Set the corresponding packet as "not to be sent" (ie. on-flight)
+     * to prevent redundant re-transmissions.
+     */
+    candidateMsg->SetNotToBeTx(pktOffset);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+    
 void
 HomaSendScheduler::TxPacket ()
 {
@@ -568,55 +701,21 @@ HomaSendScheduler::TxPacket ()
     Ptr<Ipv4Route> route = nextMsg->GetRoute ();
     
     m_homa->SendDown(p, saddr, daddr, route);
+      
+    /* 
+     * Calculate the time it would take to serialize this packet and schedule
+     * the next TX of this scheduler accordingly.
+     */
+    Ipv4Header iph;
+    PppHeader pph;
+    uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
+    Time txTime = m_txRate.CalculateBytesTxTime (p->GetSize () + headerSize);
+    m_txEvent = Simulator::Schedule (txTime, &HomaSendScheduler::TxPacket, this);
   }
   else
   {
     NS_LOG_LOGIC("HomaSendScheduler doesn't have any packet to send!");
   }
-}
-    
-bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p)
-{
-  NS_LOG_FUNCTION (this);
-  
-  uint16_t candidateID;
-  uint16_t pktOffset;
-  Ptr<HomaOutboundMsg> candidateMsg;
-  for (auto& it: m_outboundMsgs) {
-    candidateID = it.first;
-    candidateMsg = it.second; 
-    if (candidateMsg->GetNextPacket(pktOffset, p));
-      break;
-    // TODO: Iterate over all pending outbound messages and
-    //       find the one that has the smallest remainingBytes,
-    //       granted but not transmitted packets, and a receiver
-    //       that is not listed as busy
-  }
-  txMsgId = candidateID;
-    
-  HomaHeader homaHeader;
-  homaHeader.SetDstPort (candidateMsg->GetDstPort ());
-  homaHeader.SetSrcPort (candidateMsg->GetSrcPort ());
-  homaHeader.SetTxMsgId (candidateID);
-  homaHeader.SetFlags (HomaHeader::Flags_t::DATA); 
-  homaHeader.SetMsgLen (candidateMsg->GetMsgSizePkts ());
-  homaHeader.SetPktOffset (pktOffset);
-  homaHeader.SetPayloadSize (p->GetSize ());
-
-  p->AddHeader (homaHeader);
-  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-               " HomaL4Protocol sending: " << p->ToString ());
-    
-  // NOTE: Use the following SocketIpTosTag append strategy when 
-  //       sending packets out. This allows us to set the priority
-  //       of the packets correctly for the PfifoHomaQueueDisc way of 
-  //       priority queueing in the network.
-  SocketIpTosTag ipTosTag;
-  ipTosTag.SetTos (candidateMsg->GetPrio ()); // TODO: Resolve Priorities
-  // This packet may already have a SocketIpTosTag (see HomaSocket)
-  p->ReplacePacketTag (ipTosTag);
-    
-  return true;
 }
     
 } // namespace ns3
