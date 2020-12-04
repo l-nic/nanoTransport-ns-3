@@ -35,7 +35,6 @@
 #include "ipv4-end-point.h"
 #include "ipv4-l3-protocol.h"
 #include "homa-l4-protocol.h"
-#include "ns3/homa-header.h"
 #include "homa-socket-factory.h"
 #include "homa-socket.h"
 
@@ -272,11 +271,14 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
 {
   NS_LOG_FUNCTION (this << packet << header);
     
-  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-               " HomaL4Protocol received: " << packet->ToString ());
+  NS_LOG_DEBUG ("HomaL4Protocol received: " << packet->ToString ());
+    
+  NS_ASSERT(header.GetProtocol() == PROT_NUMBER);
   
+  Ptr<Packet> cp = packet->Copy ();
+    
   HomaHeader homaHeader;
-  packet->PeekHeader (homaHeader);
+  cp->RemoveHeader(homaHeader);
 
   NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << homaHeader.GetDstPort ()); 
   Ipv4EndPointDemux::EndPoints endPoints =
@@ -289,14 +291,28 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
     }
     
   //  TODO: Implement the protocol logic here!
-
-  packet->RemoveHeader(homaHeader);
-  for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
-       endPoint != endPoints.end (); endPoint++)
+  uint8_t rxFlag = homaHeader.GetFlags ();
+  if (rxFlag & HomaHeader::Flags_t::DATA)
+  {
+    for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
+         endPoint != endPoints.end (); endPoint++)
     {
-      (*endPoint)->ForwardUp (packet->Copy (), header, homaHeader.GetSrcPort (), 
-                              interface);
+      (*endPoint)->ForwardUp (cp, header, homaHeader.GetSrcPort (), 
+                                  interface);
     }
+  }
+  else if (rxFlag & HomaHeader::Flags_t::GRANT)
+    m_sendScheduler->GrantReceivedForMsg(header, homaHeader);
+    
+  else if (rxFlag & HomaHeader::Flags_t::BUSY)
+    m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
+    
+  else
+  {
+    NS_LOG_ERROR("HomaL4Protocol received an unknown type of a packet: " 
+                 << homaHeader.FlagsToString(rxFlag));
+    return IpL4Protocol::RX_ENDPOINT_UNREACH;
+  }
   return IpL4Protocol::RX_OK;
 }
     
@@ -508,6 +524,23 @@ bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
                << ") doesn't have any packet to send!");
   return false;
 }
+    
+/*
+ * This method is called when a GRANT or a BUSY packet is received. 
+ * The pktOffset value on a control packet denotes that the receiver
+ * has received the corresponding data packet, so the packet can be 
+ * marked delivered.
+ */    
+void HomaOutboundMsg::SetDelivered (uint16_t pktOffset)
+{
+  NS_LOG_FUNCTION (this << pktOffset);
+    
+  NS_LOG_DEBUG("HomaOutboundMsg (" << this 
+               << ") is marking packet " << pktOffset 
+               << " as delivered.");
+    
+  m_deliveredPackets[pktOffset] = true;
+}
 
 /*
  * This method is called when a packet is transmitted to note that it
@@ -524,6 +557,19 @@ void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
                << " as not 'to be transmitted'.");
     
   m_toBeTxPackets[pktOffset] = false;
+}
+    
+void HomaOutboundMsg::AdjustGrantedIdx (uint16_t grantOffset)
+{
+  NS_LOG_FUNCTION (this << grantOffset);
+    
+  if (grantOffset > m_maxGrantedIdx)
+  {
+    NS_LOG_LOGIC("HomaOutboundMsg (" << this 
+                 << ") is increasing the Grant index to "
+                 << grantOffset);
+    m_maxGrantedIdx = grantOffset;
+  }
 }
     
 /******************************************************************************/
@@ -716,6 +762,73 @@ HomaSendScheduler::TxPacket ()
   {
     NS_LOG_LOGIC("HomaSendScheduler doesn't have any packet to send!");
   }
+}
+    
+void HomaSendScheduler::GrantReceivedForMsg(Ipv4Header const &ipv4Header, 
+                                            HomaHeader const &homaHeader)
+{
+  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
+    
+  Ptr<HomaOutboundMsg> grantedMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
+  // Verify that the TxMsgId indeed matches the 4 tuple
+  NS_ASSERT(grantedMsg->GetSrcAddress() == ipv4Header.GetSource ());
+  NS_ASSERT(grantedMsg->GetDstAddress() == ipv4Header.GetDestination ());
+  NS_ASSERT(grantedMsg->GetSrcPort() == homaHeader.GetSrcPort ());
+  NS_ASSERT(grantedMsg->GetDstPort() == homaHeader.GetDstPort ());
+    
+  /*
+   * The pktOffset within GRANT and BUSY packets are used to acknowledge 
+   * the arrival of the corresponding data packet to the receiver.
+   */
+  grantedMsg->SetDelivered (homaHeader.GetPktOffset ());
+    
+  grantedMsg->AdjustGrantedIdx (homaHeader.GetGrantOffset ());
+  
+  // Since the receiver is sending GRANTs, it is considered not busy
+  this->SetReceiverNotBusy(ipv4Header.GetDestination ());
+  // TODO: If there are multiple messages from the same sender to the same 
+  //       receiver, all of those messages will be allowed to send at once.
+}
+    
+void HomaSendScheduler::BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
+                                           HomaHeader const &homaHeader)
+{
+  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
+    
+  Ptr<HomaOutboundMsg> busyMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
+  // Verify that the TxMsgId indeed matches the 4 tuple
+  NS_ASSERT(busyMsg->GetSrcAddress() == ipv4Header.GetSource ());
+  NS_ASSERT(busyMsg->GetDstAddress() == ipv4Header.GetDestination ());
+  NS_ASSERT(busyMsg->GetSrcPort() == homaHeader.GetSrcPort ());
+  NS_ASSERT(busyMsg->GetDstPort() == homaHeader.GetDstPort ());
+    
+  /*
+   * The pktOffset within GRANT and BUSY packets are used to acknowledge 
+   * the arrival of the corresponding data packet to the receiver.
+   */
+  busyMsg->SetDelivered (homaHeader.GetPktOffset ());
+    
+  this->SetReceiverBusy(ipv4Header.GetDestination ());
+  // TODO: If there are multiple messages from the same sender to the same 
+  //       receiver where only one of them is granted by the receiver, the 
+  //       busy packet for the other messages will block the granted one as well.
+}
+    
+void HomaSendScheduler::SetReceiverBusy(Ipv4Address receiverAddress)
+{
+  NS_LOG_FUNCTION (this << receiverAddress);
+    
+  if (std::find(m_busyReceivers.begin(),m_busyReceivers.end(),receiverAddress) == m_busyReceivers.end())
+  {
+    m_busyReceivers.push_back(receiverAddress);
+  }
+}
+    
+void HomaSendScheduler::SetReceiverNotBusy(Ipv4Address receiverAddress)
+{
+  NS_LOG_FUNCTION (this << receiverAddress);
+    
+  m_busyReceivers.remove(receiverAddress);
 }
     
 } // namespace ns3

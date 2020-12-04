@@ -31,6 +31,7 @@
 #include "ns3/node.h"
 #include "ns3/data-rate.h"
 #include "ip-l4-protocol.h"
+#include "ns3/homa-header.h"
 
 namespace ns3 {
 
@@ -316,10 +317,22 @@ public:
   bool GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p);
   
   /**
-   * \brief Set the the corresponding m_toBeTxPackets entry to false to mark on-flight or delivered.
+   * \brief Set the the corresponding m_toBeTxPackets entry to false to mark acknowledgement.
+   * \param pktOffset The offset of the packet within the message that is to be marked.
+   */
+  void SetDelivered (uint16_t pktOffset);
+  
+  /**
+   * \brief Set the the corresponding m_deliveredPackets entry to true to mark on-flight or delivered.
    * \param pktOffset The offset of the packet within the message that is to be marked.
    */
   void SetNotToBeTx (uint16_t pktOffset);
+  
+  /**
+   * \brief Icrease the m_maxGrantedIdx if the new Grant index is larger than the current one
+   * \param grantOffset The offset which packets are granted upto and including.
+   */
+  void AdjustGrantedIdx (uint16_t grantOffset);
   
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
@@ -391,6 +404,34 @@ public:
    * \brief Send the next packet down to the IP layer and schedule next TX.
    */
   void TxPacket(void);
+  
+  /**
+   * \brief Updates the state for the corresponding outbound message per the received GRANT.
+   * \param ipv4Header The Ipv4 header of the received GRANT.
+   * \param homaHeader The Homa header of the received GRANT.
+   */
+  void GrantReceivedForMsg(Ipv4Header const &ipv4Header, 
+                           HomaHeader const &homaHeader);
+                           
+  /**
+   * \brief Updates the state for the corresponding outbound message per the received BUSY.
+   * \param ipv4Header The Ipv4 header of the received BUSY.
+   * \param homaHeader The Homa header of the received BUSY.
+   */
+  void BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
+                          HomaHeader const &homaHeader);
+   
+  /**
+   * \brief Add the address of the receiver to the list of busy receivers
+   * \param receiverAddress The Ipv4 address of the receiver.
+   */
+  void SetReceiverBusy(Ipv4Address receiverAddress);
+  
+  /**
+   * \brief Remove the address of the receiver from the list of busy receivers
+   * \param receiverAddress The Ipv4 address of the receiver.
+   */
+  void SetReceiverNotBusy(Ipv4Address receiverAddress);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
