@@ -728,10 +728,6 @@ bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p
     homaHeader.SetMsgLen (candidateMsg->GetMsgSizePkts ());
     homaHeader.SetPktOffset (pktOffset);
     homaHeader.SetPayloadSize (p->GetSize ());
-
-    p->AddHeader (homaHeader);
-    NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-               " HomaL4Protocol sending: " << p->ToString ());
     
     // NOTE: Use the following SocketIpTosTag append strategy when 
     //       sending packets out. This allows us to set the priority
@@ -741,6 +737,21 @@ bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p
     ipTosTag.SetTos (candidateMsg->GetPrio (pktOffset)); 
     // This packet may already have a SocketIpTosTag (see HomaSocket)
     p->ReplacePacketTag (ipTosTag);
+      
+    /*
+     * The priority of packets are actually carried on the packet tags as
+     * shown above. The priority field on the homaHeader field is actually
+     * used by control packets to signal the requested priority from receivers
+     * to the senders, so that they can set their data packet priorities 
+     * accordingly.
+     *
+     * Setting the priority field on a data packet is just for monitoring reasons.
+     */
+    homaHeader.SetPrio (candidateMsg->GetPrio (pktOffset));
+      
+    p->AddHeader (homaHeader);
+    NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+               " HomaL4Protocol sending: " << p->ToString ());
     
     /*
      * Set the corresponding packet as "not to be sent" (ie. on-flight)
