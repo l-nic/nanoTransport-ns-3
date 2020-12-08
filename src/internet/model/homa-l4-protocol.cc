@@ -290,7 +290,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
       return IpL4Protocol::RX_ENDPOINT_UNREACH;
     }
     
-  //  TODO: Implement the protocol logic here!
+  //  The Homa protocol logic starts here!
   uint8_t rxFlag = homaHeader.GetFlags ();
   if (rxFlag & HomaHeader::Flags_t::DATA)
   {
@@ -301,8 +301,9 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
                                   interface);
     }
   }
-  else if (rxFlag & HomaHeader::Flags_t::GRANT)
-    m_sendScheduler->GrantReceivedForOutboundMsg(header, homaHeader);
+  else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
+           (rxFlag & HomaHeader::Flags_t::RESEND))
+    m_sendScheduler->SignalReceivedForOutboundMsg(header, homaHeader);
     
   else if (rxFlag & HomaHeader::Flags_t::BUSY) 
     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
@@ -570,7 +571,7 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
     
-  if (grantOffset > m_maxGrantedIdx)
+  if (grantOffset >= m_maxGrantedIdx)
   {
     uint8_t prio = homaHeader.GetPrio();
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
@@ -800,25 +801,37 @@ HomaSendScheduler::TxPacket ()
   }
 }
     
-void HomaSendScheduler::GrantReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
-                                            HomaHeader const &homaHeader)
+void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
+                                                     HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
-  Ptr<HomaOutboundMsg> grantedMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
+  Ptr<HomaOutboundMsg> signaledMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
   // Verify that the TxMsgId indeed matches the 4 tuple
-  NS_ASSERT(grantedMsg->GetSrcAddress() == ipv4Header.GetSource ());
-  NS_ASSERT(grantedMsg->GetDstAddress() == ipv4Header.GetDestination ());
-  NS_ASSERT(grantedMsg->GetSrcPort() == homaHeader.GetSrcPort ());
-  NS_ASSERT(grantedMsg->GetDstPort() == homaHeader.GetDstPort ());
+  NS_ASSERT(signaledMsg->GetSrcAddress() == ipv4Header.GetSource ());
+  NS_ASSERT(signaledMsg->GetDstAddress() == ipv4Header.GetDestination ());
+  NS_ASSERT(signaledMsg->GetSrcPort() == homaHeader.GetSrcPort ());
+  NS_ASSERT(signaledMsg->GetDstPort() == homaHeader.GetDstPort ());
     
   /*
    * The pktOffset within GRANT and BUSY packets are used to acknowledge 
    * the arrival of the corresponding data packet to the receiver.
    */
-  grantedMsg->SetDelivered (homaHeader.GetPktOffset ());
+  signaledMsg->SetDelivered (homaHeader.GetPktOffset ());
+  
+  uint8_t signalFlag = homaHeader.GetFlags();
+  if (signalFlag & HomaHeader::Flags_t::GRANT)
+    signaledMsg->HandleGrant (homaHeader);
     
-  grantedMsg->HandleGrant (homaHeader);
+  else if (signalFlag & HomaHeader::Flags_t::RESEND)
+    // TODO: Figure out what to do when RESEND is received
+      
+  else
+  {
+    NS_LOG_ERROR("HomaSendScheduler (" << this 
+                 << ") has received an unexpected control packet ("
+                 << homaHeader.FlagsToString(signalFlag) << ")");
+  }
   
   // Since the receiver is sending GRANTs, it is considered not busy
   this->SetReceiverNotBusy(ipv4Header.GetDestination ());

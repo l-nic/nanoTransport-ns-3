@@ -407,12 +407,12 @@ public:
   void TxPacket(void);
   
   /**
-   * \brief Updates the state for the corresponding outbound message per the received GRANT.
+   * \brief Updates the state for the corresponding outbound message per the received control packet.
    * \param ipv4Header The Ipv4 header of the received GRANT.
    * \param homaHeader The Homa header of the received GRANT.
    */
-  void GrantReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
-                                   HomaHeader const &homaHeader);
+  void SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
+                                    HomaHeader const &homaHeader);
                            
   /**
    * \brief Updates the state for the corresponding outbound message per the received BUSY.
