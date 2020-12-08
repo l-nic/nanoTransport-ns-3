@@ -569,7 +569,8 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << homaHeader);
     
-  NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::GRANT);
+  // TODO: Figure out what to do when RESEND is received
+//   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::GRANT);
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
     
@@ -596,7 +597,7 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
   else
   {
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
-                 << ") has received an out-of-order grant. State is not updated!");
+                 << ") has received an out-of-order Grant. State is not updated!");
   }
 }
     
@@ -841,6 +842,7 @@ void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Heade
   else if (signalFlag & HomaHeader::Flags_t::RESEND)
   {
     // TODO: Figure out what to do when RESEND is received
+    signaledMsg->HandleGrant (homaHeader);
   }
   else
   {
