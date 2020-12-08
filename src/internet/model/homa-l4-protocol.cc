@@ -399,7 +399,7 @@ TypeId HomaOutboundMsg::GetTypeId (void)
 HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message, 
                                   Ipv4Address saddr, Ipv4Address daddr, 
                                   uint16_t sport, uint16_t dport, 
-                                  uint32_t mtu, uint16_t bdp)
+                                  uint32_t mtuBytes, uint16_t rttPackets)
     : m_route(0),
       m_prio(0),
       m_prioSetByReceiver(false)
@@ -417,7 +417,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     
   HomaHeader homah;
   Ipv4Header ipv4h;
-  m_maxPayloadSize = mtu - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
+  m_maxPayloadSize = mtuBytes - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
     
   // Packetize the message into MTU sized packets and store the corresponding state
   uint32_t unpacketizedBytes = m_msgSizeBytes;
@@ -425,19 +425,21 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   uint32_t nextPktSize;
   Ptr<Packet> nextPkt;
   while (unpacketizedBytes > 0)
-    {
-      nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
-      nextPkt = message->CreateFragment (message->GetSize () - unpacketizedBytes, nextPktSize);
-      
-      m_packets.push_back(nextPkt);
-      m_deliveredPackets.push_back(false);
-      m_toBeTxPackets.push_back(true);
-      
-      unpacketizedBytes -= nextPktSize;
-      numPkts ++;
-    } 
+  {
+    nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
+    nextPkt = message->CreateFragment (message->GetSize () - unpacketizedBytes, nextPktSize);
+
+    m_packets.push_back(nextPkt);
+    m_deliveredPackets.push_back(false);
+    m_toBeTxPackets.push_back(true);
+
+    unpacketizedBytes -= nextPktSize;
+    numPkts ++;
+  } 
   m_msgSizePkts = numPkts;
-  m_maxGrantedIdx = bdp;
+          
+  m_rttPackets = rttPackets;
+  m_maxGrantedIdx = m_rttPackets;
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -560,16 +562,38 @@ void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
   m_toBeTxPackets[pktOffset] = false;
 }
     
-void HomaOutboundMsg::AdjustGrantedIdx (uint16_t grantOffset)
+void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
 {
-  NS_LOG_FUNCTION (this << grantOffset);
+  NS_LOG_FUNCTION (this << homaHeader);
+    
+  NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::GRANT);
+    
+  uint16_t grantOffset = homaHeader.GetGrantOffset();
     
   if (grantOffset > m_maxGrantedIdx)
   {
+    uint8_t prio = homaHeader.GetPrio();
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                  << ") is increasing the Grant index to "
-                 << grantOffset);
+                 << grantOffset << " and setting priority as "
+                 << prio);
     m_maxGrantedIdx = grantOffset;
+      
+    m_prio = prio;
+    m_prioSetByReceiver = true;
+      
+    /*
+     * Since Homa doesn't explicitly acknowledge the delivery of data packets,
+     * one way to estimate the remaining bytes is to exploit the mechanism where
+     * Homa grants messages in a way that there is always exactly BDP worth of 
+     * packet on flight. Then we can calculate the remaining bytes as the following.
+     */
+    m_remainingBytes = (grantOffset - m_rttPackets) * m_maxPayloadSize;
+  }
+  else
+  {
+    NS_LOG_LOGIC("HomaOutboundMsg (" << this 
+                 << ") has received an out-of-order grant. State is not updated!");
   }
 }
     
@@ -783,7 +807,7 @@ void HomaSendScheduler::GrantReceivedForMsg(Ipv4Header const &ipv4Header,
    */
   grantedMsg->SetDelivered (homaHeader.GetPktOffset ());
     
-  grantedMsg->AdjustGrantedIdx (homaHeader.GetGrantOffset ());
+  grantedMsg->HandleGrant (homaHeader);
   
   // Since the receiver is sending GRANTs, it is considered not busy
   this->SetReceiverNotBusy(ipv4Header.GetDestination ());

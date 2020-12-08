@@ -252,7 +252,7 @@ public:
   HomaOutboundMsg (Ptr<Packet> message, 
                    Ipv4Address saddr, Ipv4Address daddr, 
                    uint16_t sport, uint16_t dport, 
-                   uint32_t mtu, uint16_t bdp);
+                   uint32_t mtuBytes, uint16_t rttPackets);
   ~HomaOutboundMsg (void);
   
   /**
@@ -329,10 +329,10 @@ public:
   void SetNotToBeTx (uint16_t pktOffset);
   
   /**
-   * \brief Icrease the m_maxGrantedIdx if the new Grant index is larger than the current one
-   * \param grantOffset The offset which packets are granted upto and including.
+   * \brief Update the state per the received Grant
+   * \param homaHeader The header information for the received Grant
    */
-  void AdjustGrantedIdx (uint16_t grantOffset);
+  void HandleGrant (HomaHeader const &homaHeader);
   
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
@@ -349,7 +349,8 @@ private:
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
-  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: BDP in packets)
+  uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
+  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: m_rttPackets)
   
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
