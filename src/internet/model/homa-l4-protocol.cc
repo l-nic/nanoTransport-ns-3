@@ -303,12 +303,14 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND))
+  {
     m_sendScheduler->SignalReceivedForOutboundMsg(header, homaHeader);
-    
-  else if (rxFlag & HomaHeader::Flags_t::BUSY) 
+  }
+  else if (rxFlag & HomaHeader::Flags_t::BUSY)
+  {
     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
     // TODO: The busy packet is always sent from sender to receiver. 
-    
+  }
   else
   {
     NS_LOG_ERROR("HomaL4Protocol received an unknown type of a packet: " 
@@ -682,7 +684,7 @@ HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
   return true;
 }
     
-bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p)
+bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
 {
   NS_LOG_FUNCTION (this);
   
@@ -690,6 +692,7 @@ bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p
   Ptr<HomaOutboundMsg> candidateMsg;
   uint32_t minRemainingBytes = std::numeric_limits<uint32_t>::max();
   uint16_t pktOffset;
+  Ptr<Packet> p;
   bool msgSelected = false;
   /*
    * Iterate over all pending outbound messages and select the one 
@@ -718,8 +721,17 @@ bool HomaSendScheduler::GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p
       }
     }
   }
+  return msgSelected;
+}
+    
+bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
+{
+  NS_LOG_FUNCTION (this << txMsgId);
   
-  if (msgSelected)
+  uint16_t pktOffset;
+  Ptr<HomaOutboundMsg> candidateMsg = m_outboundMsgs[txMsgId];
+    
+  if (candidateMsg->GetNextPacket(pktOffset, p))
   {
     HomaHeader homaHeader;
     homaHeader.SetDstPort (candidateMsg->GetDstPort ());
@@ -774,9 +786,11 @@ HomaSendScheduler::TxPacket ()
     
   uint16_t nextTxMsgID;
   Ptr<Packet> p;
-  if (this->GetNextMsgIdAndPacket (nextTxMsgID, p))
+  if (this->GetNextMsgId (nextTxMsgID))
   {
     NS_LOG_LOGIC("HomaSendScheduler will transmit a packet from msg " << nextTxMsgID);
+      
+    NS_ASSERT(this->GetNextPktOfMsg(nextTxMsgID, p));
       
     Ptr<HomaOutboundMsg> nextMsg = m_outboundMsgs[nextTxMsgID];
     Ipv4Address saddr = nextMsg->GetSrcAddress ();
@@ -821,11 +835,13 @@ void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Heade
   
   uint8_t signalFlag = homaHeader.GetFlags();
   if (signalFlag & HomaHeader::Flags_t::GRANT)
+  {
     signaledMsg->HandleGrant (homaHeader);
-    
+  }
   else if (signalFlag & HomaHeader::Flags_t::RESEND)
+  {
     // TODO: Figure out what to do when RESEND is received
-      
+  }
   else
   {
     NS_LOG_ERROR("HomaSendScheduler (" << this 

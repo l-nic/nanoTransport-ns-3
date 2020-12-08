@@ -394,12 +394,19 @@ public:
   bool ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg);
   
   /**
-   * \brief Determines which message should be selected to send a packet from
+   * \brief Determines which message would be selected to send a packet from
    * \param txMsgId The TX msg ID of the selected message (determined inside this function)
-   * \param p The selected packet from the corresponding message (determined inside this function)
    * \return Whether a message was successfully selected
    */
-  bool GetNextMsgIdAndPacket (uint16_t &txMsgId, Ptr<Packet> &p);
+  bool GetNextMsgId (uint16_t &txMsgId);
+  
+  /**
+   * \brief Get the next "available to send" packet from the selected message
+   * \param txMsgId The ID of the selected message.
+   * \param p The selected packet from the corresponding message (determined inside this function)
+   * \return Whether a packet could successfully be selected
+   */
+  bool GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p); 
   
   /**
    * \brief Send the next packet down to the IP layer and schedule next TX.
