@@ -411,8 +411,8 @@ public:
    * \param ipv4Header The Ipv4 header of the received GRANT.
    * \param homaHeader The Homa header of the received GRANT.
    */
-  void GrantReceivedForMsg(Ipv4Header const &ipv4Header, 
-                           HomaHeader const &homaHeader);
+  void GrantReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
+                                   HomaHeader const &homaHeader);
                            
   /**
    * \brief Updates the state for the corresponding outbound message per the received BUSY.

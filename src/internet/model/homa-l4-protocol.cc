@@ -302,7 +302,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
     }
   }
   else if (rxFlag & HomaHeader::Flags_t::GRANT)
-    m_sendScheduler->GrantReceivedForMsg(header, homaHeader);
+    m_sendScheduler->GrantReceivedForOutboundMsg(header, homaHeader);
     
   else if (rxFlag & HomaHeader::Flags_t::BUSY) 
     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
@@ -789,7 +789,7 @@ HomaSendScheduler::TxPacket ()
   }
 }
     
-void HomaSendScheduler::GrantReceivedForMsg(Ipv4Header const &ipv4Header, 
+void HomaSendScheduler::GrantReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
                                             HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
