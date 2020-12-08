@@ -304,8 +304,9 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   else if (rxFlag & HomaHeader::Flags_t::GRANT)
     m_sendScheduler->GrantReceivedForMsg(header, homaHeader);
     
-  else if (rxFlag & HomaHeader::Flags_t::BUSY)
+  else if (rxFlag & HomaHeader::Flags_t::BUSY) 
     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
+    // TODO: The busy packet is always sent from sender to receiver. 
     
   else
   {
