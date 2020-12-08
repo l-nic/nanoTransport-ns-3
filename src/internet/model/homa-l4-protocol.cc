@@ -855,8 +855,8 @@ void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Heade
   //       receiver, all of those messages will be allowed to send at once.
     
   /* 
-   * Since control packets may mark new "to be TX" packet we should try to 
-   * transmit allowed packets.
+   * Since control packets may allow new packets to be sent, we should try 
+   * to transmit those packets.
    */
   if(m_txEvent.IsExpired()) 
     this->TxPacket();
