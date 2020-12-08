@@ -853,6 +853,13 @@ void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Heade
   this->SetReceiverNotBusy(ipv4Header.GetDestination ());
   // TODO: If there are multiple messages from the same sender to the same 
   //       receiver, all of those messages will be allowed to send at once.
+    
+  /* 
+   * Since control packets may mark new "to be TX" packet we should try to 
+   * transmit allowed packets.
+   */
+  if(m_txEvent.IsExpired()) 
+    this->TxPacket();
 }
     
 void HomaSendScheduler::BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
