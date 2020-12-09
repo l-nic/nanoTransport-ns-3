@@ -72,6 +72,7 @@ HomaL4Protocol::HomaL4Protocol ()
   NS_LOG_FUNCTION (this);
       
   m_sendScheduler = CreateObject<HomaSendScheduler> (this);
+  m_recvScheduler = CreateObject<HomaRecvScheduler> (this);
 }
 
 HomaL4Protocol::~HomaL4Protocol ()
@@ -83,6 +84,7 @@ void
 HomaL4Protocol::SetNode (Ptr<Node> node)
 {
   m_node = node;
+  m_mtu = m_node->GetDevice (0)->GetMtu ();
 }
     
 Ptr<Node> 
@@ -121,6 +123,9 @@ HomaL4Protocol::NotifyNewAggregate ()
           node->AggregateObject (homaFactory);
           
           m_sendScheduler->SetPacer();
+          
+          NS_ASSERT(m_mtu);
+          m_recvScheduler->SetMtuAndBdp (m_mtu, m_bdp);
         }
     }
   
@@ -237,8 +242,7 @@ HomaL4Protocol::Send (Ptr<Packet> message,
     
   
   Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, sport, dport, 
-                                                              (uint32_t) m_node->GetDevice (0)->GetMtu (), 
-                                                              m_bdp);
+                                                              m_mtu, m_bdp);
   outMsg->SetRoute (route); // This is mostly unnecessary
   m_sendScheduler->ScheduleNewMessage(outMsg);
 }
@@ -294,6 +298,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   uint8_t rxFlag = homaHeader.GetFlags ();
   if (rxFlag & HomaHeader::Flags_t::DATA)
   {
+    m_recvScheduler->ReceiveDataPacket(cp, header, homaHeader);
     for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
          endPoint != endPoints.end (); endPoint++)
     {
@@ -603,7 +608,7 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
     
 /******************************************************************************/
     
-const uint8_t HomaSendScheduler::MAX_N_MSG = 255;
+const uint16_t HomaSendScheduler::MAX_N_MSG = 255;
 
 TypeId HomaSendScheduler::GetTypeId (void)
 {
@@ -672,7 +677,7 @@ HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
      * to send next. 
      */
     if(m_txEvent.IsExpired()) 
-      this->TxPacket();
+      this->TxDataPacket();
   }
   else
   {
@@ -781,7 +786,7 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
 }
     
 void
-HomaSendScheduler::TxPacket ()
+HomaSendScheduler::TxDataPacket ()
 {
   NS_LOG_FUNCTION (this);
     
@@ -808,7 +813,7 @@ HomaSendScheduler::TxPacket ()
     PppHeader pph;
     uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
     Time txTime = m_txRate.CalculateBytesTxTime (p->GetSize () + headerSize);
-    m_txEvent = Simulator::Schedule (txTime, &HomaSendScheduler::TxPacket, this);
+    m_txEvent = Simulator::Schedule (txTime, &HomaSendScheduler::TxDataPacket, this);
   }
   else
   {
@@ -861,7 +866,7 @@ void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Heade
    * to transmit those packets.
    */
   if(m_txEvent.IsExpired()) 
-    this->TxPacket();
+    this->TxDataPacket();
 }
     
 void HomaSendScheduler::BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
@@ -919,26 +924,28 @@ TypeId HomaInboundMsg::GetTypeId (void)
 /*
  * This method creates a new inbound message with the given information.
  */
-HomaInboundMsg::HomaInboundMsg (Ipv4Header const &ipv4h, HomaHeader const &homah, 
+HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
+                                Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
                                 uint32_t mtuBytes, uint16_t rttPackets)
 {
   NS_LOG_FUNCTION (this);
       
-  m_saddr = ipv4h.GetSourceAddress ();
-  m_daddr = ipv4h.GetDestinationAddress ();
-  m_sport = homah.GetSrcPort ();
-  m_dport = homah.GetDstPort ();
+  m_saddr = ipv4Header.GetSource ();
+  m_daddr = ipv4Header.GetDestination ();
+  m_sport = homaHeader.GetSrcPort ();
+  m_dport = homaHeader.GetDstPort ();
+  m_txMsgId = homaHeader.GetTxMsgId ();
    
-  m_msgSizePkts = homah.GetMsgLen ();
+  m_msgSizePkts = homaHeader.GetMsgLen ();
   /*
    * Note that since the Homa header doesn't include the total message size in bytes,
    * we can only estimate it from the provided message size in packets times the 
    * maximum payload size per packet. The error margin in this estimation comes from 
    * the last packet of the message which may be smaller than the maximum allowed payload size.
    */
-  m_msgSizeBytes = m_msgSizePkts * (mtuBytes - homah.GetSerializedSize () - ipv4h.GetSerializedSize ());
+  m_msgSizeBytes = m_msgSizePkts * (mtuBytes - homaHeader.GetSerializedSize () - ipv4Header.GetSerializedSize ());
   // The remaining undelivered message size equals to the total message size in the beginning
-  m_remainingBytes = m_msgSizeBytes;
+  m_remainingBytes = m_msgSizeBytes - p->GetSize();
   
   // Fill in the packet buffer with place holder (empty) packets and set the received info as false
   for (uint16_t i = 0; i < m_msgSizePkts; i++)
@@ -946,6 +953,9 @@ HomaInboundMsg::HomaInboundMsg (Ipv4Header const &ipv4h, HomaHeader const &homah
     m_packets.push_back(Create<Packet> ());
     m_receivedPackets.push_back(false);
   } 
+  uint16_t pktOffset = homaHeader.GetPktOffset ();
+  m_packets[pktOffset] = p;
+  m_receivedPackets[pktOffset] = true;
           
   m_rttPackets = rttPackets;
   m_maxGrantedIdx = m_rttPackets;
@@ -984,6 +994,212 @@ uint16_t HomaInboundMsg::GetSrcPort ()
 uint16_t HomaInboundMsg::GetDstPort ()
 {
   return m_dport;
+}
+    
+uint16_t HomaInboundMsg::GetTxMsgId ()
+{
+  return m_txMsgId;
+}
+    
+void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
+{
+  NS_LOG_FUNCTION (this << p << pktOffset);
+    
+  if (!m_receivedPackets[pktOffset])
+  {
+    m_packets[pktOffset] = p;
+    m_receivedPackets[pktOffset] = true;
+      
+    m_remainingBytes -= p->GetSize ();
+    m_maxGrantedIdx++; // Since a packet has arrived, we can allow a new packet to be on flight
+  }
+  else
+  {
+    NS_LOG_WARN("HomaInboundMsg (" << this << ") has received a packet for offset "
+                << pktOffset << " which was already received.");
+    // TODO: How do we manage the GrantOffset if this was a spurious retransmission?
+  }
+}
+    
+/******************************************************************************/
+
+TypeId HomaRecvScheduler::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::HomaRecvScheduler")
+    .SetParent<Object> ()
+    .SetGroupName("Internet")
+  ;
+  return tid;
+}
+    
+HomaRecvScheduler::HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
+{
+  NS_LOG_FUNCTION (this);
+      
+  m_homa = homaL4Protocol;
+}
+
+HomaRecvScheduler::~HomaRecvScheduler ()
+{
+  NS_LOG_FUNCTION_NOARGS ();
+}
+    
+void HomaRecvScheduler::SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets)
+{
+  NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
+    
+  m_mtuBytes = mtuBytes;
+  m_rttPackets = rttPackets;
+}
+    
+void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet, 
+                                           Ipv4Header const &ipv4Header,
+                                           HomaHeader const &homaHeader)
+{
+  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
+    
+  Ptr<Packet> cp = packet->Copy();
+    
+  Ptr<HomaInboundMsg> inboundMsg;
+  int activeMsgIdx = -1;
+  if (this->GetInboundMsg(ipv4Header, homaHeader, inboundMsg, activeMsgIdx))
+  {
+    inboundMsg->ReceiveDataPacket (cp, homaHeader.GetPktOffset());
+    this->RescheduleMsg (inboundMsg, activeMsgIdx);
+  }
+  else
+  {
+    inboundMsg = CreateObject<HomaInboundMsg> (cp, ipv4Header, homaHeader, 
+                                               m_mtuBytes, m_rttPackets);
+    this->ScheduleNewMsg(inboundMsg);
+  }
+    
+  // TODO: Check if the inboundMsg is complete. If yes, forward the message 
+  //       to the application
+    
+  // TODO: Send Grant to the inboundMsg if remainingBytes allows it to be
+  //       one of the granted messages.
+}
+    
+bool HomaRecvScheduler::GetInboundMsg(Ipv4Header const &ipv4Header, 
+                                      HomaHeader const &homaHeader, 
+                                      Ptr<HomaInboundMsg> &inboundMsg,
+                                      int &activeMsgIdx)
+{
+  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
+    
+  Ptr<HomaInboundMsg> currentMsg;
+  // First look for the message in the list of active messages
+  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  {
+    currentMsg = m_activeInboundMsgs[i];
+    if (currentMsg->GetSrcAddress() == ipv4Header.GetSource() &&
+        currentMsg->GetDstAddress() == ipv4Header.GetDestination() &&
+        currentMsg->GetSrcPort() == homaHeader.GetSrcPort() &&
+        currentMsg->GetDstPort() == homaHeader.GetDstPort() &&
+        currentMsg->GetTxMsgId() == homaHeader.GetTxMsgId())
+    {
+      NS_LOG_LOGIC("The HomaInboundMsg (" << currentMsg
+                   << ") is found among the active messages.");
+      inboundMsg = currentMsg;
+      activeMsgIdx = i;
+      return true;
+    }
+  }
+    
+  // If the message is not found above, it might be marked as busy
+  auto busyMsgs = m_busyInboundMsgs.find(ipv4Header.GetSource().Get());
+  if (busyMsgs != m_busyInboundMsgs.end())
+  {
+    for (std::size_t i = 0; i < busyMsgs->second.size(); ++i) 
+    {
+      currentMsg = busyMsgs->second[i];
+      if (currentMsg->GetSrcAddress() == ipv4Header.GetSource() &&
+          currentMsg->GetDstAddress() == ipv4Header.GetDestination() &&
+          currentMsg->GetSrcPort() == homaHeader.GetSrcPort() &&
+          currentMsg->GetDstPort() == homaHeader.GetDstPort() &&
+          currentMsg->GetTxMsgId() == homaHeader.GetTxMsgId())
+      {
+        NS_LOG_LOGIC("The HomaInboundMsg (" << currentMsg
+                     << ") is found among the messages that were marked as busy.");
+        inboundMsg = currentMsg;
+        return true;
+      }
+    }
+  }
+  
+  NS_LOG_LOGIC("Incoming packet doesn't belong to an existing inbound message.");
+  return false;
+}
+    
+void HomaRecvScheduler::ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg)
+{
+  NS_LOG_FUNCTION (this << inboundMsg);
+    
+  bool msgInserted = false;
+  for(std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  {
+    if(inboundMsg->GetRemainingBytes () < m_activeInboundMsgs[i]->GetRemainingBytes())
+    {
+      m_activeInboundMsgs.insert(m_activeInboundMsgs.begin()+i, inboundMsg);
+      msgInserted = true;
+      break;
+    }
+  }
+  if (!msgInserted)
+  {
+    // The remaining size of the inboundMsg is larger than all the active messages
+    m_activeInboundMsgs.push_back(inboundMsg);
+  }
+    
+  /*
+   * Scheduling a new message means the sender is not busy anymore, so we should 
+   * try to schedule the pending inbound messages that were previously marked as busy.
+   */
+  this->SchedulePreviouslyBusySender(inboundMsg->GetSrcAddress().Get());
+}
+    
+void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIP)
+{
+  NS_LOG_FUNCTION (this << senderIP);
+    
+  Ptr<HomaInboundMsg> previouslyBusyMsg;
+  auto busyMsgs = m_busyInboundMsgs.find(senderIP);
+  if (busyMsgs != m_busyInboundMsgs.end())
+  {
+    previouslyBusyMsg = busyMsgs->second[0]; // Get the message at the head of the vector
+    busyMsgs->second.erase(busyMsgs->second.begin()); // Remove the head from the vector
+    if (busyMsgs->second.size() == 0)
+    {
+      m_busyInboundMsgs.erase(busyMsgs); // Delete the entry for the sender because it is empty
+    }
+      
+    this->ScheduleNewMsg(previouslyBusyMsg);
+  } 
+}
+    
+void HomaRecvScheduler::RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, 
+                                       int activeMsgIdx)
+{
+  NS_LOG_FUNCTION (this << inboundMsg << activeMsgIdx);
+    
+  if (activeMsgIdx >= 0)
+  {
+    NS_LOG_LOGIC("The HomaInboundMsg (" << inboundMsg 
+                 << ") is already an active message. Reordering it.");
+    
+    // Remove the corresponding message and re-insert with the correct ordering
+    m_activeInboundMsgs.erase(m_activeInboundMsgs.begin() + activeMsgIdx);
+    this->ScheduleNewMsg(inboundMsg);
+  }
+  else
+  {
+    uint32_t senderIP = inboundMsg->GetSrcAddress().Get();
+    NS_LOG_LOGIC("The sender (" << senderIP 
+                 << ") was previously marked as Busy."
+                 << " Scheduling all pending messages from this sender.");
+    this->SchedulePreviouslyBusySender(senderIP);
+  }
 }
     
 } // namespace ns3

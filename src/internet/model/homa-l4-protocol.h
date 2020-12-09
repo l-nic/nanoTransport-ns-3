@@ -231,9 +231,11 @@ private:
   std::vector<Ptr<HomaSocket> > m_sockets;      //!< list of sockets
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
   IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6 (Not supported)
-    
+  
+  uint32_t m_mtu; //!< The MTU of the bounded NetDevice
   uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
+  Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
 };
     
 /******************************************************************************/
@@ -378,7 +380,7 @@ public:
    * \return the object TypeId
    */
   static TypeId GetTypeId (void);
-  static const uint8_t MAX_N_MSG; //!< Maximum number of messages a HomaSendScheduler can hold
+  static const uint16_t MAX_N_MSG; //!< Maximum number of messages a HomaSendScheduler can hold
 
   HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
   ~HomaSendScheduler (void);
@@ -413,7 +415,7 @@ public:
   /**
    * \brief Send the next packet down to the IP layer and schedule next TX.
    */
-  void TxPacket(void);
+  void TxDataPacket(void);
   
   /**
    * \brief Updates the state for the corresponding outbound message per the received control packet.
@@ -469,7 +471,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaInboundMsg (Ipv4Header const &ipv4h, HomaHeader const &homah, 
+  HomaInboundMsg (Ptr<Packet> p, Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
                   uint32_t mtuBytes, uint16_t rttPackets);
   ~HomaInboundMsg (void);
   
@@ -503,12 +505,20 @@ public:
    * \return The port number of the receiver
    */
   uint16_t GetDstPort (void);
+  /**
+   * \brief Get the TX msg ID for this message.
+   * \return The TX msg ID determined the sender
+   */
+  uint16_t GetTxMsgId (void);
+  
+  void ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset);
 
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
   Ipv4Address m_daddr;       //!< Destination IP address of this message
   uint16_t m_sport;          //!< Source port of this message
   uint16_t m_dport;          //!< Destination port of this message
+  uint16_t m_txMsgId;        //!< TX msg ID of the message determined by the sender
   
   std::vector<Ptr<Packet>> m_packets;  //!< Packet buffer for the message
   std::vector<bool> m_receivedPackets; //!< State to store whether the packets are delivered to the receiver
@@ -518,6 +528,60 @@ private:
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset determined so far (default: m_rttPackets)
+};
+    
+/******************************************************************************/
+    
+/**
+ * \ingroup homa
+ *
+ * \brief Manages the arrival of all HomaInboundMsg from HomaL4Protocol
+ *
+ * This class keeps the state necessary for arrival of the messages. 
+ * For every new message that arrives from the network, this class is 
+ * responsible for scheduling the messages and sending the control packets.
+ *
+ */
+class HomaRecvScheduler : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
+  ~HomaRecvScheduler (void);
+  
+  /**
+   * \brief Set state values that are used by the rx logic
+   */
+  void SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets);
+  
+  void ReceiveDataPacket (Ptr<Packet> packet, 
+                          Ipv4Header const &ipv4Header,
+                          HomaHeader const &homaHeader);
+                          
+  bool GetInboundMsg(Ipv4Header const &ipv4Header, 
+                     HomaHeader const &homaHeader, 
+                     Ptr<HomaInboundMsg> &inboundMsg,
+                     int &activeMsgIdx);
+                     
+  void ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg);
+  
+  void SchedulePreviouslyBusySender(uint32_t senderIP);
+  
+  void RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, int activeMsgIdx);
+  
+private:
+  Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
+  
+  uint32_t m_mtuBytes;   //!< The MTU of the corresponding netDevice
+  uint16_t m_rttPackets; //!< The number of packets required for full utilization, ie. BDP.
+  
+  std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
+  std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address
 };
     
 } // namespace ns3
