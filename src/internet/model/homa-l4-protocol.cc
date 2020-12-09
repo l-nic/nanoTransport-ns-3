@@ -905,4 +905,85 @@ void HomaSendScheduler::SetReceiverNotBusy(Ipv4Address receiverAddress)
   m_busyReceivers.remove(receiverAddress);
 }
     
+/******************************************************************************/
+
+TypeId HomaInboundMsg::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::HomaInboundMsg")
+    .SetParent<Object> ()
+    .SetGroupName("Internet")
+  ;
+  return tid;
+}
+
+/*
+ * This method creates a new inbound message with the given information.
+ */
+HomaInboundMsg::HomaInboundMsg (Ipv4Header const &ipv4h, HomaHeader const &homah, 
+                                uint32_t mtuBytes, uint16_t rttPackets)
+{
+  NS_LOG_FUNCTION (this);
+      
+  m_saddr = ipv4h.GetSourceAddress ();
+  m_daddr = ipv4h.GetDestinationAddress ();
+  m_sport = homah.GetSrcPort ();
+  m_dport = homah.GetDstPort ();
+   
+  m_msgSizePkts = homah.GetMsgLen ();
+  /*
+   * Note that since the Homa header doesn't include the total message size in bytes,
+   * we can only estimate it from the provided message size in packets times the 
+   * maximum payload size per packet. The error margin in this estimation comes from 
+   * the last packet of the message which may be smaller than the maximum allowed payload size.
+   */
+  m_msgSizeBytes = m_msgSizePkts * (mtuBytes - homah.GetSerializedSize () - ipv4h.GetSerializedSize ());
+  // The remaining undelivered message size equals to the total message size in the beginning
+  m_remainingBytes = m_msgSizeBytes;
+  
+  // Fill in the packet buffer with place holder (empty) packets and set the received info as false
+  for (uint16_t i = 0; i < m_msgSizePkts; i++)
+  {
+    m_packets.push_back(Create<Packet> ());
+    m_receivedPackets.push_back(false);
+  } 
+          
+  m_rttPackets = rttPackets;
+  m_maxGrantedIdx = m_rttPackets;
+}
+
+HomaInboundMsg::~HomaInboundMsg ()
+{
+  NS_LOG_FUNCTION_NOARGS ();
+}
+    
+uint32_t HomaInboundMsg::GetRemainingBytes()
+{
+  return m_remainingBytes;
+}
+    
+uint16_t HomaInboundMsg::GetMsgSizePkts()
+{
+  return m_msgSizePkts;
+}
+    
+Ipv4Address HomaInboundMsg::GetSrcAddress ()
+{
+  return m_saddr;
+}
+    
+Ipv4Address HomaInboundMsg::GetDstAddress ()
+{
+  return m_daddr;
+}
+
+uint16_t HomaInboundMsg::GetSrcPort ()
+{
+  return m_sport;
+}
+    
+uint16_t HomaInboundMsg::GetDstPort ()
+{
+  return m_dport;
+}
+    
 } // namespace ns3

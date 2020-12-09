@@ -43,6 +43,8 @@ class HomaSocket;
 class NetDevice;
 class HomaSendScheduler;
 class HomaOutboundMsg;
+class HomaRecvScheduler;
+class HomaInboundMsg;
     
 /**
  * \ingroup internet
@@ -450,6 +452,72 @@ private:
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
   std::list<Ipv4Address> m_busyReceivers; //!< List of busy receivers that packets shouldn't be sent to
+};
+    
+/******************************************************************************/
+    
+/**
+ * \ingroup homa
+ * \brief Stores the state for an inbound Homa message
+ */
+class HomaInboundMsg : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
+  HomaInboundMsg (Ipv4Header const &ipv4h, HomaHeader const &homah, 
+                  uint32_t mtuBytes, uint16_t rttPackets);
+  ~HomaInboundMsg (void);
+  
+  /**
+   * \brief Get the remaining undelivered bytes of this message.
+   * \return The amount of undelivered bytes
+   */
+  uint32_t GetRemainingBytes(void);
+  /**
+   * \brief Get the total number of packets for this message.
+   * \return The number of packets
+   */
+  uint16_t GetMsgSizePkts(void);
+  /**
+   * \brief Get the sender's IP address for this message.
+   * \return The IPv4 address of the sender
+   */
+  Ipv4Address GetSrcAddress (void);
+  /**
+   * \brief Get the receiver's IP address for this message.
+   * \return The IPv4 address of the receiver
+   */
+  Ipv4Address GetDstAddress (void);
+  /**
+   * \brief Get the sender's port number for this message.
+   * \return The port number of the sender
+   */
+  uint16_t GetSrcPort (void);
+  /**
+   * \brief Get the receiver's port number for this message.
+   * \return The port number of the receiver
+   */
+  uint16_t GetDstPort (void);
+
+private:
+  Ipv4Address m_saddr;       //!< Source IP address of this message
+  Ipv4Address m_daddr;       //!< Destination IP address of this message
+  uint16_t m_sport;          //!< Source port of this message
+  uint16_t m_dport;          //!< Destination port of this message
+  
+  std::vector<Ptr<Packet>> m_packets;  //!< Packet buffer for the message
+  std::vector<bool> m_receivedPackets; //!< State to store whether the packets are delivered to the receiver
+   
+  uint32_t m_remainingBytes; //!< Remaining number of bytes that are not received yet
+  uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
+  uint16_t m_msgSizePkts;    //!< Number packets this message occupies
+  uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
+  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset determined so far (default: m_rttPackets)
 };
     
 } // namespace ns3
