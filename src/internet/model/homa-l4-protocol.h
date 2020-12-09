@@ -511,6 +511,11 @@ public:
    */
   uint16_t GetTxMsgId (void);
   
+  /**
+   * \brief Insert the received data packet in the buffer and update state
+   * \param p The received data packet
+   * \param pktOffset The offset of the received packet within the message
+   */
   void ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset);
 
 private:
@@ -559,19 +564,57 @@ public:
    */
   void SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets);
   
+  /**
+   * \brief Notify this HomaRecvScheduler upon arrival of a data packet
+   * \param packet The received packet (without any headers)
+   * \param ipv4Header IPv4 header of the received packet
+   * \param homaHeader The Homa header of the received packet
+   */
   void ReceiveDataPacket (Ptr<Packet> packet, 
                           Ipv4Header const &ipv4Header,
                           HomaHeader const &homaHeader);
-                          
+  
+  /**
+   * \brief Try to find the message of the provided headers among the pending inbound messages.
+   * \param ipv4Header IPv4 header of the received packet.
+   * \param homaHeader The Homa header of the received packet.
+   * \param inboundMsg The corresponding inbound message. (determined inside this function)
+   * \param activeMsgIdx The index of the message if it is already an active (not busy) one. (determined inside this function)
+   *
+   * \returns Whether the corresponding inbound message was found among the pending messages.
+   */
   bool GetInboundMsg(Ipv4Header const &ipv4Header, 
                      HomaHeader const &homaHeader, 
                      Ptr<HomaInboundMsg> &inboundMsg,
                      int &activeMsgIdx);
-                     
+  
+  /**
+   * \brief Insert a new message into the list of active messages with the correct ordering.
+   *
+   * Once the requested message is scheduled, the sender of the message 
+   * is considered not busy, and all the inactive messages for the sender 
+   * are also scheduled.
+   * 
+   * \param inboundMsg The message that is asked to be scheduled
+   */
   void ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg);
   
+  /**
+   * \brief Schedule all the inactive messages for the sender.
+   * 
+   * \param senderIP The address of the sender that is to be marked as not busy.
+   */
   void SchedulePreviouslyBusySender(uint32_t senderIP);
   
+  /**
+   * \brief Change the priority ordering of an existing message. 
+   * 
+   * If the message was previously marked as busy, this function schedules it
+   * along with all the other messages that sre from the same sender.
+   * 
+   * \param inboundMsg The message that is asked to be rescheduled.
+   * \param activeMsgIdx The index of the message if it is an active (not busy) one.
+   */
   void RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, int activeMsgIdx);
   
 private:

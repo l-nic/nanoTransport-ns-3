@@ -570,6 +570,13 @@ void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
   m_toBeTxPackets[pktOffset] = false;
 }
     
+/*
+ * This method updates the state for the corresponding outbound message
+ * upon reveival of a Grant. The state is updated only if the granted 
+ * packet index is larger than the highest grant index received so far.
+ * This allows reordered Grants to be ignored when more recent ones are
+ * received.
+ */
 void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << homaHeader);
@@ -654,7 +661,12 @@ void HomaSendScheduler::SetPacer ()
   m_txRate = p2pNetDevice->GetDataRate ();
   m_pacerLastTxTime = Simulator::Now () - m_txRate.CalculateBytesTxTime ((uint32_t) netDevice->GetMtu ());
 }
-    
+
+/*
+ * This method is called upon receiving a new message from the application layer.
+ * It inserts the message into the list of pending outbound messages and updates
+ * the scheduler's state accordingly.
+ */
 bool 
 HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
 {
@@ -689,7 +701,13 @@ HomaSendScheduler::ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg)
   }
   return true;
 }
-    
+   
+/*
+ * This method determines the txMsgId of the highest priority 
+ * message that is ready to send some packets into the network.
+ * See the nested if statements for the algorithm to choose 
+ * highest priority outbound message.
+ */
 bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
 {
   NS_LOG_FUNCTION (this);
@@ -784,7 +802,13 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
     return false;
   }
 }
-    
+ 
+/*
+ * This method is called either when a new packet to send is found after
+ * an idle time period or when the serialization of the previous packet finishes.
+ * This allows HomaSendScheduler to choose the most recent highest priority packet
+ * just before sending it.
+ */
 void
 HomaSendScheduler::TxDataPacket ()
 {
@@ -820,7 +844,11 @@ HomaSendScheduler::TxDataPacket ()
     NS_LOG_LOGIC("HomaSendScheduler doesn't have any packet to send!");
   }
 }
-    
+   
+/*
+ * This method is called when a control packet is received that interests
+ * an outbound message.
+ */
 void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
                                                      HomaHeader const &homaHeader)
 {
@@ -1000,7 +1028,10 @@ uint16_t HomaInboundMsg::GetTxMsgId ()
 {
   return m_txMsgId;
 }
-    
+
+/*
+ * This method updates the state for an inbound message upon receival of a data packet.
+ */
 void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
 {
   NS_LOG_FUNCTION (this << p << pktOffset);
