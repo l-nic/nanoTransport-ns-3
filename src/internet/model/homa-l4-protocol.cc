@@ -273,7 +273,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
                         Ipv4Header const &header,
                         Ptr<Ipv4Interface> interface)
 {
-  NS_LOG_FUNCTION (this << packet << header);
+  NS_LOG_FUNCTION (this << packet << header << interface);
     
   NS_LOG_DEBUG ("HomaL4Protocol received: " << packet->ToString ());
     
@@ -298,13 +298,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   uint8_t rxFlag = homaHeader.GetFlags ();
   if (rxFlag & HomaHeader::Flags_t::DATA)
   {
-    m_recvScheduler->ReceiveDataPacket(cp, header, homaHeader);
-    for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
-         endPoint != endPoints.end (); endPoint++)
-    {
-      (*endPoint)->ForwardUp (cp, header, homaHeader.GetSrcPort (), 
-                                  interface);
-    }
+    m_recvScheduler->ReceiveDataPacket(cp, header, homaHeader, interface);
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND))
@@ -332,6 +326,31 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
 {
   NS_FATAL_ERROR_CONT("HomaL4Protocol currently doesn't support IPv6. Use IPv4 instead.");
   return IpL4Protocol::RX_ENDPOINT_UNREACH;
+}
+
+/*
+ * This method is called by the HomaRecvScheduler everytime a message is ready to
+ * be forwarded up to the applications. 
+ */
+void HomaL4Protocol::ForwardUp (Ptr<Packet> completeMsg,
+                                const Ipv4Header &header,
+                                uint16_t sport, uint16_t dport,
+                                Ptr<Ipv4Interface> incomingInterface)
+{
+  NS_LOG_FUNCTION (this << completeMsg << header << sport << incomingInterface);
+    
+  NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << dport); 
+  Ipv4EndPointDemux::EndPoints endPoints =
+    m_endPoints->Lookup (header.GetDestination (), dport,
+                         header.GetSource (), sport, incomingInterface);
+    
+  NS_ASSERT_MSG(!endPoints.empty (), "HomaL4Protocol was able to find an endpoint when msg was received, but now it couldn't");
+    
+  for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
+         endPoint != endPoints.end (); endPoint++)
+  {
+    (*endPoint)->ForwardUp (completeMsg, header, sport, incomingInterface);
+  }
 }
 
 // inherited from Ipv4L4Protocol (Not used for Homa Transport Purposes)
@@ -954,12 +973,13 @@ TypeId HomaInboundMsg::GetTypeId (void)
  */
 HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
                                 Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
-                                uint32_t mtuBytes, uint16_t rttPackets)
+                                Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets)
 {
   NS_LOG_FUNCTION (this);
-      
-  m_saddr = ipv4Header.GetSource ();
-  m_daddr = ipv4Header.GetDestination ();
+
+  m_ipv4Header = ipv4Header;
+  m_iface = iface;
+    
   m_sport = homaHeader.GetSrcPort ();
   m_dport = homaHeader.GetDstPort ();
   m_txMsgId = homaHeader.GetTxMsgId ();
@@ -986,7 +1006,8 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   m_receivedPackets[pktOffset] = true;
           
   m_rttPackets = rttPackets;
-  m_maxGrantedIdx = m_rttPackets;
+  m_maxGrantableIdx = m_rttPackets;
+  m_maxGrantedIdx = 0;
 }
 
 HomaInboundMsg::~HomaInboundMsg ()
@@ -1006,12 +1027,12 @@ uint16_t HomaInboundMsg::GetMsgSizePkts()
     
 Ipv4Address HomaInboundMsg::GetSrcAddress ()
 {
-  return m_saddr;
+  return m_ipv4Header.GetSource ();
 }
     
 Ipv4Address HomaInboundMsg::GetDstAddress ()
 {
-  return m_daddr;
+  return m_ipv4Header.GetDestination ();
 }
 
 uint16_t HomaInboundMsg::GetSrcPort ()
@@ -1027,6 +1048,31 @@ uint16_t HomaInboundMsg::GetDstPort ()
 uint16_t HomaInboundMsg::GetTxMsgId ()
 {
   return m_txMsgId;
+}
+    
+Ipv4Header HomaInboundMsg::GetIpv4Header ()
+{
+  return m_ipv4Header;
+}
+    
+Ptr<Ipv4Interface> HomaInboundMsg::GetIpv4Interface ()
+{
+  return m_iface;
+}
+ 
+bool HomaInboundMsg::IsFullyGranted ()
+{
+  return m_maxGrantedIdx >= m_msgSizePkts;
+}
+    
+bool HomaInboundMsg::IsFullyReceived ()
+{
+  bool allReceived = true;
+  for (uint16_t i = 0; i < m_receivedPackets.size(); i++)
+  {
+    allReceived = allReceived && m_receivedPackets[i];
+  }
+  return allReceived;
 }
 
 /*
@@ -1047,7 +1093,7 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
      * for this message. However it is upto the HomaRecvScheduler to decide 
      * whether to send a Grant packet to the sender of this message or not.
      */
-    m_maxGrantedIdx++;
+    m_maxGrantableIdx++;
   }
   else
   {
@@ -1055,6 +1101,21 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
                 << pktOffset << " which was already received.");
     // TODO: How do we manage the GrantOffset if this was a spurious retransmission?
   }
+}
+    
+Ptr<Packet> HomaInboundMsg::GetReassembledMsg ()
+{
+  NS_LOG_FUNCTION (this);
+    
+  Ptr<Packet> completeMsg = Create<Packet> ();
+  for (std::size_t i = 0; i < m_packets.size(); i++)
+  {
+    NS_ASSERT_MSG(m_receivedPackets[i],
+                  "ERROR: HomaRecvScheduler is trying to reassemble an incomplete msg!");
+    completeMsg->AddAtEnd (m_packets[i]);
+  }
+  
+  return completeMsg;
 }
     
 /******************************************************************************/
@@ -1095,7 +1156,8 @@ void HomaRecvScheduler::SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets)
     
 void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet, 
                                            Ipv4Header const &ipv4Header,
-                                           HomaHeader const &homaHeader)
+                                           HomaHeader const &homaHeader,
+                                           Ptr<Ipv4Interface> interface)
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
@@ -1111,12 +1173,22 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
   else
   {
     inboundMsg = CreateObject<HomaInboundMsg> (cp, ipv4Header, homaHeader, 
-                                               m_mtuBytes, m_rttPackets);
+                                               interface, m_mtuBytes, m_rttPackets);
+    /*
+     * Even if the message was a single packet one and now is fully received,
+     * we should still schedule it first because ScheduleNewMsg also lets 
+     * HomaRecvScheduler know that the sender is not busy anymore.
+     */
     this->ScheduleNewMsg(inboundMsg);
   }
     
-  // TODO: Check if the inboundMsg is complete. If yes, forward the message 
-  //       to the application
+  if (inboundMsg->IsFullyReceived ())
+  {
+    NS_LOG_LOGIC("HomaInboundMsg (" << inboundMsg <<
+                 ") is fully received. Forwarding the message to applications.");
+    // Once the message fowarded, it will also be removed from the active msg list
+    this->ForwardUp (inboundMsg);
+  }
     
   // TODO: Send Grant to the inboundMsg if remainingBytes allows it to be
   //       one of the granted messages.
@@ -1262,6 +1334,57 @@ void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIP)
       
     this->ScheduleNewMsg(previouslyBusyMsg);
   } 
+}
+    
+void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
+{
+  NS_LOG_FUNCTION (this << inboundMsg);
+    
+  m_homa->ForwardUp (inboundMsg->GetReassembledMsg(), 
+                     inboundMsg->GetIpv4Header (),
+                     inboundMsg->GetSrcPort(),
+                     inboundMsg->GetDstPort(),
+                     inboundMsg->GetIpv4Interface());
+    
+  /*
+   * Since the message is being forwarded up, it should have been 
+   * received completely which means the sender is not marked as busy.
+   * Therefore the completed message should be listed on the active 
+   * messages list.
+   */
+  this->RemoveMsgFromActiveMsgsList (inboundMsg);
+}
+    
+void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg)
+{
+  NS_LOG_FUNCTION (this << inboundMsg);
+  
+  bool msgRemoved = false;
+  Ptr<HomaInboundMsg> currentMsg;
+  // First look for the message in the list of active messages
+  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  {
+    currentMsg = m_activeInboundMsgs[i];
+    if (currentMsg->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
+        currentMsg->GetDstAddress() == inboundMsg->GetDstAddress() &&
+        currentMsg->GetSrcPort() == inboundMsg->GetSrcPort() &&
+        currentMsg->GetDstPort() == inboundMsg->GetDstPort() &&
+        currentMsg->GetTxMsgId() == inboundMsg->GetTxMsgId())
+    {
+      NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
+                   ") from the active messages list of HomaRecvScheduler (" << 
+                   this << ").");
+      m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
+      msgRemoved = true;
+      break;
+    }
+  }
+    
+  if (!msgRemoved)
+  {
+    NS_LOG_ERROR("ERROR: HomaInboundMsg (" << inboundMsg <<
+                 ") couldn't be find inside the active messages list!");
+  }
 }
     
 } // namespace ns3

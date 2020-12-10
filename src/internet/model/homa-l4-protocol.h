@@ -201,6 +201,19 @@ public:
                                                Ipv6Header const &header,
                                                Ptr<Ipv6Interface> interface);
   
+  /**
+   * \brief Forward the reassembled message to the upper layers
+   * \param completeMsg The message that is completely reassembled
+   * \param header The IPv4 header associated with the message
+   * \param sport The source port of the message
+   * \param dport The destinateion port of the message
+   * \param incomingInterface The interface from which the message arrived
+   */ 
+  void ForwardUp (Ptr<Packet> completeMsg,
+                  const Ipv4Header &header,
+                  uint16_t sport, uint16_t dport,
+                  Ptr<Ipv4Interface> incomingInterface);
+  
   // inherited from Ipv4L4Protocol (Not used for Homa Transport Purposes)
   virtual void ReceiveIcmp (Ipv4Address icmpSource, uint8_t icmpTtl,
                             uint8_t icmpType, uint8_t icmpCode, uint32_t icmpInfo,
@@ -472,7 +485,7 @@ public:
   static TypeId GetTypeId (void);
 
   HomaInboundMsg (Ptr<Packet> p, Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
-                  uint32_t mtuBytes, uint16_t rttPackets);
+                  Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets);
   ~HomaInboundMsg (void);
   
   /**
@@ -485,6 +498,7 @@ public:
    * \return The number of packets
    */
   uint16_t GetMsgSizePkts(void);
+  
   /**
    * \brief Get the sender's IP address for this message.
    * \return The IPv4 address of the sender
@@ -512,18 +526,45 @@ public:
   uint16_t GetTxMsgId (void);
   
   /**
+   * \brief Get the Ipv4Header associated with the first arrived packet of the message
+   * \return The IPv4 header associated with the message
+   */
+  Ipv4Header GetIpv4Header (void);
+  /**
+   * \brief Get the interface from which the message arrives.
+   * \return The interface from which the message arrives
+   */
+  Ptr<Ipv4Interface> GetIpv4Interface (void);
+  
+  /**
+   * \return Whether this message has been fully granted
+   */
+  bool IsFullyGranted (void);
+  /**
+   * \return Whether this message has been fully received
+   */
+  bool IsFullyReceived (void);
+  
+  /**
    * \brief Insert the received data packet in the buffer and update state
    * \param p The received data packet
    * \param pktOffset The offset of the received packet within the message
    */
   void ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset);
+  
+  /**
+   * \brief Reassembles the message from its packets
+   * \return The reassembled message
+   */
+  Ptr<Packet> GetReassembledMsg (void);
 
 private:
-  Ipv4Address m_saddr;       //!< Source IP address of this message
-  Ipv4Address m_daddr;       //!< Destination IP address of this message
-  uint16_t m_sport;          //!< Source port of this message
-  uint16_t m_dport;          //!< Destination port of this message
-  uint16_t m_txMsgId;        //!< TX msg ID of the message determined by the sender
+  Ipv4Header m_ipv4Header;    //!< The IPv4 Header of the first packet arrived for this message
+  Ptr<Ipv4Interface> m_iface; //!< The interface from which the message first came in from
+  
+  uint16_t m_sport;           //!< Source port of this message
+  uint16_t m_dport;           //!< Destination port of this message
+  uint16_t m_txMsgId;         //!< TX msg ID of the message determined by the sender
   
   std::vector<Ptr<Packet>> m_packets;  //!< Packet buffer for the message
   std::vector<bool> m_receivedPackets; //!< State to store whether the packets are delivered to the receiver
@@ -532,7 +573,8 @@ private:
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
-  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset determined so far (default: m_rttPackets)
+  uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
+  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far (default: 0)
 };
     
 /******************************************************************************/
@@ -571,10 +613,12 @@ public:
    * \param packet The received packet (without any headers)
    * \param ipv4Header IPv4 header of the received packet
    * \param homaHeader The Homa header of the received packet
+   * \param interface The interface from which the packet came in
    */
   void ReceiveDataPacket (Ptr<Packet> packet, 
                           Ipv4Header const &ipv4Header,
-                          HomaHeader const &homaHeader);
+                          HomaHeader const &homaHeader,
+                          Ptr<Ipv4Interface> interface);
   
   /**
    * \brief Try to find the message of the provided headers among the pending inbound messages.
@@ -583,7 +627,7 @@ public:
    * \param inboundMsg The corresponding inbound message. (determined inside this function)
    * \param activeMsgIdx The index of the message if it is already an active (not busy) one. (determined inside this function)
    *
-   * \returns Whether the corresponding inbound message was found among the pending messages.
+   * \return Whether the corresponding inbound message was found among the pending messages.
    */
   bool GetInboundMsg(Ipv4Header const &ipv4Header, 
                      HomaHeader const &homaHeader, 
@@ -614,10 +658,21 @@ public:
   
   /**
    * \brief Schedule all the inactive messages for the sender.
-   * 
    * \param senderIP The address of the sender that is to be marked as not busy.
    */
   void SchedulePreviouslyBusySender(uint32_t senderIP);
+  
+  /**
+   * \brief Reassemble the packets of the incoming message and forward up to the sockets.
+   * \param inboundMsg The incoming message that is fully received.
+   */
+  void ForwardUp(Ptr<HomaInboundMsg> inboundMsg);
+  
+  /**
+   * \brief Remove the given message from the list of active messages upon completion
+   * \param inboundMsg The incoming message that is to be removed.
+   */
+  void RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
