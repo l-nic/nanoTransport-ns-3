@@ -124,7 +124,7 @@ HomaL4Protocol::NotifyNewAggregate ()
           
           m_sendScheduler->SetPacer();
           
-          NS_ASSERT(m_mtu);
+          NS_ASSERT(m_mtu); // m_mtu is set inside SetNode() above.
           m_recvScheduler->SetMtuAndBdp (m_mtu, m_bdp);
         }
     }
@@ -309,7 +309,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND))
   {
-    m_sendScheduler->SignalReceivedForOutboundMsg(header, homaHeader);
+    m_sendScheduler->CtrlPktRecvdForOutboundMsg(header, homaHeader);
   }
   else if (rxFlag & HomaHeader::Flags_t::BUSY)
   {
@@ -849,39 +849,39 @@ HomaSendScheduler::TxDataPacket ()
  * This method is called when a control packet is received that interests
  * an outbound message.
  */
-void HomaSendScheduler::SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
-                                                     HomaHeader const &homaHeader)
+void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header, 
+                                                   HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
-  Ptr<HomaOutboundMsg> signaledMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
+  Ptr<HomaOutboundMsg> targetdMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
   // Verify that the TxMsgId indeed matches the 4 tuple
-  NS_ASSERT(signaledMsg->GetSrcAddress() == ipv4Header.GetSource ());
-  NS_ASSERT(signaledMsg->GetDstAddress() == ipv4Header.GetDestination ());
-  NS_ASSERT(signaledMsg->GetSrcPort() == homaHeader.GetSrcPort ());
-  NS_ASSERT(signaledMsg->GetDstPort() == homaHeader.GetDstPort ());
+  NS_ASSERT(targetdMsg->GetSrcAddress() == ipv4Header.GetSource ());
+  NS_ASSERT(targetdMsg->GetDstAddress() == ipv4Header.GetDestination ());
+  NS_ASSERT(targetdMsg->GetSrcPort() == homaHeader.GetSrcPort ());
+  NS_ASSERT(targetdMsg->GetDstPort() == homaHeader.GetDstPort ());
     
   /*
    * The pktOffset within GRANT and BUSY packets are used to acknowledge 
    * the arrival of the corresponding data packet to the receiver.
    */
-  signaledMsg->SetDelivered (homaHeader.GetPktOffset ());
+  targetdMsg->SetDelivered (homaHeader.GetPktOffset ());
   
-  uint8_t signalFlag = homaHeader.GetFlags();
-  if (signalFlag & HomaHeader::Flags_t::GRANT)
+  uint8_t ctrlFlag = homaHeader.GetFlags();
+  if (ctrlFlag & HomaHeader::Flags_t::GRANT)
   {
-    signaledMsg->HandleGrant (homaHeader);
+    targetdMsg->HandleGrant (homaHeader);
   }
-  else if (signalFlag & HomaHeader::Flags_t::RESEND)
+  else if (ctrlFlag & HomaHeader::Flags_t::RESEND)
   {
     // TODO: Figure out what to do when RESEND is received
-    signaledMsg->HandleGrant (homaHeader);
+    targetdMsg->HandleGrant (homaHeader);
   }
   else
   {
     NS_LOG_ERROR("HomaSendScheduler (" << this 
                  << ") has received an unexpected control packet ("
-                 << homaHeader.FlagsToString(signalFlag) << ")");
+                 << homaHeader.FlagsToString(ctrlFlag) << ")");
   }
   
   // Since the receiver is sending GRANTs, it is considered not busy
@@ -1042,7 +1042,12 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
     m_receivedPackets[pktOffset] = true;
       
     m_remainingBytes -= p->GetSize ();
-    m_maxGrantedIdx++; // Since a packet has arrived, we can allow a new packet to be on flight
+    /*
+     * Since a packet has arrived, we can allow a new packet to be on flight
+     * for this message. However it is upto the HomaRecvScheduler to decide 
+     * whether to send a Grant packet to the sender of this message or not.
+     */
+    m_maxGrantedIdx++;
   }
   else
   {
@@ -1074,7 +1079,12 @@ HomaRecvScheduler::~HomaRecvScheduler ()
 {
   NS_LOG_FUNCTION_NOARGS ();
 }
-    
+ 
+/*
+ * This method is called in the beginning of the simulation (inside 
+ * NotifyNewAggregate()) to set up the correct topological information 
+ * inside the Homa protocol logic. 
+ */
 void HomaRecvScheduler::SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets)
 {
   NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
@@ -1185,11 +1195,56 @@ void HomaRecvScheduler::ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg)
     
   /*
    * Scheduling a new message means the sender is not busy anymore, so we should 
-   * try to schedule the pending inbound messages that were previously marked as busy.
+   * try to schedule the pending inbound messages that were previously marked as busy
+   * from the same sender.
    */
   this->SchedulePreviouslyBusySender(inboundMsg->GetSrcAddress().Get());
 }
     
+/*
+ * This method is called after the corresponding inbound message is found among the
+ * pending messages. This means if the message was found to be active, its index (order)
+ * was also detected. Then this method takes this index as an optimization which
+ * prevents looping through all the active messages once again. 
+ */
+void HomaRecvScheduler::RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, 
+                                       int activeMsgIdx)
+{
+  NS_LOG_FUNCTION (this << inboundMsg << activeMsgIdx);
+    
+  if (activeMsgIdx >= 0)
+  {
+    NS_LOG_LOGIC("The HomaInboundMsg (" << inboundMsg 
+                 << ") is already an active message. Reordering it.");
+    
+    // Make sure the activeMsgIdx matches inboundMsg
+    Ptr<HomaInboundMsg> msgToReschedule = m_activeInboundMsgs[activeMsgIdx];
+    NS_ASSERT(msgToReschedule->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
+              msgToReschedule->GetDstAddress() == inboundMsg->GetDstAddress() &&
+              msgToReschedule->GetSrcPort() == inboundMsg->GetSrcPort() &&
+              msgToReschedule->GetDstPort() == inboundMsg->GetDstPort() &&
+              msgToReschedule->GetTxMsgId() == inboundMsg->GetTxMsgId());
+    
+    // Remove the corresponding message and re-insert with the correct ordering
+    m_activeInboundMsgs.erase(m_activeInboundMsgs.begin() + activeMsgIdx);
+    this->ScheduleNewMsg(inboundMsg);
+  }
+  else
+  {
+    uint32_t senderIP = inboundMsg->GetSrcAddress().Get();
+    NS_LOG_LOGIC("The sender (" << senderIP 
+                 << ") was previously marked as Busy."
+                 << " Scheduling all pending messages from this sender.");
+    this->SchedulePreviouslyBusySender(senderIP);
+  }
+}
+ 
+/*
+ * This method takes the first busy inbound message of the sender and 
+ * schedules it (ie, inserts it into the list of active messages). The 
+ * ScheduleNewMsg method calls this one again until the all busy messages
+ * of the same sender are scheduled one by one.
+ */
 void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIP)
 {
   NS_LOG_FUNCTION (this << senderIP);
@@ -1207,30 +1262,6 @@ void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIP)
       
     this->ScheduleNewMsg(previouslyBusyMsg);
   } 
-}
-    
-void HomaRecvScheduler::RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, 
-                                       int activeMsgIdx)
-{
-  NS_LOG_FUNCTION (this << inboundMsg << activeMsgIdx);
-    
-  if (activeMsgIdx >= 0)
-  {
-    NS_LOG_LOGIC("The HomaInboundMsg (" << inboundMsg 
-                 << ") is already an active message. Reordering it.");
-    
-    // Remove the corresponding message and re-insert with the correct ordering
-    m_activeInboundMsgs.erase(m_activeInboundMsgs.begin() + activeMsgIdx);
-    this->ScheduleNewMsg(inboundMsg);
-  }
-  else
-  {
-    uint32_t senderIP = inboundMsg->GetSrcAddress().Get();
-    NS_LOG_LOGIC("The sender (" << senderIP 
-                 << ") was previously marked as Busy."
-                 << " Scheduling all pending messages from this sender.");
-    this->SchedulePreviouslyBusySender(senderIP);
-  }
 }
     
 } // namespace ns3

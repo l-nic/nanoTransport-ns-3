@@ -422,8 +422,8 @@ public:
    * \param ipv4Header The Ipv4 header of the received GRANT.
    * \param homaHeader The Homa header of the received GRANT.
    */
-  void SignalReceivedForOutboundMsg(Ipv4Header const &ipv4Header, 
-                                    HomaHeader const &homaHeader);
+  void CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header, 
+                                  HomaHeader const &homaHeader);
                            
   /**
    * \brief Updates the state for the corresponding outbound message per the received BUSY.
@@ -561,6 +561,8 @@ public:
   
   /**
    * \brief Set state values that are used by the rx logic
+   * \param mtuBytes The maximum transmission unit of the netDevice in bytes
+   * \param rttPackets The average BDP value inside the network in packets.
    */
   void SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets);
   
@@ -600,13 +602,6 @@ public:
   void ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg);
   
   /**
-   * \brief Schedule all the inactive messages for the sender.
-   * 
-   * \param senderIP The address of the sender that is to be marked as not busy.
-   */
-  void SchedulePreviouslyBusySender(uint32_t senderIP);
-  
-  /**
    * \brief Change the priority ordering of an existing message. 
    * 
    * If the message was previously marked as busy, this function schedules it
@@ -616,6 +611,13 @@ public:
    * \param activeMsgIdx The index of the message if it is an active (not busy) one.
    */
   void RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, int activeMsgIdx);
+  
+  /**
+   * \brief Schedule all the inactive messages for the sender.
+   * 
+   * \param senderIP The address of the sender that is to be marked as not busy.
+   */
+  void SchedulePreviouslyBusySender(uint32_t senderIP);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
