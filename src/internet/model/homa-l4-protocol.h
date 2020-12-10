@@ -674,6 +674,12 @@ public:
    */
   void RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg);
   
+  /**
+   * \brief Updates the state for the corresponding inbound message per the received BUSY.
+   * \param senderAddress The address of the sender who is busy
+   */
+  void BusyReceivedForMsg(Ipv4Address senderAddress);
+  
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   

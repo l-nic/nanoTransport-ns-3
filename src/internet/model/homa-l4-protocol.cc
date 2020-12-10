@@ -307,8 +307,9 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   }
   else if (rxFlag & HomaHeader::Flags_t::BUSY)
   {
-    m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
-    // TODO: The busy packet is always sent from sender to receiver. 
+    // TODO: The busy packet is always sent from sender to receiver.
+//     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
+    m_recvScheduler->BusyReceivedForMsg(header.GetSource());
   }
   else
   {
@@ -1384,6 +1385,40 @@ void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundM
   {
     NS_LOG_ERROR("ERROR: HomaInboundMsg (" << inboundMsg <<
                  ") couldn't be find inside the active messages list!");
+  }
+}
+    
+void HomaRecvScheduler::BusyReceivedForMsg(Ipv4Address senderAddress)
+{
+  NS_LOG_FUNCTION (this << senderAddress);
+    
+  std::vector<Ptr<HomaInboundMsg>> msgsToMarkBusy;
+  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  {
+    if (m_activeInboundMsgs[i]->GetSrcAddress() == senderAddress)
+    {
+      msgsToMarkBusy.push_back(m_activeInboundMsgs[i]);
+      m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
+    } 
+  }
+   
+  if (msgsToMarkBusy.size() > 0)
+  {
+    uint32_t senderIP = senderAddress.Get();
+    auto busySenderMsgs = m_busyInboundMsgs.find(senderIP);
+    if (busySenderMsgs != m_busyInboundMsgs.end())
+    {
+      // Sender was already marked busy before, append the active messages detected above
+      busySenderMsgs->second.insert (busySenderMsgs->second.end(), 
+                                     msgsToMarkBusy.begin(), msgsToMarkBusy.end());
+    }
+    else
+    {
+      m_busyInboundMsgs[senderIP] = msgsToMarkBusy;
+    }
+      
+    // TODO: New messages might become available to be Granted now. Make sure 
+    //       to send appropriate grants.
   }
 }
     
