@@ -62,6 +62,14 @@ HomaL4Protocol::GetTypeId (void)
                    UintegerValue (10),
                    MakeUintegerAccessor (&HomaL4Protocol::m_bdp),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("NumTotalPrioBands", "Total number of priority levels used within the network",
+                   UintegerValue (8),
+                   MakeUintegerAccessor (&HomaL4Protocol::m_numTotalPrioBands),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("NumUnschedPrioBands", "Number of priority bands dedicated for unscheduled packets",
+                   UintegerValue (2),
+                   MakeUintegerAccessor (&HomaL4Protocol::m_numUnschedPrioBands),
+                   MakeUintegerChecker<uint16_t> ())
   ;
   return tid;
 }
@@ -125,7 +133,10 @@ HomaL4Protocol::NotifyNewAggregate ()
           m_sendScheduler->SetPacer();
           
           NS_ASSERT(m_mtu); // m_mtu is set inside SetNode() above.
-          m_recvScheduler->SetMtuAndBdp (m_mtu, m_bdp);
+          NS_ASSERT_MSG(m_numTotalPrioBands > m_numUnschedPrioBands,
+                "Total number of priority bands should be larger than the number of bands dedicated for unscheduled packets.");
+          m_recvScheduler->SetNetworkConfig (m_mtu, m_bdp, 
+                                             m_numTotalPrioBands, m_numUnschedPrioBands);
         }
     }
   
@@ -296,20 +307,18 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
     
   //  The Homa protocol logic starts here!
   uint8_t rxFlag = homaHeader.GetFlags ();
-  if (rxFlag & HomaHeader::Flags_t::DATA)
+  if (rxFlag & HomaHeader::Flags_t::DATA ||
+      rxFlag & HomaHeader::Flags_t::BUSY)
   {
-    m_recvScheduler->ReceiveDataPacket(cp, header, homaHeader, interface);
+    m_recvScheduler->ReceivePacket(cp, header, homaHeader, interface);
+      
+    // TODO: The busy packet is always sent from sender to receiver.
+//     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND))
   {
     m_sendScheduler->CtrlPktRecvdForOutboundMsg(header, homaHeader);
-  }
-  else if (rxFlag & HomaHeader::Flags_t::BUSY)
-  {
-    // TODO: The busy packet is always sent from sender to receiver.
-//     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
-    m_recvScheduler->BusyReceivedForMsg(header.GetSource());
   }
   else
   {
@@ -808,7 +817,7 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
       
     p->AddHeader (homaHeader);
     NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-               " HomaL4Protocol sending: " << p->ToString ());
+                  " HomaL4Protocol sending: " << p->ToString ());
     
     /*
      * Set the corresponding packet as "not to be sent" (ie. on-flight)
@@ -1147,12 +1156,36 @@ HomaRecvScheduler::~HomaRecvScheduler ()
  * NotifyNewAggregate()) to set up the correct topological information 
  * inside the Homa protocol logic. 
  */
-void HomaRecvScheduler::SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets)
+void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
+                                          uint16_t numTotalPrioBands, uint16_t numUnschedPrioBands)
 {
   NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
     
   m_mtuBytes = mtuBytes;
   m_rttPackets = rttPackets;
+  m_numTotalPrioBands = numTotalPrioBands;
+  m_numUnschedPrioBands = numUnschedPrioBands;
+}
+    
+void HomaRecvScheduler::ReceivePacket (Ptr<Packet> packet, 
+                                       Ipv4Header const &ipv4Header,
+                                       HomaHeader const &homaHeader,
+                                       Ptr<Ipv4Interface> interface)
+{
+  NS_LOG_FUNCTION (this << packet << ipv4Header << homaHeader);
+    
+  uint8_t rxFlag = homaHeader.GetFlags ();
+  if (rxFlag & HomaHeader::Flags_t::DATA )
+  {
+    this->ReceiveDataPacket (packet, header, homaHeader, interface);
+  }
+  else if (rxFlag & HomaHeader::Flags_t::BUSY)
+  {
+    this->BusyReceivedForMsg (header.GetSource());
+  }
+    
+  // TODO: Some messages might become available to be Granted now. Make sure 
+  //       to send appropriate grants.
 }
     
 void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet, 
@@ -1160,7 +1193,7 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
                                            HomaHeader const &homaHeader,
                                            Ptr<Ipv4Interface> interface)
 {
-  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
+  NS_LOG_FUNCTION (this << packet << ipv4Header << homaHeader);
     
   Ptr<Packet> cp = packet->Copy();
     
@@ -1190,9 +1223,6 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
     // Once the message fowarded, it will also be removed from the active msg list
     this->ForwardUp (inboundMsg);
   }
-    
-  // TODO: Send Grant to the inboundMsg if remainingBytes allows it to be
-  //       one of the granted messages.
 }
     
 bool HomaRecvScheduler::GetInboundMsg(Ipv4Header const &ipv4Header, 
@@ -1416,9 +1446,6 @@ void HomaRecvScheduler::BusyReceivedForMsg(Ipv4Address senderAddress)
     {
       m_busyInboundMsgs[senderIP] = msgsToMarkBusy;
     }
-      
-    // TODO: New messages might become available to be Granted now. Make sure 
-    //       to send appropriate grants.
   }
 }
     

@@ -247,6 +247,8 @@ private:
   
   uint32_t m_mtu; //!< The MTU of the bounded NetDevice
   uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
+  uint16_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
+  uint16_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
   Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
 };
@@ -604,9 +606,24 @@ public:
   /**
    * \brief Set state values that are used by the rx logic
    * \param mtuBytes The maximum transmission unit of the netDevice in bytes
-   * \param rttPackets The average BDP value inside the network in packets.
+   * \param rttPackets The average BDP value inside the network in packets
+   * \param numTotalPrioBands Total number of priority levels used within the network
+   * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
    */
-  void SetMtuAndBdp (uint32_t mtuBytes, uint16_t rttPackets);
+  void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
+                         uint16_t numTotalPrioBands, uint16_t numUnschedPrioBands);
+  
+  /**
+   * \brief Notify this HomaRecvScheduler upon arrival of a packet
+   * \param packet The received packet (without any headers)
+   * \param ipv4Header IPv4 header of the received packet
+   * \param homaHeader The Homa header of the received packet
+   * \param interface The interface from which the packet came in
+   */
+  void ReceivePacket (Ptr<Packet> packet, 
+                      Ipv4Header const &ipv4Header,
+                      HomaHeader const &homaHeader,
+                      Ptr<Ipv4Interface> interface);
   
   /**
    * \brief Notify this HomaRecvScheduler upon arrival of a data packet
@@ -685,6 +702,8 @@ private:
   
   uint32_t m_mtuBytes;   //!< The MTU of the corresponding netDevice
   uint16_t m_rttPackets; //!< The number of packets required for full utilization, ie. BDP.
+  uint16_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
+  uint16_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address

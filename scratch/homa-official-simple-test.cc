@@ -117,6 +117,13 @@ main (int argc, char *argv[])
                      EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
   /* Set default BDP value in packets */
   Config::SetDefault("ns3::HomaL4Protocol::RttPackets", UintegerValue(10));
+  /* Set default number of priority bands in the network */
+  uint16_t numTotalPrioBands = 8;
+  uint16_t numUnschedPrioBands = 2;
+  Config::SetDefault("ns3::HomaL4Protocol::NumTotalPrioBands", 
+                     UintegerValue(numTotalPrioBands));
+  Config::SetDefault("ns3::HomaL4Protocol::NumUnschedPrioBands", 
+                     UintegerValue(numUnschedPrioBands));
     
   InternetStackHelper stack;
   stack.InstallAll ();
@@ -125,7 +132,7 @@ main (int argc, char *argv[])
   TrafficControlHelper tchPfifo;
   tchPfifo.SetRootQueueDisc ("ns3::PfifoHomaQueueDisc", 
                              "MaxSize", StringValue("9p"),
-                             "NumBands", UintegerValue(4));
+                             "NumBands", UintegerValue(numTotalPrioBands));
   tchPfifo.Install (switchDevices);
   tchPfifo.Install (senderDevices);
   tchPfifo.Install (receiveDevices);
