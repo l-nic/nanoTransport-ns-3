@@ -175,7 +175,7 @@ public:
              Ipv4Address saddr, Ipv4Address daddr, 
              uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route);
   
-  // called by HomaSendScheduler.
+  // called by HomaSendScheduler or HomaRecvScheduler.
   /**
    * \brief Send the selected packet down to the IP Layer
    * \param packet The packet to send
@@ -185,7 +185,7 @@ public:
    */ 
   void SendDown (Ptr<Packet> packet, 
                  Ipv4Address saddr, Ipv4Address daddr, 
-                 Ptr<Ipv4Route> route);
+                 Ptr<Ipv4Route> route=0);
     
   // inherited from Ipv4L4Protocol
   /**
@@ -247,8 +247,8 @@ private:
   
   uint32_t m_mtu; //!< The MTU of the bounded NetDevice
   uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
-  uint16_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
-  uint16_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+  uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
+  uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
   Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
 };
@@ -543,6 +543,10 @@ public:
    */
   bool IsFullyGranted (void);
   /**
+   * \return Whether this message has grantable packets that are not granted yet
+   */
+  bool IsGrantable (void);
+  /**
    * \return Whether this message has been fully received
    */
   bool IsFullyReceived (void);
@@ -559,6 +563,13 @@ public:
    * \return The reassembled message
    */
   Ptr<Packet> GetReassembledMsg (void);
+  
+  /**
+   * \brief Generate a GRANT packet with the most recent state of this message
+   * \param grantedPrio The priority to grant DATA packets with
+   * \return The generated GRANT packet
+   */
+  Ptr<Packet> GenerateGrant(uint8_t grantedPrio);
 
 private:
   Ipv4Header m_ipv4Header;    //!< The IPv4 Header of the first packet arrived for this message
@@ -611,7 +622,7 @@ public:
    * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
    */
   void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
-                         uint16_t numTotalPrioBands, uint16_t numUnschedPrioBands);
+                         uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands);
   
   /**
    * \brief Notify this HomaRecvScheduler upon arrival of a packet
@@ -697,13 +708,18 @@ public:
    */
   void BusyReceivedForMsg(Ipv4Address senderAddress);
   
+  /**
+   * \brief Loop through the list of active messages and send Grants to the grantable ones
+   */
+  void SendAppropriateGrants(void);
+  
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   
   uint32_t m_mtuBytes;   //!< The MTU of the corresponding netDevice
   uint16_t m_rttPackets; //!< The number of packets required for full utilization, ie. BDP.
-  uint16_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
-  uint16_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+  uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
+  uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address

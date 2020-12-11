@@ -65,11 +65,11 @@ HomaL4Protocol::GetTypeId (void)
     .AddAttribute ("NumTotalPrioBands", "Total number of priority levels used within the network",
                    UintegerValue (8),
                    MakeUintegerAccessor (&HomaL4Protocol::m_numTotalPrioBands),
-                   MakeUintegerChecker<uint16_t> ())
+                   MakeUintegerChecker<uint8_t> ())
     .AddAttribute ("NumUnschedPrioBands", "Number of priority bands dedicated for unscheduled packets",
                    UintegerValue (2),
                    MakeUintegerAccessor (&HomaL4Protocol::m_numUnschedPrioBands),
-                   MakeUintegerChecker<uint16_t> ())
+                   MakeUintegerChecker<uint8_t> ())
   ;
   return tid;
 }
@@ -354,7 +354,8 @@ void HomaL4Protocol::ForwardUp (Ptr<Packet> completeMsg,
     m_endPoints->Lookup (header.GetDestination (), dport,
                          header.GetSource (), sport, incomingInterface);
     
-  NS_ASSERT_MSG(!endPoints.empty (), "HomaL4Protocol was able to find an endpoint when msg was received, but now it couldn't");
+  NS_ASSERT_MSG(!endPoints.empty (), 
+                "HomaL4Protocol was able to find an endpoint when msg was received, but now it couldn't");
     
   for (Ipv4EndPointDemux::EndPointsI endPoint = endPoints.begin ();
          endPoint != endPoints.end (); endPoint++)
@@ -1074,6 +1075,11 @@ bool HomaInboundMsg::IsFullyGranted ()
 {
   return m_maxGrantedIdx >= m_msgSizePkts;
 }
+
+bool HomaInboundMsg::IsGrantable ()
+{
+  return m_maxGrantedIdx < m_maxGrantableIdx;
+}
     
 bool HomaInboundMsg::IsFullyReceived ()
 {
@@ -1084,7 +1090,7 @@ bool HomaInboundMsg::IsFullyReceived ()
   }
   return allReceived;
 }
-
+    
 /*
  * This method updates the state for an inbound message upon receival of a data packet.
  */
@@ -1128,6 +1134,40 @@ Ptr<Packet> HomaInboundMsg::GetReassembledMsg ()
   return completeMsg;
 }
     
+Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
+{
+  NS_LOG_FUNCTION (this << grantedPrio);
+    
+  uint16_t ackNo = m_receivedPackets.size();
+  for (std::size_t i = 0; i < m_receivedPackets.size(); i++)
+  {
+    if (!m_receivedPackets[i])
+    {
+      ackNo = i; // The earliest un-received packet
+      break;
+    }
+  }
+    
+  HomaHeader homaHeader;
+  // Note we swap the src and dst port numbers for reverse direction
+  homaHeader.SetSrcPort (m_dport); 
+  homaHeader.SetDstPort (m_sport);
+  homaHeader.SetTxMsgId (m_txMsgId);
+  homaHeader.SetMsgLen (m_msgSizePkts);
+  homaHeader.SetPktOffset (ackNo); // TODO: Is this correct?
+  homaHeader.SetGrantOffset (m_maxGrantableIdx);
+  homaHeader.SetPrio (grantedPrio);
+  homaHeader.SetPayloadSize (0);
+  homaHeader.SetFlags (HomaHeader::Flags_t::GRANT);
+  
+  Ptr<Packet> p = Create<Packet> ();
+  p-> AddHeader (homaHeader);
+    
+  m_maxGrantedIdx = m_maxGrantableIdx;
+    
+  return p;
+}
+    
 /******************************************************************************/
 
 TypeId HomaRecvScheduler::GetTypeId (void)
@@ -1157,7 +1197,7 @@ HomaRecvScheduler::~HomaRecvScheduler ()
  * inside the Homa protocol logic. 
  */
 void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
-                                          uint16_t numTotalPrioBands, uint16_t numUnschedPrioBands)
+                                          uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands)
 {
   NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
     
@@ -1177,15 +1217,14 @@ void HomaRecvScheduler::ReceivePacket (Ptr<Packet> packet,
   uint8_t rxFlag = homaHeader.GetFlags ();
   if (rxFlag & HomaHeader::Flags_t::DATA )
   {
-    this->ReceiveDataPacket (packet, header, homaHeader, interface);
+    this->ReceiveDataPacket (packet, ipv4Header, homaHeader, interface);
   }
   else if (rxFlag & HomaHeader::Flags_t::BUSY)
   {
-    this->BusyReceivedForMsg (header.GetSource());
+    this->BusyReceivedForMsg (ipv4Header.GetSource());
   }
     
-  // TODO: Some messages might become available to be Granted now. Make sure 
-  //       to send appropriate grants.
+  this->SendAppropriateGrants();
 }
     
 void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet, 
@@ -1193,7 +1232,7 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
                                            HomaHeader const &homaHeader,
                                            Ptr<Ipv4Interface> interface)
 {
-  NS_LOG_FUNCTION (this << packet << ipv4Header << homaHeader);
+  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
   Ptr<Packet> cp = packet->Copy();
     
@@ -1445,6 +1484,46 @@ void HomaRecvScheduler::BusyReceivedForMsg(Ipv4Address senderAddress)
     else
     {
       m_busyInboundMsgs[senderIP] = msgsToMarkBusy;
+    }
+  }
+}
+
+/*
+ * This method is called everytime a packet (DATA or BUSY) is received because
+ * both types of incoming packets may cause the ordering of active messages list
+ * which implies that we might need to send out a Grant.
+ * The method loops over all the pending messages in the list of active messages
+ * and checks whether they are grantable. If yes, an appropriate grant packet is 
+ * generated and send down the networking stack. Although the method loops over
+ * all the messages, ideally at most one message should be granted because other
+ * messages should already be granted when they received packets for themselves.
+ */
+void HomaRecvScheduler::SendAppropriateGrants()
+{
+  NS_LOG_FUNCTION (this);
+    
+  std::list<Ipv4Address> grantedSenders; // Same sender can't be granted for multiple msgs at the same time
+  uint8_t grantingPrio = m_numUnschedPrioBands; // Scheduled priorities start here
+  Ptr<HomaInboundMsg> currentMsg;
+  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  {
+    if (grantingPrio >= m_numTotalPrioBands) 
+      break;
+    
+    currentMsg = m_activeInboundMsgs[i];
+    Ipv4Address senderAddress = currentMsg->GetSrcAddress ();
+    if (std::find(grantedSenders.begin(),grantedSenders.end(),senderAddress) == grantedSenders.end())
+    {
+      if (!currentMsg->IsFullyGranted ()) // TODO: Fully granted active messages don't get reGranted?
+      {
+        if (currentMsg->IsGrantable ())
+        {
+          m_homa->SendDown(currentMsg->GenerateGrant(grantingPrio),
+                           currentMsg->GetDstAddress (),
+                           senderAddress);
+        }
+        grantingPrio++;
+      }
     }
   }
 }

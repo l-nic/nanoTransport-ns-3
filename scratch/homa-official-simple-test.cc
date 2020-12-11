@@ -118,8 +118,8 @@ main (int argc, char *argv[])
   /* Set default BDP value in packets */
   Config::SetDefault("ns3::HomaL4Protocol::RttPackets", UintegerValue(10));
   /* Set default number of priority bands in the network */
-  uint16_t numTotalPrioBands = 8;
-  uint16_t numUnschedPrioBands = 2;
+  uint8_t numTotalPrioBands = 8;
+  uint8_t numUnschedPrioBands = 2;
   Config::SetDefault("ns3::HomaL4Protocol::NumTotalPrioBands", 
                      UintegerValue(numTotalPrioBands));
   Config::SetDefault("ns3::HomaL4Protocol::NumUnschedPrioBands", 
