@@ -913,6 +913,9 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
                  << ") has received an unexpected control packet ("
                  << homaHeader.FlagsToString(ctrlFlag) << ")");
   }
+    
+  // TODO: Generate a BUSY packet if the incoming packet doesn't belong
+  //       to the highest priority outboung message.
   
   // Since the receiver is sending GRANTs, it is considered not busy
   this->SetReceiverNotBusy(ipv4Header.GetDestination ());
