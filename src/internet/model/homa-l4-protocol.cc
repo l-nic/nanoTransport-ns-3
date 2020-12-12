@@ -525,6 +525,11 @@ uint16_t HomaOutboundMsg::GetDstPort ()
   return m_dport;
 }
     
+uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
+{
+  return m_maxGrantedIdx;
+}
+    
 void HomaOutboundMsg::SetPrio (uint8_t prio)
 {
   m_prio = prio;
@@ -563,6 +568,7 @@ bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
   }
   NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                << ") doesn't have any packet to send!");
+  pktOffset = i;
   return false;
 }
     
@@ -643,6 +649,36 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
   }
 }
     
+Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
+{
+  NS_LOG_FUNCTION (this);
+  
+  Ptr<Packet> p;
+  uint16_t nextPktOffsetToSend;
+  this->GetNextPacket(nextPktOffsetToSend, p);
+  
+  HomaHeader homaHeader;
+  homaHeader.SetSrcPort (m_sport); 
+  homaHeader.SetDstPort (m_dport);
+  homaHeader.SetTxMsgId (targetTxMsgId);
+  homaHeader.SetMsgLen (m_msgSizePkts);
+  homaHeader.SetPktOffset (nextPktOffsetToSend); // TODO: Is this correct?
+  homaHeader.SetGrantOffset (m_maxGrantedIdx); // TODO: Is this correct?
+  homaHeader.SetPrio (m_prio); // TODO: Is this correct?
+  homaHeader.SetPayloadSize (0);
+  homaHeader.SetFlags (HomaHeader::Flags_t::BUSY);
+    
+  Ptr<Packet> busyPacket;
+  busyPacket->AddHeader (homaHeader);
+    
+  SocketIpTosTag ipTosTag;
+  ipTosTag.SetTos (0); // Busy packets have the highest priority
+  // This packet may already have a SocketIpTosTag (see HomaSocket)
+  busyPacket->ReplacePacketTag (ipTosTag);
+    
+  return busyPacket;
+}
+    
 /******************************************************************************/
     
 const uint16_t HomaSendScheduler::MAX_N_MSG = 255;
@@ -657,6 +693,7 @@ TypeId HomaSendScheduler::GetTypeId (void)
 }
     
 HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
+  : m_numCtrlPktsSinceLastTx(0)
 {
   NS_LOG_FUNCTION (this);
       
@@ -689,7 +726,6 @@ void HomaSendScheduler::SetPacer ()
   PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
     
   m_txRate = p2pNetDevice->GetDataRate ();
-  m_pacerLastTxTime = Simulator::Now () - m_txRate.CalculateBytesTxTime ((uint32_t) netDevice->GetMtu ());
 }
 
 /*
@@ -844,11 +880,33 @@ HomaSendScheduler::TxDataPacket ()
 {
   NS_LOG_FUNCTION (this);
     
+  NS_ASSERT(m_txEvent.IsExpired());
+    
+  Ipv4Header iph;
+  PppHeader pph;
+  uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
+  Time timeToTx;
+  if (m_numCtrlPktsSinceLastTx != 0)
+  {
+    NS_LOG_LOGIC("HomaSendScheduler (" << this <<
+                  ") has " <<  m_numCtrlPktsSinceLastTx <<
+                  " control packets being transmitted. Postponing data TX.");
+    
+    HomaHeader homah;
+    headerSize += homah.GetSerializedSize(); // Control packets only have homa header after IP header
+    timeToTx = m_txRate.CalculateBytesTxTime (headerSize * m_numCtrlPktsSinceLastTx);
+    m_txEvent = Simulator::Schedule (timeToTx, &HomaSendScheduler::TxDataPacket, this);
+      
+    m_numCtrlPktsSinceLastTx = 0;
+    return;
+  }
+    
   uint16_t nextTxMsgID;
   Ptr<Packet> p;
   if (this->GetNextMsgId (nextTxMsgID))
   {
-    NS_LOG_LOGIC("HomaSendScheduler will transmit a packet from msg " << nextTxMsgID);
+    NS_LOG_LOGIC("HomaSendScheduler (" << this <<
+                  ") will transmit a packet from msg " << nextTxMsgID);
       
     NS_ASSERT(this->GetNextPktOfMsg(nextTxMsgID, p));
       
@@ -863,11 +921,8 @@ HomaSendScheduler::TxDataPacket ()
      * Calculate the time it would take to serialize this packet and schedule
      * the next TX of this scheduler accordingly.
      */
-    Ipv4Header iph;
-    PppHeader pph;
-    uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
-    Time txTime = m_txRate.CalculateBytesTxTime (p->GetSize () + headerSize);
-    m_txEvent = Simulator::Schedule (txTime, &HomaSendScheduler::TxDataPacket, this);
+    timeToTx = m_txRate.CalculateBytesTxTime (p->GetSize () + headerSize);
+    m_txEvent = Simulator::Schedule (timeToTx, &HomaSendScheduler::TxDataPacket, this);
   }
   else
   {
@@ -884,38 +939,53 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
-  Ptr<HomaOutboundMsg> targetdMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
+  uint16_t targetTxMsgId = homaHeader.GetTxMsgId();
+  Ptr<HomaOutboundMsg> targetMsg = m_outboundMsgs[targetTxMsgId];
   // Verify that the TxMsgId indeed matches the 4 tuple
-  NS_ASSERT(targetdMsg->GetSrcAddress() == ipv4Header.GetSource ());
-  NS_ASSERT(targetdMsg->GetDstAddress() == ipv4Header.GetDestination ());
-  NS_ASSERT(targetdMsg->GetSrcPort() == homaHeader.GetSrcPort ());
-  NS_ASSERT(targetdMsg->GetDstPort() == homaHeader.GetDstPort ());
+  NS_ASSERT( (targetMsg->GetSrcAddress() == ipv4Header.GetSource ()) &&
+             (targetMsg->GetDstAddress() == ipv4Header.GetDestination ()) && 
+             (targetMsg->GetSrcPort() == homaHeader.GetSrcPort ()) &&
+             (targetMsg->GetDstPort() == homaHeader.GetDstPort ()) );
     
   /*
    * The pktOffset within GRANT and BUSY packets are used to acknowledge 
    * the arrival of the corresponding data packet to the receiver.
    */
-  targetdMsg->SetDelivered (homaHeader.GetPktOffset ());
+  targetMsg->SetDelivered (homaHeader.GetPktOffset ());
   
   uint8_t ctrlFlag = homaHeader.GetFlags();
   if (ctrlFlag & HomaHeader::Flags_t::GRANT)
   {
-    targetdMsg->HandleGrant (homaHeader);
+    targetMsg->HandleGrant (homaHeader);
   }
   else if (ctrlFlag & HomaHeader::Flags_t::RESEND)
   {
     // TODO: Figure out what to do when RESEND is received
-    targetdMsg->HandleGrant (homaHeader);
+    targetMsg->HandleGrant (homaHeader);
   }
   else
   {
     NS_LOG_ERROR("HomaSendScheduler (" << this 
                  << ") has received an unexpected control packet ("
                  << homaHeader.FlagsToString(ctrlFlag) << ")");
+      
+    return;
   }
     
-  // TODO: Generate a BUSY packet if the incoming packet doesn't belong
-  //       to the highest priority outboung message.
+  uint16_t nextTxMsgID;
+  this->GetNextMsgId (nextTxMsgID);
+  if (nextTxMsgID != targetTxMsgId) 
+  {
+    // Incoming packet doesn't belong to the highest priority outboung message.
+    NS_LOG_LOGIC("HomaSendScheduler (" << this 
+                 << ") needs to send a BUSY packet for " << targetTxMsgId);
+      
+    m_homa->SendDown(targetMsg->GenerateBusy (nextTxMsgID), 
+                     targetMsg->GetSrcAddress (), 
+                     targetMsg->GetDstAddress (), 
+                     targetMsg->GetRoute ());
+    m_numCtrlPktsSinceLastTx++;
+  }
   
   // Since the receiver is sending GRANTs, it is considered not busy
   this->SetReceiverNotBusy(ipv4Header.GetDestination ());
@@ -1165,6 +1235,11 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
   
   Ptr<Packet> p = Create<Packet> ();
   p-> AddHeader (homaHeader);
+    
+  SocketIpTosTag ipTosTag;
+  ipTosTag.SetTos (0); // Grant packets have the highest priority
+  // This packet may already have a SocketIpTosTag (see HomaSocket)
+  p->ReplacePacketTag (ipTosTag);
     
   m_maxGrantedIdx = m_maxGrantableIdx;
     

@@ -316,6 +316,12 @@ public:
    */
   uint16_t GetDstPort (void);
   /**
+   * \brief Get the highest Granted packet index so far for this message.
+   * \return The highest Grant Offset received so far
+   */
+  uint16_t GetMaxGrantedIdx(void);
+  
+  /**
    * \brief Set the the priority requested for this message by the receiver.
    * \param prio the priority of this message
    */
@@ -352,6 +358,13 @@ public:
    * \param homaHeader The header information for the received Grant
    */
   void HandleGrant (HomaHeader const &homaHeader);
+  
+  /**
+   * \brief Generates a busy packet to the receiver of the this message
+   * \param targetTxMsgId The txMsgId of this message (determined by the HomaSendScheduler)
+   * \return The generated BUSY packet
+   */
+  Ptr<Packet> GenerateBusy (uint16_t targetTxMsgId);
   
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
@@ -439,7 +452,7 @@ public:
    */
   void CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header, 
                                   HomaHeader const &homaHeader);
-                           
+  
   /**
    * \brief Updates the state for the corresponding outbound message per the received BUSY.
    * \param ipv4Header The Ipv4 header of the received BUSY.
@@ -462,9 +475,10 @@ public:
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
-  Time m_pacerLastTxTime;     //!< The last simulation time the packet generator sent out a packet
+  
   DataRate m_txRate;          //!< Data Rate of the corresponding net device for this prototocol
   EventId m_txEvent;          //!< The EventID for the next scheduled transmission
+  uint32_t m_numCtrlPktsSinceLastTx; //!< Number of control packets sent since last data packet TX
   
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
