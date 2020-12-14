@@ -972,6 +972,10 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
     return;
   }
     
+  // TODO: How to check if a message is fully delivered, so that 
+  //       HomaSendScheduler can clear state for the message and 
+  //       return the txMsgId as free again?
+    
   uint16_t nextTxMsgID;
   this->GetNextMsgId (nextTxMsgID);
   if (nextTxMsgID != targetTxMsgId) 
@@ -1183,6 +1187,9 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
      * whether to send a Grant packet to the sender of this message or not.
      */
     m_maxGrantableIdx++;
+    // TODO: How do we make sure the bytes in flight is always equal to RttBytes?
+    //       For example if a data packet gets dropped, the effective bytes in flight
+    //       remains low until the lost packet is retransmitted.
   }
   else
   {
