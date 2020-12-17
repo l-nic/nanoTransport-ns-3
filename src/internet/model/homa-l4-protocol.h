@@ -463,26 +463,6 @@ public:
   void CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header, 
                                   HomaHeader const &homaHeader);
   
-  /**
-   * \brief Updates the state for the corresponding outbound message per the received BUSY.
-   * \param ipv4Header The Ipv4 header of the received BUSY.
-   * \param homaHeader The Homa header of the received BUSY.
-   */
-  void BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
-                          HomaHeader const &homaHeader);
-   
-  /**
-   * \brief Add the address of the receiver to the list of busy receivers
-   * \param receiverAddress The Ipv4 address of the receiver.
-   */
-  void SetReceiverBusy(Ipv4Address receiverAddress);
-  
-  /**
-   * \brief Remove the address of the receiver from the list of busy receivers
-   * \param receiverAddress The Ipv4 address of the receiver.
-   */
-  void SetReceiverNotBusy(Ipv4Address receiverAddress);
-  
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   
@@ -492,7 +472,6 @@ private:
   
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
-  std::list<Ipv4Address> m_busyReceivers; //!< List of busy receivers that packets shouldn't be sent to
   
   Time m_rtxTimeout; //!< Time to expire the retransmission events.
 };

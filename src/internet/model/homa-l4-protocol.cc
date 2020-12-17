@@ -319,9 +319,6 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
       rxFlag & HomaHeader::Flags_t::BUSY)
   {
     m_recvScheduler->ReceivePacket(cp, header, homaHeader, interface);
-      
-    // TODO: The busy packet is always sent from sender to receiver.
-//     m_sendScheduler->BusyReceivedForMsg(header, homaHeader);
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND))
@@ -819,17 +816,13 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
     if (curRemainingBytes < minRemainingBytes)
     {
       Ipv4Address daddr = currentMsg->GetDstAddress ();
-      // Accept current msg if the receiver is not busy
-      if (std::find(m_busyReceivers.begin(),m_busyReceivers.end(),daddr) == m_busyReceivers.end())
+      // Accept current msg if it has a granted but not transmitted packet
+      if (currentMsg->GetNextPacket(pktOffset, p))
       {
-        // Accept current msg if it has a granted but not transmitted packet
-        if (currentMsg->GetNextPacket(pktOffset, p))
-        {
-          candidateMsg = currentMsg;
-          txMsgId = it.first;
-          minRemainingBytes = curRemainingBytes;
-          msgSelected = true;
-        }
+        candidateMsg = currentMsg;
+        txMsgId = it.first;
+        minRemainingBytes = curRemainingBytes;
+        msgSelected = true;
       }
     }
   }
@@ -1009,11 +1002,6 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
                      targetMsg->GetRoute ());
     m_numCtrlPktsSinceLastTx++;
   }
-  
-  // Since the receiver is sending GRANTs, it is considered not busy
-  this->SetReceiverNotBusy(ipv4Header.GetDestination ());
-  // TODO: If there are multiple messages from the same sender to the same 
-  //       receiver, all of those messages will be allowed to send at once.
     
   /* 
    * Since control packets may allow new packets to be sent, we should try 
@@ -1021,47 +1009,6 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
    */
   if(m_txEvent.IsExpired()) 
     this->TxDataPacket();
-}
-    
-void HomaSendScheduler::BusyReceivedForMsg(Ipv4Header const &ipv4Header, 
-                                           HomaHeader const &homaHeader)
-{
-  NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
-    
-  Ptr<HomaOutboundMsg> busyMsg = m_outboundMsgs[homaHeader.GetTxMsgId()];
-  // Verify that the TxMsgId indeed matches the 4 tuple
-  NS_ASSERT(busyMsg->GetSrcAddress() == ipv4Header.GetSource ());
-  NS_ASSERT(busyMsg->GetDstAddress() == ipv4Header.GetDestination ());
-  NS_ASSERT(busyMsg->GetSrcPort() == homaHeader.GetSrcPort ());
-  NS_ASSERT(busyMsg->GetDstPort() == homaHeader.GetDstPort ());
-    
-  /*
-   * The pktOffset within GRANT and BUSY packets are used to acknowledge 
-   * the arrival of the corresponding data packet to the receiver.
-   */
-  busyMsg->SetDeliveredUntil (homaHeader.GetPktOffset ());
-    
-  this->SetReceiverBusy(ipv4Header.GetDestination ());
-  // TODO: If there are multiple messages from the same sender to the same 
-  //       receiver where only one of them is granted by the receiver, the 
-  //       busy packet for the other messages will block the granted one as well.
-}
-    
-void HomaSendScheduler::SetReceiverBusy(Ipv4Address receiverAddress)
-{
-  NS_LOG_FUNCTION (this << receiverAddress);
-    
-  if (std::find(m_busyReceivers.begin(),m_busyReceivers.end(),receiverAddress) == m_busyReceivers.end())
-  {
-    m_busyReceivers.push_back(receiverAddress);
-  }
-}
-    
-void HomaSendScheduler::SetReceiverNotBusy(Ipv4Address receiverAddress)
-{
-  NS_LOG_FUNCTION (this << receiverAddress);
-    
-  m_busyReceivers.remove(receiverAddress);
 }
     
 /******************************************************************************/
