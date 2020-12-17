@@ -586,15 +586,19 @@ bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
  * has received the corresponding data packet, so the packet can be 
  * marked delivered.
  */    
-void HomaOutboundMsg::SetDelivered (uint16_t pktOffset)
+void HomaOutboundMsg::SetDeliveredUntil (uint16_t pktOffset)
 {
   NS_LOG_FUNCTION (this << pktOffset);
     
   NS_LOG_DEBUG("HomaOutboundMsg (" << this 
-               << ") is marking packet " << pktOffset 
-               << " as delivered.");
+               << ") is setting ackNo as " << pktOffset);
     
-  m_deliveredPackets[pktOffset] = true;
+  pktOffset = std::min(pktOffset, m_msgSizePkts);
+  for (uint16_t i = 0; i < pktOffset; i++)
+  {
+    m_deliveredPackets[i] = true;
+    m_toBeTxPackets[i] = false;
+  }
 }
 
 /*
@@ -616,17 +620,14 @@ void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
     
 /*
  * This method updates the state for the corresponding outbound message
- * upon reveival of a Grant. The state is updated only if the granted 
- * packet index is larger than the highest grant index received so far.
- * This allows reordered Grants to be ignored when more recent ones are
- * received.
+ * upon receival of a Grant or RESEND. The state is updated only if the  
+ * granted packet index is larger than the highest grant index received 
+ * so far. This allows reordered Grants to be ignored when more recent 
+ * ones are received.
  */
-void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
+void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
 {
   NS_LOG_FUNCTION (this << homaHeader);
-    
-  // TODO: Figure out what to do when RESEND is received
-//   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::GRANT);
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
     
@@ -648,13 +649,24 @@ void HomaOutboundMsg::HandleGrant (HomaHeader const &homaHeader)
      * Homa grants messages in a way that there is always exactly BDP worth of 
      * packet on flight. Then we can calculate the remaining bytes as the following.
      */
-    m_remainingBytes = (grantOffset - m_rttPackets) * m_maxPayloadSize;
+    m_remainingBytes = (m_maxGrantedIdx - m_rttPackets) * m_maxPayloadSize;
   }
   else
   {
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                  << ") has received an out-of-order Grant. State is not updated!");
   }
+}
+    
+void HomaOutboundMsg::HandleResend (HomaHeader const &homaHeader)
+{
+  NS_LOG_FUNCTION (this << homaHeader);
+    
+  NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::RESEND);
+    
+  m_toBeTxPackets[homaHeader.GetPktOffset ()] = true;
+    
+  // TODO: Is this really all we need to do for RESEND?
 }
     
 Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
@@ -956,26 +968,23 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
              (targetMsg->GetDstAddress() == ipv4Header.GetDestination ()) && 
              (targetMsg->GetSrcPort() == homaHeader.GetSrcPort ()) &&
              (targetMsg->GetDstPort() == homaHeader.GetDstPort ()) );
-    
-  /*
-   * The pktOffset within GRANT and BUSY packets are used to acknowledge 
-   * the arrival of the corresponding data packet to the receiver.
-   */
-  targetMsg->SetDelivered (homaHeader.GetPktOffset ());
   
   uint8_t ctrlFlag = homaHeader.GetFlags();
   if (ctrlFlag & HomaHeader::Flags_t::GRANT)
   {
-    targetMsg->HandleGrant (homaHeader);
+    targetMsg->HandleGrantOffset (homaHeader);
+      
+    // Only GRANT packets explicitly have the acknowledgement number
+    targetMsg->SetDeliveredUntil (homaHeader.GetPktOffset ());
   }
   else if (ctrlFlag & HomaHeader::Flags_t::RESEND)
   {
-    // TODO: Figure out what to do when RESEND is received
-    targetMsg->HandleGrant (homaHeader);
+    targetMsg->HandleGrantOffset (homaHeader);
+    targetMsg->HandleResend (homaHeader);
   }
   else
   {
-    NS_LOG_ERROR("HomaSendScheduler (" << this 
+    NS_LOG_ERROR("ERROR: HomaSendScheduler (" << this 
                  << ") has received an unexpected control packet ("
                  << homaHeader.FlagsToString(ctrlFlag) << ")");
       
@@ -1030,7 +1039,7 @@ void HomaSendScheduler::BusyReceivedForMsg(Ipv4Header const &ipv4Header,
    * The pktOffset within GRANT and BUSY packets are used to acknowledge 
    * the arrival of the corresponding data packet to the receiver.
    */
-  busyMsg->SetDelivered (homaHeader.GetPktOffset ());
+  busyMsg->SetDeliveredUntil (homaHeader.GetPktOffset ());
     
   this->SetReceiverBusy(ipv4Header.GetDestination ());
   // TODO: If there are multiple messages from the same sender to the same 
@@ -1072,6 +1081,7 @@ TypeId HomaInboundMsg::GetTypeId (void)
 HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
                                 Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
                                 Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets)
+    : m_prio(0)
 {
   NS_LOG_FUNCTION (this);
 
@@ -1104,8 +1114,9 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   m_receivedPackets[pktOffset] = true;
           
   m_rttPackets = rttPackets;
-  m_maxGrantableIdx = m_rttPackets + 1; // 1 Data packet is already received
-  m_maxGrantedIdx = m_rttPackets; // We think of unscheduled packets as already granted
+  uint16_t grantIdx = std::min(m_rttPackets, m_msgSizePkts);
+  m_maxGrantableIdx = grantIdx + 1; // 1 Data packet is already received
+  m_maxGrantedIdx = grantIdx; // We think of unscheduled packets as already granted
 }
 
 HomaInboundMsg::~HomaInboundMsg ()
@@ -1171,7 +1182,12 @@ EventId HomaInboundMsg::GetRtxEvent ()
 {
   return m_rtxEvent;
 }
- 
+
+uint16_t HomaInboundMsg::GetMaxGrantedIdx ()
+{
+  return m_maxGrantedIdx;
+}
+    
 bool HomaInboundMsg::IsFullyGranted ()
 {
   return m_maxGrantedIdx >= m_msgSizePkts;
@@ -1242,6 +1258,8 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
 {
   NS_LOG_FUNCTION (this << grantedPrio);
     
+  m_prio = grantedPrio; // Updated with the most recent granted priority value
+    
   uint16_t ackNo = m_receivedPackets.size();
   for (std::size_t i = 0; i < m_receivedPackets.size(); i++)
   {
@@ -1260,12 +1278,12 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
   homaHeader.SetMsgLen (m_msgSizePkts);
   homaHeader.SetPktOffset (ackNo); // TODO: Is this correct?
   homaHeader.SetGrantOffset (m_maxGrantableIdx);
-  homaHeader.SetPrio (grantedPrio);
+  homaHeader.SetPrio (m_prio);
   homaHeader.SetPayloadSize (0);
   homaHeader.SetFlags (HomaHeader::Flags_t::GRANT);
   
   Ptr<Packet> p = Create<Packet> ();
-  p-> AddHeader (homaHeader);
+  p->AddHeader (homaHeader);
     
   SocketIpTosTag ipTosTag;
   ipTosTag.SetTos (0); // Grant packets have the highest priority
@@ -1275,6 +1293,45 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
   m_maxGrantedIdx = m_maxGrantableIdx;
     
   return p;
+}
+    
+std::list<Ptr<Packet>> HomaInboundMsg::GenerateResends (uint16_t maxRsndPktOffset)
+{
+  NS_LOG_FUNCTION (this << maxRsndPktOffset);
+    
+  std::list<Ptr<Packet>> rsndPkts;
+    
+  maxRsndPktOffset = std::min(maxRsndPktOffset, m_msgSizePkts);
+  maxRsndPktOffset = std::min(maxRsndPktOffset, m_maxGrantedIdx);
+  for (uint16_t i = 0; i < maxRsndPktOffset; ++i)
+  {
+    if(!m_receivedPackets[i])
+    {
+      HomaHeader homaHeader;
+      // Note we swap the src and dst port numbers for reverse direction
+      homaHeader.SetSrcPort (m_dport); 
+      homaHeader.SetDstPort (m_sport);
+      homaHeader.SetTxMsgId (m_txMsgId);
+      homaHeader.SetMsgLen (m_msgSizePkts);
+      homaHeader.SetPktOffset (i); // TODO: Is this correct?
+      homaHeader.SetGrantOffset (m_maxGrantedIdx);
+      homaHeader.SetPrio (m_prio);
+      homaHeader.SetPayloadSize (0);
+      homaHeader.SetFlags (HomaHeader::Flags_t::RESEND);
+  
+      Ptr<Packet> p = Create<Packet> ();
+      p->AddHeader (homaHeader);
+    
+      SocketIpTosTag ipTosTag;
+      ipTosTag.SetTos (0); // Resend packets have the highest priority
+      // This packet may already have a SocketIpTosTag (see HomaSocket)
+      p->ReplacePacketTag (ipTosTag);
+        
+      rsndPkts.push_back(p);
+    }
+  }
+  
+    return rsndPkts;
 }
     
 /******************************************************************************/
@@ -1358,6 +1415,9 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
   {
     inboundMsg = CreateObject<HomaInboundMsg> (cp, ipv4Header, homaHeader, 
                                                interface, m_mtuBytes, m_rttPackets);
+    inboundMsg-> SetRtxEvent (Simulator::Schedule (m_rtxTimeout, 
+                                                   &HomaRecvScheduler::ExpireRtxTimeout, this, 
+                                                   inboundMsg, inboundMsg->GetMaxGrantedIdx ()));
     /*
      * Even if the message was a single packet one and now is fully received,
      * we should still schedule it first because ScheduleNewMsg also lets 
@@ -1555,6 +1615,7 @@ void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundM
       NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
                    ") from the active messages list of HomaRecvScheduler (" << 
                    this << ").");
+      Simulator::Cancel (currentMsg->GetRtxEvent ());
       m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
       msgRemoved = true;
       break;
@@ -1564,7 +1625,7 @@ void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundM
   if (!msgRemoved)
   {
     NS_LOG_ERROR("ERROR: HomaInboundMsg (" << inboundMsg <<
-                 ") couldn't be find inside the active messages list!");
+                 ") couldn't be found inside the active messages list!");
   }
 }
     
@@ -1637,6 +1698,52 @@ void HomaRecvScheduler::SendAppropriateGrants()
       }
     }
   }
+}
+    
+void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
+                                         uint16_t maxRsndPktOffset)
+{
+  NS_LOG_FUNCTION (this << inboundMsg << maxRsndPktOffset);
+    
+  if (inboundMsg->IsFullyReceived ())
+    return;
+    
+  // Create a dummy Homa Header for msg lookup
+  HomaHeader homaHeader;
+  homaHeader.SetSrcPort (inboundMsg->GetSrcPort ());
+  homaHeader.SetDstPort (inboundMsg->GetDstPort ());
+  homaHeader.SetTxMsgId (inboundMsg->GetTxMsgId ());
+  int activeMsgIdx = -1;
+  if (this->GetInboundMsg(inboundMsg->GetIpv4Header (), homaHeader, 
+                          inboundMsg, activeMsgIdx))
+  {
+    if (activeMsgIdx >= 0)
+    {
+      // We send RESEND packets only to non-busy senders
+      NS_LOG_LOGIC("Rtx Timer for an inbound Msg (" << inboundMsg << 
+                   ") expired, which is active. RESEND packets will be sent");
+        
+      std::list<Ptr<Packet>> rsndPkts = inboundMsg->GenerateResends (maxRsndPktOffset);
+      while (!rsndPkts.empty())
+      {
+        m_homa->SendDown(rsndPkts.front(),
+                         inboundMsg->GetDstAddress (),
+                         inboundMsg->GetSrcAddress ());
+        rsndPkts.pop_front();
+      }
+    }
+      
+    // Rechedule the next retransmission event for this message
+    inboundMsg-> SetRtxEvent (Simulator::Schedule (m_rtxTimeout, 
+                                                   &HomaRecvScheduler::ExpireRtxTimeout, this, 
+                                                   inboundMsg, inboundMsg->GetMaxGrantedIdx ()));
+  }
+  else
+  {
+    NS_LOG_DEBUG("Rtx Timer for an inbound Msg (" << inboundMsg << 
+                   ") expired, which doesn't exist any more.");
+  }  
+  return;
 }
     
 } // namespace ns3

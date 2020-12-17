@@ -345,10 +345,10 @@ public:
   bool GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p);
   
   /**
-   * \brief Set the the corresponding m_toBeTxPackets entry to false to mark acknowledgement.
+   * \brief Set the the corresponding state entries to true/false to mark acknowledgement.
    * \param pktOffset The offset of the packet within the message that is to be marked.
    */
-  void SetDelivered (uint16_t pktOffset);
+  void SetDeliveredUntil (uint16_t pktOffset);
   
   /**
    * \brief Set the the corresponding m_deliveredPackets entry to true to mark on-flight or delivered.
@@ -360,7 +360,13 @@ public:
    * \brief Update the state per the received Grant
    * \param homaHeader The header information for the received Grant
    */
-  void HandleGrant (HomaHeader const &homaHeader);
+  void HandleGrantOffset (HomaHeader const &homaHeader);
+  
+  /**
+   * \brief Update the m_toBeTxPackets state per the received Resend
+   * \param homaHeader The header information for the received Grant
+   */
+  void HandleResend (HomaHeader const &homaHeader);
   
   /**
    * \brief Generates a busy packet to the receiver of the this message
@@ -570,6 +576,11 @@ public:
   EventId GetRtxEvent (void);
   
   /**
+   * \brief Get the highest granted packet index for this message.
+   * \return The highest granted packet index so far
+   */
+  uint16_t GetMaxGrantedIdx (void);
+  /**
    * \return Whether this message has been fully granted
    */
   bool IsFullyGranted (void);
@@ -601,6 +612,13 @@ public:
    * \return The generated GRANT packet
    */
   Ptr<Packet> GenerateGrant(uint8_t grantedPrio);
+  
+  /**
+   * \brief Generate a list of RESEND packets to send upon retransmission timeout
+   * \param maxRsndPktOffset The highest packet index to decide RESENDs upto
+   * \return The list of RESEND packets
+   */
+  std::list<Ptr<Packet>> GenerateResends (uint16_t maxRsndPktOffset);
 
 private:
   Ipv4Header m_ipv4Header;    //!< The IPv4 Header of the first packet arrived for this message
@@ -619,6 +637,7 @@ private:
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far (default: 0)
+  uint8_t m_prio;            //!< The most recent granted priority set for this message
   
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
 };
@@ -746,6 +765,13 @@ public:
    * \brief Loop through the list of active messages and send Grants to the grantable ones
    */
   void SendAppropriateGrants(void);
+  
+  /**
+   * \brief Gets appropriate RESEND packets for the inbound message and sends them down.
+   * \param inboundMsg The inbound message whose retransmission timer expires
+   * \param maxRsndPktOffset The highest packet index to send RESEND for 
+   */
+  void ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg, uint16_t maxRsndPktOffset);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
