@@ -815,7 +815,6 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
     // Accept current msg if the remainig size is smaller than minRemainingBytes
     if (curRemainingBytes < minRemainingBytes)
     {
-      Ipv4Address daddr = currentMsg->GetDstAddress ();
       // Accept current msg if it has a granted but not transmitted packet
       if (currentMsg->GetNextPacket(pktOffset, p))
       {
@@ -914,6 +913,8 @@ HomaSendScheduler::TxDataPacket ()
       
     m_numCtrlPktsSinceLastTx = 0;
     return;
+      
+    // TODO: The logic here doesn't help with the control packets sent from the HomaRecvScheduler!
   }
     
   uint16_t nextTxMsgID;
