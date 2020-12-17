@@ -1094,8 +1094,8 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   m_receivedPackets[pktOffset] = true;
           
   m_rttPackets = rttPackets;
-  m_maxGrantableIdx = m_rttPackets;
-  m_maxGrantedIdx = 0;
+  m_maxGrantableIdx = m_rttPackets + 1; // 1 Data packet is already received
+  m_maxGrantedIdx = m_rttPackets; // We think of unscheduled packets as already granted
 }
 
 HomaInboundMsg::~HomaInboundMsg ()
