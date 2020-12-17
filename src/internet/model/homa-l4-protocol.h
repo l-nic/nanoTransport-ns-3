@@ -342,6 +342,17 @@ public:
   uint8_t GetPrio (uint16_t pktOffset);
   
   /**
+   * \brief Sets the scheduled retransmission event for this message
+   * \param rtxEvent The retransmission event scheduled by the HomaSendScheduler.
+   */
+  void SetRtxEvent (EventId rtxEvent);
+  /**
+   * \brief Gets the most recent retransmission event for this message, either scheduled or expired.
+   * \return The most recent retransmission event scheduled by the HomaSendScheduler.
+   */
+  EventId GetRtxEvent (void);
+  
+  /**
    * \brief Determines which packet should be sent next for this message
    * \param pktOffset The index of the selected packet (determined inside this function)
    * \param p The selected packet (determined inside this function)
@@ -400,6 +411,8 @@ private:
   
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
+  
+  EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
 };
  
 /******************************************************************************/
@@ -465,8 +478,14 @@ public:
    * \param ipv4Header The Ipv4 header of the received GRANT.
    * \param homaHeader The Homa header of the received GRANT.
    */
-  void CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header, 
-                                  HomaHeader const &homaHeader);
+  void CtrlPktRecvdForOutboundMsg (Ipv4Header const &ipv4Header, 
+                                   HomaHeader const &homaHeader);
+  
+  /**
+   * \brief Delete the state for a msg and set the txMsgId as free again
+   * \param txMsgId The TX msg ID of the message to be cleared
+   */
+  void ClearStateForMsg (uint16_t txMsgId);
   
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages

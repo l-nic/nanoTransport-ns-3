@@ -565,6 +565,20 @@ uint8_t HomaOutboundMsg::GetPrio (uint16_t pktOffset)
   return m_prio;
 }
     
+/*
+ * Although the retransmission events are handled by the HomaSendScheduler
+ * the corresponding EventId of messages are kept within the messages 
+ * themselves for the sake of being tidy.
+ */
+void HomaOutboundMsg::SetRtxEvent (EventId rtxEvent)
+{
+  m_rtxEvent = rtxEvent;
+}
+EventId HomaOutboundMsg::GetRtxEvent ()
+{
+  return m_rtxEvent;
+}
+    
 bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
 {
   NS_LOG_FUNCTION (this);
@@ -1009,9 +1023,7 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
     
   if (targetMsg->IsFullyDelivered ())
   {
-   // TODO: How to check if a message is fully delivered, so that 
-   //       HomaSendScheduler can clear state for the message and 
-   //       return the txMsgId as free again?
+    this->ClearStateForMsg (targetTxMsgId);
   }
   else
   {
@@ -1037,6 +1049,15 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
    */
   if(m_txEvent.IsExpired()) 
     this->TxDataPacket();
+}
+    
+void HomaSendScheduler::ClearStateForMsg (uint16_t txMsgId)
+{
+  NS_LOG_FUNCTION(this << txMsgId);
+  
+  Simulator::Cancel (m_outboundMsgs[txMsgId]->GetRtxEvent ());
+  m_outboundMsgs.erase(m_outboundMsgs.find(txMsgId));
+  m_txMsgIdFreeList.pus_back(txMsgId);
 }
     
 /******************************************************************************/
