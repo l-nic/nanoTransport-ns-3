@@ -97,7 +97,7 @@ main (int argc, char *argv[])
 
   /******** Create Channels ********/
   PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("1us"));
 
   /******** Create NetDevices ********/

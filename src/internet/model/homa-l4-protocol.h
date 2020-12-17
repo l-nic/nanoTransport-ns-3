@@ -289,6 +289,12 @@ public:
   Ptr<Ipv4Route> GetRoute (void);
   
   /**
+   * \brief Set the retransmission timeout interval for this message
+   * \param rtxTimeout The time interval between each timeout
+   */
+  void SetRtxTimeout (Time rtxTimeout);
+  
+  /**
    * \brief Get the remaining undelivered bytes of this message.
    * \return The amount of undelivered bytes
    */
@@ -342,11 +348,6 @@ public:
   uint8_t GetPrio (uint16_t pktOffset);
   
   /**
-   * \brief Sets the scheduled retransmission event for this message
-   * \param rtxEvent The retransmission event scheduled by the HomaSendScheduler.
-   */
-  void SetRtxEvent (EventId rtxEvent);
-  /**
    * \brief Gets the most recent retransmission event for this message, either scheduled or expired.
    * \return The most recent retransmission event scheduled by the HomaSendScheduler.
    */
@@ -391,6 +392,12 @@ public:
    */
   Ptr<Packet> GenerateBusy (uint16_t targetTxMsgId);
   
+  /**
+   * \brief Determines whether there exists some data packets to retransmit
+   * \param maxRtxPktOffset The highest packet index to retransmit data packets for 
+   */
+  void ExpireRtxTimeout(uint16_t maxRtxPktOffset);
+  
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
   Ipv4Address m_daddr;       //!< Destination IP address of this message
@@ -412,6 +419,7 @@ private:
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
   
+  Time m_rtxTimeout;         //!< Time to expire the retransmission events.
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
 };
  
@@ -437,8 +445,7 @@ public:
   static TypeId GetTypeId (void);
   static const uint16_t MAX_N_MSG; //!< Maximum number of messages a HomaSendScheduler can hold
 
-  HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
-                     Time rtxTimeout);
+  HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
   ~HomaSendScheduler (void);
   
   /**
@@ -451,7 +458,7 @@ public:
    * \param outMsg The outbound message to be accepted
    * \return Whether the message was accepted or not
    */
-  bool ScheduleNewMessage (Ptr<HomaOutboundMsg> outMsg);
+  bool ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg);
   
   /**
    * \brief Determines which message would be selected to send a packet from
@@ -496,8 +503,6 @@ private:
   
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
-  
-  Time m_rtxTimeout; //!< Time to expire the retransmission events.
 };
     
 /******************************************************************************/
