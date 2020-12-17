@@ -1147,6 +1147,20 @@ Ptr<Ipv4Interface> HomaInboundMsg::GetIpv4Interface ()
 {
   return m_iface;
 }
+
+/*
+ * Although the retransmission events are handled by the HomaRecvScheduler
+ * the corresponding EventId of messages are kept within the messages 
+ * themselves for the sake of being tidy.
+ */
+void SetRtxEvent (EventId rtxEvent)
+{
+  m_rtxEvent = rtxEvent;
+}
+EventId GetRtxEvent ()
+{
+  return m_rtxEvent;
+}
  
 bool HomaInboundMsg::IsFullyGranted ()
 {

@@ -553,6 +553,17 @@ public:
   Ptr<Ipv4Interface> GetIpv4Interface (void);
   
   /**
+   * \brief Sets the scheduled retransmission event for this message
+   * \param rtxEvent The retransmission event scheduled by the HomaRecvScheduler.
+   */
+  void SetRtxEvent (EventId rtxEvent);
+  /**
+   * \brief Gets the most recent retransmission event for this message, either scheduled or expired.
+   * \return The most recent retransmission event scheduled by the HomaRecvScheduler.
+   */
+  EventId GetRtxEvent (void);
+  
+  /**
    * \return Whether this message has been fully granted
    */
   bool IsFullyGranted (void);
@@ -602,6 +613,8 @@ private:
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far (default: 0)
+  
+  EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
 };
     
 /******************************************************************************/
