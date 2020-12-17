@@ -70,6 +70,14 @@ HomaL4Protocol::GetTypeId (void)
                    UintegerValue (2),
                    MakeUintegerAccessor (&HomaL4Protocol::m_numUnschedPrioBands),
                    MakeUintegerChecker<uint8_t> ())
+    .AddAttribute ("InbndRtxTimeout", "Time value to determine the retransmission timeout of InboundMsgs",
+                   TimeValue (MicroSeconds (50)),
+                   MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
+                   MakeTimeChecker (MicroSeconds (0)))
+    .AddAttribute ("OutbndRtxTimeout", "Time value to determine the retransmission timeout of OutboundMsgs",
+                   TimeValue (MicroSeconds (100)),
+                   MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
+                   MakeTimeChecker (MicroSeconds (0)))
   ;
   return tid;
 }
@@ -79,8 +87,8 @@ HomaL4Protocol::HomaL4Protocol ()
 {
   NS_LOG_FUNCTION (this);
       
-  m_sendScheduler = CreateObject<HomaSendScheduler> (this);
-  m_recvScheduler = CreateObject<HomaRecvScheduler> (this);
+  m_sendScheduler = CreateObject<HomaSendScheduler> (this, m_outboundRtxTimeout);
+  m_recvScheduler = CreateObject<HomaRecvScheduler> (this, m_inboundRtxTimeout);
 }
 
 HomaL4Protocol::~HomaL4Protocol ()
@@ -692,12 +700,14 @@ TypeId HomaSendScheduler::GetTypeId (void)
   return tid;
 }
     
-HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
+HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
+                                      Time rtxTimeout)
   : m_numCtrlPktsSinceLastTx(0)
 {
   NS_LOG_FUNCTION (this);
       
   m_homa = homaL4Protocol;
+  m_rtxTimeout = rtxTimeout;
   
   // Initially, all the txMsgId values between 0 and MAX_N_MSG are listed as free
   m_txMsgIdFreeList.resize(MAX_N_MSG);
@@ -1153,11 +1163,11 @@ Ptr<Ipv4Interface> HomaInboundMsg::GetIpv4Interface ()
  * the corresponding EventId of messages are kept within the messages 
  * themselves for the sake of being tidy.
  */
-void SetRtxEvent (EventId rtxEvent)
+void HomaInboundMsg::SetRtxEvent (EventId rtxEvent)
 {
   m_rtxEvent = rtxEvent;
 }
-EventId GetRtxEvent ()
+EventId HomaInboundMsg::GetRtxEvent ()
 {
   return m_rtxEvent;
 }
@@ -1278,11 +1288,13 @@ TypeId HomaRecvScheduler::GetTypeId (void)
   return tid;
 }
     
-HomaRecvScheduler::HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
+HomaRecvScheduler::HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
+                                      Time rtxTimeout)
 {
   NS_LOG_FUNCTION (this);
       
   m_homa = homaL4Protocol;
+  m_rtxTimeout = rtxTimeout;
 }
 
 HomaRecvScheduler::~HomaRecvScheduler ()

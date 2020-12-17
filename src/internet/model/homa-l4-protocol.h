@@ -251,6 +251,9 @@ private:
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
   Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
+    
+  Time m_inboundRtxTimeout; //!< Time value to determine the retransmission timeout of InboundMsgs
+  Time m_outboundRtxTimeout; //!< Time value to determine the retransmission timeout of OutboundMsgs
 };
     
 /******************************************************************************/
@@ -410,7 +413,8 @@ public:
   static TypeId GetTypeId (void);
   static const uint16_t MAX_N_MSG; //!< Maximum number of messages a HomaSendScheduler can hold
 
-  HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
+  HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
+                     Time rtxTimeout);
   ~HomaSendScheduler (void);
   
   /**
@@ -483,6 +487,8 @@ private:
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
   std::list<Ipv4Address> m_busyReceivers; //!< List of busy receivers that packets shouldn't be sent to
+  
+  Time m_rtxTimeout; //!< Time to expire the retransmission events.
 };
     
 /******************************************************************************/
@@ -638,7 +644,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
+  HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
+                     Time rtxTimeout);
   ~HomaRecvScheduler (void);
   
   /**
@@ -750,6 +757,8 @@ private:
   
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address
+  
+  Time m_rtxTimeout; //!< Time to expire the retransmission events.
 };
     
 } // namespace ns3
