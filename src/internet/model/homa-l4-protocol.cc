@@ -958,10 +958,10 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
   uint16_t targetTxMsgId = homaHeader.GetTxMsgId();
   Ptr<HomaOutboundMsg> targetMsg = m_outboundMsgs[targetTxMsgId];
   // Verify that the TxMsgId indeed matches the 4 tuple
-  NS_ASSERT( (targetMsg->GetSrcAddress() == ipv4Header.GetSource ()) &&
-             (targetMsg->GetDstAddress() == ipv4Header.GetDestination ()) && 
-             (targetMsg->GetSrcPort() == homaHeader.GetSrcPort ()) &&
-             (targetMsg->GetDstPort() == homaHeader.GetDstPort ()) );
+  NS_ASSERT( (targetMsg->GetSrcAddress() == ipv4Header.GetDestination ()) &&
+             (targetMsg->GetDstAddress() == ipv4Header.GetSource ()) && 
+             (targetMsg->GetSrcPort() == homaHeader.GetDstPort ()) &&
+             (targetMsg->GetDstPort() == homaHeader.GetSrcPort ()) );
   
   uint8_t ctrlFlag = homaHeader.GetFlags();
   if (ctrlFlag & HomaHeader::Flags_t::GRANT)
@@ -1534,6 +1534,11 @@ void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
                      inboundMsg->GetSrcPort(),
                      inboundMsg->GetDstPort(),
                      inboundMsg->GetIpv4Interface());
+        
+  // TODO: Send one last Grant as below to acknowledge the arrival of whole message?
+  m_homa->SendDown(inboundMsg->GenerateGrant(m_numUnschedPrioBands),
+                   inboundMsg->GetDstAddress (),
+                   inboundMsg->GetSrcAddress ());
     
   /*
    * Since the message is being forwarded up, it should have been 
@@ -1563,6 +1568,7 @@ void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundM
       NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
                    ") from the active messages list of HomaRecvScheduler (" << 
                    this << ").");
+        
       Simulator::Cancel (currentMsg->GetRtxEvent ());
       m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
       msgRemoved = true;
