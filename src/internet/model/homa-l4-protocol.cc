@@ -535,6 +535,18 @@ uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
   return m_maxGrantedIdx;
 }
     
+bool HomaOutboundMsg::IsFullyDelivered ()
+{
+  for (uint16_t i = 0; i < m_deliveredPackets.size(); i++)
+  {
+    if (!m_deliveredPackets[i])
+    {
+      return false;
+    }
+  }
+  return true;
+}
+    
 void HomaOutboundMsg::SetPrio (uint8_t prio)
 {
   m_prio = prio;
@@ -661,7 +673,17 @@ void HomaOutboundMsg::HandleResend (HomaHeader const &homaHeader)
     
   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::RESEND);
     
-  m_toBeTxPackets[homaHeader.GetPktOffset ()] = true;
+  uint16_t pktOffset = homaHeader.GetPktOffset ();
+  if (!m_deliveredPackets[pktOffset])
+  {
+    m_toBeTxPackets[pktOffset] = true;
+  }
+  else
+  {
+    NS_LOG_LOGIC("HomaOutboundMsg (" << this <<
+                 ") has received a RESEND for pkt " << pktOffset <<
+                 " which is already delivered to the receiver.");
+  }
     
   // TODO: Is this really all we need to do for RESEND?
 }
@@ -985,23 +1007,28 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
     return;
   }
     
-  // TODO: How to check if a message is fully delivered, so that 
-  //       HomaSendScheduler can clear state for the message and 
-  //       return the txMsgId as free again?
-    
-  uint16_t nextTxMsgID;
-  this->GetNextMsgId (nextTxMsgID);
-  if (nextTxMsgID != targetTxMsgId) 
+  if (targetMsg->IsFullyDelivered ())
   {
-    // Incoming packet doesn't belong to the highest priority outboung message.
-    NS_LOG_LOGIC("HomaSendScheduler (" << this 
-                 << ") needs to send a BUSY packet for " << targetTxMsgId);
+   // TODO: How to check if a message is fully delivered, so that 
+   //       HomaSendScheduler can clear state for the message and 
+   //       return the txMsgId as free again?
+  }
+  else
+  {
+    uint16_t nextTxMsgID;
+    this->GetNextMsgId (nextTxMsgID);
+    if (nextTxMsgID != targetTxMsgId) 
+    {
+      // Incoming packet doesn't belong to the highest priority outboung message.
+      NS_LOG_LOGIC("HomaSendScheduler (" << this 
+                   << ") needs to send a BUSY packet for " << targetTxMsgId);
       
-    m_homa->SendDown(targetMsg->GenerateBusy (nextTxMsgID), 
-                     targetMsg->GetSrcAddress (), 
-                     targetMsg->GetDstAddress (), 
-                     targetMsg->GetRoute ());
-    m_numCtrlPktsSinceLastTx++;
+      m_homa->SendDown(targetMsg->GenerateBusy (nextTxMsgID), 
+                       targetMsg->GetSrcAddress (), 
+                       targetMsg->GetDstAddress (), 
+                       targetMsg->GetRoute ());
+      m_numCtrlPktsSinceLastTx++;
+    }
   }
     
   /* 
@@ -1148,12 +1175,14 @@ bool HomaInboundMsg::IsGrantable ()
     
 bool HomaInboundMsg::IsFullyReceived ()
 {
-  bool allReceived = true;
   for (uint16_t i = 0; i < m_receivedPackets.size(); i++)
   {
-    allReceived = allReceived && m_receivedPackets[i];
+    if (!m_receivedPackets[i])
+    {
+      return false;
+    }
   }
-  return allReceived;
+  return true;
 }
     
 /*

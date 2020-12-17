@@ -325,6 +325,11 @@ public:
   uint16_t GetMaxGrantedIdx(void);
   
   /**
+   * \return Whether this message has been fully acknowledged by the receiver
+   */
+  bool IsFullyDelivered (void);
+  
+  /**
    * \brief Set the the priority requested for this message by the receiver.
    * \param prio the priority of this message
    */
