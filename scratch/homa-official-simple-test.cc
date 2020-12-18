@@ -70,6 +70,34 @@ AppReceive (Ptr<Socket> receiverSocket)
   }
 }
 
+void TraceMsgBegin (Ptr<OutputStreamWrapper> stream,
+                    Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                    uint16_t sport, uint16_t dport, int txMsgId)
+{
+  NS_LOG_UNCOND("+ " << Simulator::Now ().GetNanoSeconds () 
+                << " " << saddr << ":" << sport 
+                << " "  << daddr << ":" << dport 
+                << " " << txMsgId);
+    
+  *stream->GetStream () << "+ " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << std::endl;
+}
+
+void TraceMsgFinish (Ptr<OutputStreamWrapper> stream,
+                     Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                     uint16_t sport, uint16_t dport, int txMsgId)
+{
+  NS_LOG_UNCOND("- " << Simulator::Now ().GetNanoSeconds () 
+                << " " << saddr << ":" << sport 
+                << " "  << daddr << ":" << dport 
+                << " " << txMsgId);
+    
+  *stream->GetStream () << "- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << std::endl;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -78,9 +106,9 @@ main (int argc, char *argv[])
     
   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
-  LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+//   LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 
   /******** Create Nodes ********/
@@ -157,6 +185,15 @@ main (int argc, char *argv[])
   Ptr<Socket> receiverSocket = receiverSocketFactory->CreateSocket ();
   InetSocketAddress receiverAddr = InetSocketAddress (receiverIf.GetAddress (1), 2020);
   receiverSocket->Bind (receiverAddr);
+    
+  /* Set the message traces for the Homa clients*/
+  AsciiTraceHelper asciiTraceHelper;
+  Ptr<OutputStreamWrapper> qStream;
+  qStream = asciiTraceHelper.CreateFileStream ("HomaOfficialSimpleTestMsgTraces.tr");
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
+                                MakeBoundCallback(&TraceMsgBegin, qStream));
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
+                                MakeBoundCallback(&TraceMsgFinish, qStream));
     
   /******** Create a Message and Schedule to be Sent ********/
   HomaHeader homah;
