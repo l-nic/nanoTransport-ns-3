@@ -191,6 +191,15 @@ main (int argc, char *argv[])
   InetSocketAddress receiverAddr = InetSocketAddress (receiverIf.GetAddress (1), 2020);
   receiverSocket->Bind (receiverAddr);
     
+  /* Set the message traces for the Homa clients*/
+  AsciiTraceHelper asciiTraceHelper;
+  Ptr<OutputStreamWrapper> qStream;
+  qStream = asciiTraceHelper.CreateFileStream ("HomaOfficialSimpleTestMsgTraces.tr");
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
+                                MakeBoundCallback(&TraceMsgBegin, qStream));
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
+                                MakeBoundCallback(&TraceMsgFinish, qStream));
+    
   /******** Create a Message and Schedule to be Sent ********/
   HomaHeader homah;
   Ipv4Header ipv4h;

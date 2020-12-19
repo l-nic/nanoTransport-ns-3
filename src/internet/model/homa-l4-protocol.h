@@ -28,6 +28,7 @@
 #include "ns3/ptr.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "ns3/traced-callback.h"
 #include "ns3/node.h"
 #include "ns3/data-rate.h"
 #include "ip-l4-protocol.h"
@@ -207,11 +208,12 @@ public:
    * \param header The IPv4 header associated with the message
    * \param sport The source port of the message
    * \param dport The destinateion port of the message
+   * \param txMsgId The message ID determined by the sender
    * \param incomingInterface The interface from which the message arrived
    */ 
   void ForwardUp (Ptr<Packet> completeMsg,
                   const Ipv4Header &header,
-                  uint16_t sport, uint16_t dport,
+                  uint16_t sport, uint16_t dport, uint16_t txMsgId,
                   Ptr<Ipv4Interface> incomingInterface);
   
   // inherited from Ipv4L4Protocol (Not used for Homa Transport Purposes)
@@ -254,6 +256,9 @@ private:
     
   Time m_inboundRtxTimeout; //!< Time value to determine the retransmission timeout of InboundMsgs
   Time m_outboundRtxTimeout; //!< Time value to determine the retransmission timeout of OutboundMsgs
+    
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
 };
     
 /******************************************************************************/
@@ -456,9 +461,9 @@ public:
   /**
    * \brief Accept a new message from the upper layers and add to the list of pending messages
    * \param outMsg The outbound message to be accepted
-   * \return Whether the message was accepted or not
+   * \return The txMsgId allocated for this message (-1 if the message is not scheduled)
    */
-  bool ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg);
+  int ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg);
   
   /**
    * \brief Determines which message would be selected to send a packet from
