@@ -497,7 +497,6 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     numPkts ++;
   } 
   m_msgSizePkts = numPkts;
-  NS_ASSERT(m_msgSizePkts==2);
           
   m_rttPackets = rttPackets;
   m_maxGrantedIdx = std::min(m_rttPackets, m_msgSizePkts);

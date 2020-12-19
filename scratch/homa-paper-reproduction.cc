@@ -112,11 +112,11 @@ main (int argc, char *argv[])
   CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
     
-  Packet::EnablePrinting ();
+//   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_ALL);  
-  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
+//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
   int nHosts = 144;
   int nTors = 9;
@@ -248,7 +248,7 @@ main (int argc, char *argv[])
   uint32_t payloadSize = hostTorDevices[senderHostIdx].Get (0)->GetMtu() 
                          - homah.GetSerializedSize ()
                          - ipv4h.GetSerializedSize ();
-  Ptr<Packet> appMsg = Create<Packet> (payloadSize*2);
+  Ptr<Packet> appMsg = Create<Packet> (payloadSize*3);
   
   Simulator::Schedule (Seconds (3.0), &AppSendTo, senderSocket, appMsg, receiverAddr);
   receiverSocket->SetRecvCallback (MakeCallback (&AppReceive));
