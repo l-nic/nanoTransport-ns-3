@@ -30,8 +30,10 @@
 //     for Computing Machinery, New York, NY, USA, 221–235. 
 //     DOI:https://doi.org/10.1145/3230543.3230564
 
-#include <iostream>
 #include <stdlib.h>
+#include <iostream>
+#include <fstream>
+#include <string>
 
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
@@ -106,6 +108,36 @@ void TraceMsgFinish (Ptr<OutputStreamWrapper> stream,
       << " " << txMsgId << std::endl;
 }
 
+std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &avgMsgSizePkts)
+{
+  std::ifstream msgSizeDistFile;
+  msgSizeDistFile.open (msgSizeDistFileName);
+  NS_LOG_FUNCTION("Reading Msg Size Distribution From: " << msgSizeDistFileName);
+    
+  std::string line;
+  std::istringstream lineBuffer;
+  
+  getline (msgSizeDistFile, line);
+  lineBuffer.str (line);
+  lineBuffer >> avgMsgSizePkts;
+    
+  std::map<double,int> msgSizeCDF;
+  double prob;
+  int msgSizePkts;
+  while(getline (msgSizeDistFile, line)) 
+  {
+    lineBuffer.clear ();
+    lineBuffer.str (line);
+    lineBuffer >> msgSizePkts;
+    lineBuffer >> prob;
+      
+    msgSizeCDF[prob] = msgSizePkts;
+  }
+  msgSizeDistFile.close();
+    
+  return msgSizeCDF;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -117,6 +149,9 @@ main (int argc, char *argv[])
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
 //   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+    
+  std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
+  std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces.tr");
     
   int nHosts = 144;
   int nTors = 9;
@@ -217,6 +252,17 @@ main (int argc, char *argv[])
   
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
+  /******** Read the Workload Distribution From File ********/
+  double avgMsgSizePkts;
+  std::map<double,int> msgSizeCDF = ReadMsgSizeDist(msgSizeDistFileName, avgMsgSizePkts);
+    
+  NS_LOG_LOGIC ("The CDF of message sizes is given below: ");
+  for (auto it = msgSizeCDF.begin(); it != msgSizeCDF.end(); it++)
+  {
+    NS_LOG_LOGIC (it->second << " : " << it->first);
+  }
+  NS_LOG_LOGIC("Average Message Size is: " << avgMsgSizePkts);
+    
   /******** Create and Bind Homa Sockets on End-hosts ********/
   int senderHostIdx = 0;
   Ptr<SocketFactory> senderSocketFactory = hostNodes.Get (senderHostIdx)->GetObject<HomaSocketFactory> ();
@@ -235,7 +281,7 @@ main (int argc, char *argv[])
   /* Set the message traces for the Homa clients*/
   AsciiTraceHelper asciiTraceHelper;
   Ptr<OutputStreamWrapper> qStream;
-  qStream = asciiTraceHelper.CreateFileStream ("HomaPaperReproductionMsgTraces.tr");
+  qStream = asciiTraceHelper.CreateFileStream (msgTracesFileName);
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
                                 MakeBoundCallback(&TraceMsgBegin, qStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
