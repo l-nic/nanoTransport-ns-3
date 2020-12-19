@@ -78,6 +78,16 @@ HomaL4Protocol::GetTypeId (void)
                    TimeValue (MicroSeconds (100)),
                    MakeTimeAccessor (&HomaL4Protocol::m_outboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
+    .AddTraceSource ("MsgBegin",
+                     "Trace source indicating a message has been delivered to "
+                     "the HomaL4Protocol by the sender application layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgBeginTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("MsgFinish",
+                     "Trace source indicating a message has been delivered to "
+                     "the receiver application by the HomaL4Protocol layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgFinishTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -264,7 +274,10 @@ HomaL4Protocol::Send (Ptr<Packet> message,
                                                                m_mtu, m_bdp);
   outMsg->SetRoute (route); // This is mostly unnecessary
   outMsg->SetRtxTimeout (m_outboundRtxTimeout);
-  m_sendScheduler->ScheduleNewMsg(outMsg);
+  int txMsgId = m_sendScheduler->ScheduleNewMsg(outMsg);
+    
+  if (txMsgId >= 0)
+    m_msgBeginTrace(message, saddr, daddr, sport, dport, txMsgId);
 }
 
 /*
@@ -350,7 +363,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
  */
 void HomaL4Protocol::ForwardUp (Ptr<Packet> completeMsg,
                                 const Ipv4Header &header,
-                                uint16_t sport, uint16_t dport,
+                                uint16_t sport, uint16_t dport, uint16_t txMsgId,
                                 Ptr<Ipv4Interface> incomingInterface)
 {
   NS_LOG_FUNCTION (this << completeMsg << header << sport << incomingInterface);
@@ -368,6 +381,9 @@ void HomaL4Protocol::ForwardUp (Ptr<Packet> completeMsg,
   {
     (*endPoint)->ForwardUp (completeMsg, header, sport, incomingInterface);
   }
+    
+  m_msgFinishTrace(completeMsg, header.GetSource(), header.GetDestination(), 
+                   sport, dport, (int)txMsgId);
 }
 
 // inherited from Ipv4L4Protocol (Not used for Homa Transport Purposes)
@@ -810,8 +826,7 @@ void HomaSendScheduler::SetPacer ()
  * It inserts the message into the list of pending outbound messages and updates
  * the scheduler's state accordingly.
  */
-bool 
-HomaSendScheduler::ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg)
+int HomaSendScheduler::ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg)
 {
   NS_LOG_FUNCTION (this << outMsg);
     
@@ -840,9 +855,9 @@ HomaSendScheduler::ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg)
                  " Error: HomaSendScheduler ("<< this << 
                  ") could not allocate a new txMsgId for message (" << 
                  outMsg << ")" );
-    return false;
+    return -1;
   }
-  return true;
+  return (int)txMsgId;
 }
    
 /*
@@ -1614,6 +1629,7 @@ void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
                      inboundMsg->GetIpv4Header (),
                      inboundMsg->GetSrcPort(),
                      inboundMsg->GetDstPort(),
+                     inboundMsg->GetTxMsgId(),
                      inboundMsg->GetIpv4Interface());
         
   // TODO: Send one last Grant as below to acknowledge the arrival of whole message?
