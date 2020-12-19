@@ -112,7 +112,7 @@ main (int argc, char *argv[])
   Time::SetResolution (Time::NS);
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
 //   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
-  LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 
   /******** Create Nodes ********/
@@ -191,6 +191,15 @@ main (int argc, char *argv[])
   InetSocketAddress receiverAddr = InetSocketAddress (receiverIf.GetAddress (1), 2020);
   receiverSocket->Bind (receiverAddr);
     
+  /* Set the message traces for the Homa clients*/
+  AsciiTraceHelper asciiTraceHelper;
+  Ptr<OutputStreamWrapper> qStream;
+  qStream = asciiTraceHelper.CreateFileStream ("HomaOfficialSimpleTestMsgTraces.tr");
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
+                                MakeBoundCallback(&TraceMsgBegin, qStream));
+  Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
+                                MakeBoundCallback(&TraceMsgFinish, qStream));
+    
   /******** Create a Message and Schedule to be Sent ********/
   HomaHeader homah;
   Ipv4Header ipv4h;
@@ -203,6 +212,7 @@ main (int argc, char *argv[])
   Simulator::Schedule (Seconds (3.0), &AppSendTo, senderSocket, appMsg, receiverAddr);
   receiverSocket->SetRecvCallback (MakeCallback (&AppReceive));
 
+  /******** Run the Actual Simulation ********/
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;
