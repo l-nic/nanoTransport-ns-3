@@ -50,7 +50,7 @@ AppSendTo (Ptr<Socket> senderSocket,
                   "Sending an application message.");
     
   int sentBytes = senderSocket->SendTo (appMsg, 0, receiverAddr);
-  NS_LOG_DEBUG(sentBytes << " Bytes sent to " << receiverAddr);
+  NS_LOG_INFO(sentBytes << " Bytes sent to " << receiverAddr);
 }
 
 void

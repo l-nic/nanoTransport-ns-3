@@ -98,7 +98,7 @@ HomaL4Protocol::HomaL4Protocol ()
   NS_LOG_FUNCTION (this);
       
   m_sendScheduler = CreateObject<HomaSendScheduler> (this);
-  m_recvScheduler = CreateObject<HomaRecvScheduler> (this, m_inboundRtxTimeout);
+  m_recvScheduler = CreateObject<HomaRecvScheduler> (this);
 }
 
 HomaL4Protocol::~HomaL4Protocol ()
@@ -153,7 +153,7 @@ HomaL4Protocol::NotifyNewAggregate ()
           NS_ASSERT(m_mtu); // m_mtu is set inside SetNode() above.
           NS_ASSERT_MSG(m_numTotalPrioBands > m_numUnschedPrioBands,
                 "Total number of priority bands should be larger than the number of bands dedicated for unscheduled packets.");
-          m_recvScheduler->SetNetworkConfig (m_mtu, m_bdp, 
+          m_recvScheduler->SetNetworkConfig (m_mtu, m_bdp, m_inboundRtxTimeout,
                                              m_numTotalPrioBands, m_numUnschedPrioBands);
         }
     }
@@ -497,6 +497,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     numPkts ++;
   } 
   m_msgSizePkts = numPkts;
+  NS_ASSERT(m_msgSizePkts==2);
           
   m_rttPackets = rttPackets;
   m_maxGrantedIdx = std::min(m_rttPackets, m_msgSizePkts);
@@ -993,11 +994,11 @@ HomaSendScheduler::TxDataPacket ()
   uint16_t nextTxMsgID;
   Ptr<Packet> p;
   if (this->GetNextMsgId (nextTxMsgID))
-  {
+  {   
+    NS_ASSERT(this->GetNextPktOfMsg(nextTxMsgID, p));
+      
     NS_LOG_LOGIC("HomaSendScheduler (" << this <<
                   ") will transmit a packet from msg " << nextTxMsgID);
-      
-    NS_ASSERT(this->GetNextPktOfMsg(nextTxMsgID, p));
       
     Ptr<HomaOutboundMsg> nextMsg = m_outboundMsgs[nextTxMsgID];
     Ipv4Address saddr = nextMsg->GetSrcAddress ();
@@ -1389,13 +1390,11 @@ TypeId HomaRecvScheduler::GetTypeId (void)
   return tid;
 }
     
-HomaRecvScheduler::HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
-                                      Time rtxTimeout)
+HomaRecvScheduler::HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
 {
   NS_LOG_FUNCTION (this);
       
   m_homa = homaL4Protocol;
-  m_rtxTimeout = rtxTimeout;
 }
 
 HomaRecvScheduler::~HomaRecvScheduler ()
@@ -1408,13 +1407,14 @@ HomaRecvScheduler::~HomaRecvScheduler ()
  * NotifyNewAggregate()) to set up the correct topological information 
  * inside the Homa protocol logic. 
  */
-void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
+void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
                                           uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands)
 {
   NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
     
   m_mtuBytes = mtuBytes;
   m_rttPackets = rttPackets;
+  m_rtxTimeout = rtxTimeout;
   m_numTotalPrioBands = numTotalPrioBands;
   m_numUnschedPrioBands = numUnschedPrioBands;
 }
@@ -1773,7 +1773,8 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
     if (activeMsgIdx >= 0)
     {
       // We send RESEND packets only to non-busy senders
-      NS_LOG_LOGIC("Rtx Timer for an inbound Msg (" << inboundMsg << 
+      NS_LOG_LOGIC(Simulator::Now().GetNanoSeconds () << 
+                   " Rtx Timer for an inbound Msg (" << inboundMsg << 
                    ") expired, which is active. RESEND packets will be sent");
         
       std::list<Ptr<Packet>> rsndPkts = inboundMsg->GenerateResends (maxRsndPktOffset);
@@ -1793,8 +1794,9 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
   }
   else
   {
-    NS_LOG_DEBUG("Rtx Timer for an inbound Msg (" << inboundMsg << 
-                   ") expired, which doesn't exist any more.");
+    NS_LOG_DEBUG(Simulator::Now().GetNanoSeconds () << 
+                 " Rtx Timer for an inbound Msg (" << inboundMsg << 
+                 ") expired, which doesn't exist any more.");
   }  
   return;
 }

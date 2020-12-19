@@ -54,7 +54,7 @@ AppSendTo (Ptr<Socket> senderSocket,
                   "Sending an application message.");
     
   int sentBytes = senderSocket->SendTo (appMsg, 0, receiverAddr);
-  NS_LOG_DEBUG(sentBytes << " Bytes sent to " << receiverAddr);
+  NS_LOG_INFO(sentBytes << " Bytes sent to " << receiverAddr);
 }
 
 void
@@ -112,11 +112,11 @@ main (int argc, char *argv[])
   CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
     
-//   Packet::EnablePrinting ();
+  Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
-//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_ALL);  
+  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
   int nHosts = 144;
   int nTors = 9;
@@ -190,7 +190,7 @@ main (int argc, char *argv[])
                              "NumBands", UintegerValue(numTotalPrioBands));
   for (int i = 0; i < nHosts; i++)
   {
-    tchPfifoHoma.Install (hostTorDevices[i]);
+    tchPfifoHoma.Install (hostTorDevices[i].Get(1));
   }
   for (int i = 0; i < nTors*nSpines; i++)
   {
@@ -248,7 +248,7 @@ main (int argc, char *argv[])
   uint32_t payloadSize = hostTorDevices[senderHostIdx].Get (0)->GetMtu() 
                          - homah.GetSerializedSize ()
                          - ipv4h.GetSerializedSize ();
-  Ptr<Packet> appMsg = Create<Packet> (payloadSize);
+  Ptr<Packet> appMsg = Create<Packet> (payloadSize*2);
   
   Simulator::Schedule (Seconds (3.0), &AppSendTo, senderSocket, appMsg, receiverAddr);
   receiverSocket->SetRecvCallback (MakeCallback (&AppReceive));

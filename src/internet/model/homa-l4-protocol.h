@@ -676,8 +676,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol,
-                     Time rtxTimeout);
+  HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
   ~HomaRecvScheduler (void);
   
   /**
@@ -687,7 +686,7 @@ public:
    * \param numTotalPrioBands Total number of priority levels used within the network
    * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
    */
-  void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets,
+  void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
                          uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands);
   
   /**
