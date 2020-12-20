@@ -147,6 +147,7 @@ main (int argc, char *argv[])
 //   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
+//   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
 //   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
@@ -156,6 +157,8 @@ main (int argc, char *argv[])
   int nHosts = 144;
   int nTors = 9;
   int nSpines = 4;
+    
+  double networkLoad = 0.5;
   
   /******** Create Nodes ********/
   NodeContainer hostNodes;
@@ -266,21 +269,24 @@ main (int argc, char *argv[])
   }
   NS_LOG_LOGIC("Average Message Size is: " << avgMsgSizePkts);
     
-  /******** Create and Bind Homa Sockets on End-hosts ********/
-  int senderHostIdx = 0;
-  Ptr<SocketFactory> senderSocketFactory = hostNodes.Get (senderHostIdx)->GetObject<HomaSocketFactory> ();
-  Ptr<Socket> senderSocket = senderSocketFactory->CreateSocket ();
-  InetSocketAddress senderAddr = InetSocketAddress (hostTorIfs[senderHostIdx].GetAddress (0), 
-                                                    1000+senderHostIdx);
-  senderSocket->Bind (senderAddr);
+  /******** Create Message Generator Apps on End-hosts ********/
+  HomaHeader homah;
+  Ipv4Header ipv4h;
+  uint32_t payloadSize = hostTorDevices[0].Get (0)->GetMtu() 
+                         - homah.GetSerializedSize ()
+                         - ipv4h.GetSerializedSize ();
     
-  int receiverHostIdx = 1;//nHosts-1;
-  Ptr<SocketFactory> receiverSocketFactory = hostNodes.Get (receiverHostIdx)->GetObject<HomaSocketFactory> ();
-  Ptr<Socket> receiverSocket = receiverSocketFactory->CreateSocket ();
-  InetSocketAddress receiverAddr = InetSocketAddress (hostTorIfs[receiverHostIdx].GetAddress (0), 
-                                                      2000+receiverHostIdx);
-  receiverSocket->Bind (receiverAddr);
-    
+  for (int i = 0; i < nHosts; i++)
+  {
+    Ptr<MsgGeneratorApp> app = CreateObject<MsgGeneratorApp>(hostTorIfs[i].GetAddress (0),
+                                                             1000 + i, payloadSize);
+    app->Install (hostNodes.Get (i), clientAddresses);
+    app->SetWorkload (networkLoad, msgSizeCDF, avgMsgSizePkts);
+      
+    app->Start(Seconds (3.0));
+    app->Stop(Seconds (3.1));
+  }
+      
   /* Set the message traces for the Homa clients*/
   AsciiTraceHelper asciiTraceHelper;
   Ptr<OutputStreamWrapper> qStream;
@@ -289,19 +295,7 @@ main (int argc, char *argv[])
                                 MakeBoundCallback(&TraceMsgBegin, qStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
                                 MakeBoundCallback(&TraceMsgFinish, qStream));
-    
-  /******** Create a Message and Schedule to be Sent ********/
-  HomaHeader homah;
-  Ipv4Header ipv4h;
-    
-  uint32_t payloadSize = hostTorDevices[senderHostIdx].Get (0)->GetMtu() 
-                         - homah.GetSerializedSize ()
-                         - ipv4h.GetSerializedSize ();
-  Ptr<Packet> appMsg = Create<Packet> (payloadSize*3);
-  
-  Simulator::Schedule (Seconds (3.0), &AppSendTo, senderSocket, appMsg, receiverAddr);
-  receiverSocket->SetRecvCallback (MakeCallback (&AppReceive));
-    
+
   /******** Run the Actual Simulation ********/
   Simulator::Run ();
   Simulator::Destroy ();

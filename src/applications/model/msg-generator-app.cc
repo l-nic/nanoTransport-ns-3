@@ -98,16 +98,22 @@ void MsgGeneratorApp::Install (Ptr<Node> node,
   m_socket->SetRecvCallback (MakeCallback (&MsgGeneratorApp::ReceiveMessage,
                                            this));
     
-  for (std::size_t i = remoteClients.size()-1; i >= 0; i--)
+  for (std::size_t i = 0; i < remoteClients.size(); i++)
   {
-    if (remoteClients[i].GetIpv4() == m_localIp &&
-        remoteClients[i].GetPort() == m_localPort)
+    if (remoteClients[i].GetIpv4() != m_localIp ||
+        remoteClients[i].GetPort() != m_localPort)
+    {
+      m_remoteClients.push_back(remoteClients[i]);
+    }
+    else
     {
       // Remove the local address from the client addresses list
-      remoteClients.erase(remoteClients.begin()+i);
+      NS_LOG_LOGIC("MsgGeneratorApp (" << this << 
+                   ") removes address " << remoteClients[i].GetIpv4() <<
+                   ":" << remoteClients[i].GetPort() <<
+                   " from remote clients because it is the local address.");
     }
   }
-  m_remoteClients = remoteClients;
     
   m_remoteClient = CreateObject<UniformRandomVariable> ();
   m_remoteClient->SetAttribute ("Min", DoubleValue (0));
@@ -195,7 +201,7 @@ void MsgGeneratorApp::ScheduleNextMessage ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
-  if (!Simulator::IsExpired(m_nextSendEvent))
+  if (Simulator::IsExpired(m_nextSendEvent))
   {
     m_nextSendEvent = Simulator::Schedule (Seconds (m_interMsgTime->GetValue ()),
                                            &MsgGeneratorApp::SendMessage, this);
