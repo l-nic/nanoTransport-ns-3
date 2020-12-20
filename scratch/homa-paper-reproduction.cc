@@ -235,11 +235,14 @@ main (int argc, char *argv[])
   /* Set IP addresses of the nodes in the network */
   Ipv4AddressHelper address;
   address.SetBase ("10.0.0.0", "255.255.255.0");
+  std::vector<InetSocketAddress> clientAddresses;
     
   Ipv4InterfaceContainer hostTorIfs[nHosts];
   for (int i = 0; i < nHosts; i++)
   {
     hostTorIfs[i] = address.Assign (hostTorDevices[i]);
+    clientAddresses.push_back(InetSocketAddress (hostTorIfs[i].GetAddress (0), 
+                                                 1000+i));
     address.NewNetwork ();
   }
   
