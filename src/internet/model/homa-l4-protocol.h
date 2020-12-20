@@ -254,8 +254,9 @@ private:
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
   Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
     
-  Time m_inboundRtxTimeout; //!< Time value to determine the retransmission timeout of InboundMsgs
+  Time m_inboundRtxTimeout;  //!< Time value to determine the retransmission timeout of InboundMsgs
   Time m_outboundRtxTimeout; //!< Time value to determine the retransmission timeout of OutboundMsgs
+  uint16_t m_maxNumRtxPerMsg;    //!< Maximum allowed rtx timeout count per message
     
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
@@ -589,10 +590,27 @@ public:
   EventId GetRtxEvent (void);
   
   /**
+   * \brief Get the highest grantable packet index for this message.
+   * \return The highest grantable packet index so far
+   */
+  uint16_t GetMaxGrantableIdx (void);
+  /**
    * \brief Get the highest granted packet index for this message.
    * \return The highest granted packet index so far
    */
   uint16_t GetMaxGrantedIdx (void);
+  
+  /**
+   * \brief Set m_maxGrantableIdx value as of last time rtx timer expired.
+   * \param The highest grantable pkt index as of last time rtx timer expired.
+   */
+  void SetLastRtxGrntIdx (uint16_t lastRtxGrntIdx);
+  /**
+   * \brief Get m_maxGrantableIdx value as of last time rtx timer expired.
+   * \return The highest grantable pkt index as of last time rtx timer expired.
+   */
+  uint16_t GetLastRtxGrntIdx (void);
+  
   /**
    * \return Whether this message has been fully granted
    */
@@ -605,6 +623,20 @@ public:
    * \return Whether this message has been fully received
    */
   bool IsFullyReceived (void);
+  
+  /**
+   * \brief Get the number of rtx timeouts without receiving any new packet
+   * \return The number of consecutive retransmission timeouts
+   */
+  uint16_t GetNumCosecRtx (void);
+  /**
+   * \brief Increments the number of rtx timeouts by 1
+   */
+  void IncrementNumConsecRtx (void);
+  /**
+   * \brief Resent the number of rtx timeouts to 0
+   */
+  void ResetNumConsecRtx (void);
   
   /**
    * \brief Insert the received data packet in the buffer and update state
@@ -649,10 +681,12 @@ private:
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
-  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far (default: 0)
+  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far
+  uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantableIdx value as of last time rtx timer expired (default: 0)
   uint8_t m_prio;            //!< The most recent granted priority set for this message
   
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
+  uint16_t m_numConsecRtx;   //!< The number of retransmission timeouts without receiving any new packet
 };
     
 /******************************************************************************/
@@ -687,7 +721,8 @@ public:
    * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
    */
   void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
-                         uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands);
+                         uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands,
+                         uint16_t maxNumRtxPerMsg);
   
   /**
    * \brief Notify this HomaRecvScheduler upon arrival of a packet
@@ -768,6 +803,12 @@ public:
   void RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg);
   
   /**
+   * \brief Remove the given message from the list of busy messages upon timeout
+   * \param inboundMsg The incoming message that is to be removed.
+   */
+  void RemoveMsgFromBusyMsgsList(Ptr<HomaInboundMsg> inboundMsg);
+  
+  /**
    * \brief Updates the state for the corresponding inbound message per the received BUSY.
    * \param senderAddress The address of the sender who is busy
    */
@@ -796,7 +837,8 @@ private:
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address
   
-  Time m_rtxTimeout; //!< Time to expire the retransmission events.
+  Time m_rtxTimeout;     //!< Time to expire the retransmission events.
+  uint16_t m_maxNumRtxPerMsg;    //!< Maximum allowed rtx timeout count per inbound message
 };
     
 } // namespace ns3

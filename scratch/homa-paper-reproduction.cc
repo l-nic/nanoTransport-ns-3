@@ -149,7 +149,7 @@ main (int argc, char *argv[])
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ERROR);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
   std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces.tr");
@@ -284,7 +284,7 @@ main (int argc, char *argv[])
     app->SetWorkload (networkLoad, msgSizeCDF, avgMsgSizePkts);
       
     app->Start(Seconds (3.0));
-    app->Stop(Seconds (3.1));
+    app->Stop(Seconds (3.001));
   }
       
   /* Set the message traces for the Homa clients*/
