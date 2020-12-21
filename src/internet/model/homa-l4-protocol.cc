@@ -1653,22 +1653,34 @@ void HomaRecvScheduler::RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg,
  * ScheduleNewMsg method calls this one again until the all busy messages
  * of the same sender are scheduled one by one.
  */
-void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIP)
+void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIp)
 {
-  NS_LOG_FUNCTION (this << senderIP);
+  NS_LOG_FUNCTION (this << senderIp);
     
   Ptr<HomaInboundMsg> previouslyBusyMsg;
-  auto busyMsgs = m_busyInboundMsgs.find(senderIP);
-  if (busyMsgs != m_busyInboundMsgs.end())
+  auto busyMsgsOfSender = m_busyInboundMsgs.find(senderIp);
+  if (busyMsgsOfSender != m_busyInboundMsgs.end())
   {
-    previouslyBusyMsg = busyMsgs->second[0]; // Get the message at the head of the vector
-    busyMsgs->second.erase(busyMsgs->second.begin()); // Remove the head from the vector
-    if (busyMsgs->second.size() == 0)
+    if (busyMsgsOfSender->second.size() > 0)
     {
-      m_busyInboundMsgs.erase(busyMsgs); // Delete the entry for the sender because it is empty
-    }
+      previouslyBusyMsg = busyMsgsOfSender->second[0]; // Get the message at the head of the vector
       
-    this->ScheduleNewMsg(previouslyBusyMsg);
+      busyMsgsOfSender->second.erase(busyMsgsOfSender->second.begin()); // Remove the head from the vector
+      if (busyMsgsOfSender->second.size() == 0)
+      {
+        m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
+      }
+      
+      this->ScheduleNewMsg(previouslyBusyMsg);
+    }
+    else
+    {
+      NS_LOG_ERROR("HomaRecvScheduler (" << this << ") detected a "
+                   "Busy sender (" << senderIp << ") which doesn't "
+                   "have a pending message");
+        
+      m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
+    }
   } 
 }
     
@@ -1735,14 +1747,16 @@ void HomaRecvScheduler::RemoveMsgFromBusyMsgsList(Ptr<HomaInboundMsg> inboundMsg
 {
   NS_LOG_FUNCTION (this << inboundMsg);
     
+  uint32_t senderIp = inboundMsg->GetSrcAddress().Get();
+    
   bool msgRemoved = false;
   Ptr<HomaInboundMsg> currentMsg;
-  auto busyMsgs = m_busyInboundMsgs.find(inboundMsg->GetSrcAddress().Get());
-  if (busyMsgs != m_busyInboundMsgs.end())
+  auto busyMsgsOfSender = m_busyInboundMsgs.find(senderIp);
+  if (busyMsgsOfSender != m_busyInboundMsgs.end())
   {
-    for (std::size_t i = 0; i < busyMsgs->second.size(); ++i) 
+    for (std::size_t i = 0; i < busyMsgsOfSender->second.size(); ++i) 
     {
-      currentMsg = busyMsgs->second[i];
+      currentMsg = busyMsgsOfSender->second[i];
       if (currentMsg->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
           currentMsg->GetDstAddress() == inboundMsg->GetDstAddress() &&
           currentMsg->GetSrcPort() == inboundMsg->GetSrcPort() &&
@@ -1752,7 +1766,11 @@ void HomaRecvScheduler::RemoveMsgFromBusyMsgsList(Ptr<HomaInboundMsg> inboundMsg
         NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
                      ") from the busy messages list of HomaRecvScheduler (" << 
                      this << ").");
-        busyMsgs->second.erase(busyMsgs->second.begin()+i);
+        busyMsgsOfSender->second.erase(busyMsgsOfSender->second.begin()+i);
+        if (busyMsgsOfSender->second.size() == 0)
+        {
+          m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
+        }
         msgRemoved = true;
         break;
       }
