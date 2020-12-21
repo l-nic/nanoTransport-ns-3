@@ -47,35 +47,6 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("HomaPaperReproduction");
 
-void
-AppSendTo (Ptr<Socket> senderSocket, 
-           Ptr<Packet> appMsg, 
-           InetSocketAddress receiverAddr)
-{
-  NS_LOG_FUNCTION(Simulator::Now ().GetNanoSeconds () << 
-                  "Sending an application message.");
-    
-  int sentBytes = senderSocket->SendTo (appMsg, 0, receiverAddr);
-  NS_LOG_INFO(sentBytes << " Bytes sent to " << receiverAddr);
-}
-
-void
-AppReceive (Ptr<Socket> receiverSocket)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << 
-                   "Received an application message");
- 
-  Ptr<Packet> message;
-  Address from;
-  while ((message = receiverSocket->RecvFrom (from)))
-  {
-    NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
-                 " client received " << message->GetSize () << " bytes from " <<
-                 InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port " <<
-                 InetSocketAddress::ConvertFrom (from).GetPort ());
-  }
-}
-
 void TraceMsgBegin (Ptr<OutputStreamWrapper> stream,
                     Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
                     uint16_t sport, uint16_t dport, int txMsgId)
@@ -141,7 +112,10 @@ std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &a
 int
 main (int argc, char *argv[])
 {
+  double duration = 0.01;
+    
   CommandLine cmd (__FILE__);
+  cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
   cmd.Parse (argc, argv);
     
 //   Packet::EnablePrinting ();
@@ -284,7 +258,7 @@ main (int argc, char *argv[])
     app->SetWorkload (networkLoad, msgSizeCDF, avgMsgSizePkts);
       
     app->Start(Seconds (3.0));
-    app->Stop(Seconds (3.001));
+    app->Stop(Seconds (3.0 + duration));
   }
       
   /* Set the message traces for the Homa clients*/
