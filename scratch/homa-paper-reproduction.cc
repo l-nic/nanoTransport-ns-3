@@ -118,12 +118,12 @@ main (int argc, char *argv[])
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
   cmd.Parse (argc, argv);
     
-//   Packet::EnablePrinting ();
+  Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
-  LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
-  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+//   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
+//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
   std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces.tr");

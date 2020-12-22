@@ -297,7 +297,7 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
 {
   NS_LOG_FUNCTION (this << packet << saddr << daddr << route);
     
-  m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
+  m_downTarget (packet->Copy(), saddr, daddr, PROT_NUMBER, route);
 }
 
 /*
@@ -321,6 +321,9 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
     
   HomaHeader homaHeader;
   cp->RemoveHeader(homaHeader);
+  NS_ASSERT_MSG(cp->GetSize()==homaHeader.GetPayloadSize(),
+                "HomaL4Protocol (" << this << ") received a packet "
+                " whose payload size doesn't match the homa header field!");
 
   NS_LOG_DEBUG ("Looking up dst " << header.GetDestination () << " port " << homaHeader.GetDstPort ()); 
   Ipv4EndPointDemux::EndPoints endPoints =
@@ -493,14 +496,14 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   while (unpacketizedBytes > 0)
   {
     nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
-    nextPkt = message->CreateFragment (message->GetSize () - unpacketizedBytes, nextPktSize);
+    nextPkt = message->CreateFragment ((uint32_t)m_msgSizeBytes - unpacketizedBytes, nextPktSize);
 
     m_packets.push_back(nextPkt);
     m_deliveredPackets.push_back(false);
     m_toBeTxPackets.push_back(true);
 
     unpacketizedBytes -= nextPktSize;
-    numPkts ++;
+    numPkts++;
   } 
   m_msgSizePkts = numPkts;
           
@@ -1033,6 +1036,7 @@ HomaSendScheduler::TxDataPacket ()
     
   Ipv4Header iph;
   PppHeader pph;
+  HomaHeader homah;
   uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
   Time timeToTx;
   if (m_numCtrlPktsSinceLastTx != 0)
@@ -1041,7 +1045,6 @@ HomaSendScheduler::TxDataPacket ()
                   ") has " <<  m_numCtrlPktsSinceLastTx <<
                   " control packets being transmitted. Postponing data TX.");
     
-    HomaHeader homah;
     headerSize += homah.GetSerializedSize(); // Control packets only have homa header after IP header
     timeToTx = m_txRate.CalculateBytesTxTime (headerSize * m_numCtrlPktsSinceLastTx);
     m_txEvent = Simulator::Schedule (timeToTx, &HomaSendScheduler::TxDataPacket, this);
@@ -1067,6 +1070,7 @@ HomaSendScheduler::TxDataPacket ()
     Ptr<Ipv4Route> route = nextMsg->GetRoute ();
     
     m_homa->SendDown(p, saddr, daddr, route);
+    p->RemoveHeader(homah); // Keep storing the packet without the header for future retransmissions
       
     /* 
      * Calculate the time it would take to serialize this packet and schedule
@@ -1320,7 +1324,7 @@ bool HomaInboundMsg::IsGrantable ()
     
 bool HomaInboundMsg::IsFullyReceived ()
 {
-  for (uint16_t i = 0; i < m_receivedPackets.size(); i++)
+  for (uint16_t i = 0; i < m_msgSizePkts; i++)
   {
     if (!m_receivedPackets[i])
     {
@@ -1379,7 +1383,7 @@ Ptr<Packet> HomaInboundMsg::GetReassembledMsg ()
   NS_LOG_FUNCTION (this);
     
   Ptr<Packet> completeMsg = Create<Packet> ();
-  for (std::size_t i = 0; i < m_packets.size(); i++)
+  for (std::size_t i = 0; i < m_msgSizePkts; i++)
   {
     NS_ASSERT_MSG(m_receivedPackets[i],
                   "ERROR: HomaRecvScheduler is trying to reassemble an incomplete msg!");
@@ -1395,8 +1399,8 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
     
   m_prio = grantedPrio; // Updated with the most recent granted priority value
     
-  uint16_t ackNo = m_receivedPackets.size();
-  for (std::size_t i = 0; i < m_receivedPackets.size(); i++)
+  uint16_t ackNo = m_msgSizePkts;
+  for (std::size_t i = 0; i < m_msgSizePkts; i++)
   {
     if (!m_receivedPackets[i])
     {
