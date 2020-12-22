@@ -297,8 +297,9 @@ public:
   /**
    * \brief Set the retransmission timeout interval for this message
    * \param rtxTimeout The time interval between each timeout
+   * \param maxNumRtxPerMsg Maximum allowed rtx timeout count for this message
    */
-  void SetRtxTimeout (Time rtxTimeout);
+  void SetRtxTimeout (Time rtxTimeout, uint16_t maxNumRtxPerMsg);
   
   /**
    * \brief Get the remaining undelivered bytes of this message.
@@ -340,6 +341,11 @@ public:
    * \return Whether this message has been fully acknowledged by the receiver
    */
   bool IsFullyDelivered (void);
+  
+  /**
+   * \return Whether this message has expired and to be cleared upon rtx timeouts
+   */
+  bool IsExpired (void);
   
   /**
    * \brief Set the the priority requested for this message by the receiver.
@@ -421,12 +427,16 @@ private:
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: m_rttPackets)
+  uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantedIdx value as of last time rtx timer expired (default: 0)
   
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
   
   Time m_rtxTimeout;         //!< Time to expire the retransmission events.
+  uint16_t m_maxNumRtxPerMsg;//!< Maximum allowed rtx timeout count per outbound message
+  uint16_t m_numConsecRtx;   //!< The number of retransmission timeouts without receiving any new packet
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
+  bool m_isExpired;          //!< Whether this message has expired and to be cleared upon rtx timeouts
 };
  
 /******************************************************************************/

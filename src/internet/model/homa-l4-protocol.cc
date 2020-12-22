@@ -278,7 +278,7 @@ HomaL4Protocol::Send (Ptr<Packet> message,
   Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, sport, dport, 
                                                                m_mtu, m_bdp);
   outMsg->SetRoute (route); // This is mostly unnecessary
-  outMsg->SetRtxTimeout (m_outboundRtxTimeout);
+  outMsg->SetRtxTimeout (m_outboundRtxTimeout, m_maxNumRtxPerMsg);
   int txMsgId = m_sendScheduler->ScheduleNewMsg(outMsg);
     
   if (txMsgId >= 0)
@@ -467,7 +467,8 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
                                   uint32_t mtuBytes, uint16_t rttPackets)
     : m_route(0),
       m_prio(0),
-      m_prioSetByReceiver(false)
+      m_prioSetByReceiver(false),
+      m_isExpired(false)
 {
   NS_LOG_FUNCTION (this);
       
@@ -505,6 +506,9 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
           
   m_rttPackets = rttPackets;
   m_maxGrantedIdx = std::min(m_rttPackets, m_msgSizePkts);
+  m_lastRtxGrntIdx = m_maxGrantedIdx;
+    
+  m_numConsecRtx = 0;
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -522,11 +526,12 @@ Ptr<Ipv4Route> HomaOutboundMsg::GetRoute ()
   return m_route;
 }
     
-void HomaOutboundMsg::SetRtxTimeout (Time rtxTimeout)
+void HomaOutboundMsg::SetRtxTimeout (Time rtxTimeout, uint16_t maxNumRtxPerMsg)
 {
   NS_LOG_FUNCTION(this << rtxTimeout);
     
   m_rtxTimeout = rtxTimeout;
+  m_maxNumRtxPerMsg = maxNumRtxPerMsg;
   m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
                                     this, m_maxGrantedIdx);
 }
@@ -576,6 +581,11 @@ bool HomaOutboundMsg::IsFullyDelivered ()
     }
   }
   return true;
+}
+    
+bool HomaOutboundMsg::IsExpired ()
+{
+  return m_isExpired;
 }
     
 void HomaOutboundMsg::SetPrio (uint8_t prio)
@@ -758,7 +768,14 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t maxRtxPktOffset)
 {
   NS_LOG_FUNCTION(this << maxRtxPktOffset);
     
-  // TODO: We need a cap for the max number of rtxTimeouts
+  if (m_numConsecRtx >= m_maxNumRtxPerMsg)
+  {
+    NS_LOG_WARN(" Rtx Limit has been reached for the outbound Msg (" 
+                << this << ").");
+    m_isExpired = true;
+      
+    return;
+  }
     
   for (uint16_t i = 0; i < maxRtxPktOffset; i++)
   {
@@ -775,6 +792,17 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t maxRtxPktOffset)
     
   m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
                                     this, m_maxGrantedIdx);
+    
+  // Update the LastRtxGrntIdx value of this message for the next timeout event
+  if (m_lastRtxGrntIdx < m_maxGrantedIdx)
+  {
+    m_numConsecRtx = 0;
+  }
+  else
+  {
+    m_numConsecRtx++;
+  }
+  m_lastRtxGrntIdx = m_maxGrantedIdx;
 }
     
 /******************************************************************************/
@@ -885,6 +913,7 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
   
   Ptr<HomaOutboundMsg> currentMsg;
   Ptr<HomaOutboundMsg> candidateMsg;
+  std::list<uint16_t> expiredMsgIds;
   uint32_t minRemainingBytes = std::numeric_limits<uint32_t>::max();
   uint16_t pktOffset;
   Ptr<Packet> p;
@@ -897,20 +926,40 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
   for (auto& it: m_outboundMsgs) 
   {
     currentMsg = it.second;
-    uint32_t curRemainingBytes = currentMsg->GetRemainingBytes();
-    // Accept current msg if the remainig size is smaller than minRemainingBytes
-    if (curRemainingBytes < minRemainingBytes)
-    {
-      // Accept current msg if it has a granted but not transmitted packet
-      if (currentMsg->GetNextPacket(pktOffset, p))
+      
+    if (!currentMsg->IsExpired ())
+    { 
+      uint32_t curRemainingBytes = currentMsg->GetRemainingBytes();
+      // Accept current msg if the remainig size is smaller than minRemainingBytes
+      if (curRemainingBytes < minRemainingBytes)
       {
-        candidateMsg = currentMsg;
-        txMsgId = it.first;
-        minRemainingBytes = curRemainingBytes;
-        msgSelected = true;
+        // Accept current msg if it has a granted but not transmitted packet
+        if (currentMsg->GetNextPacket(pktOffset, p))
+        {
+          candidateMsg = currentMsg;
+          txMsgId = it.first;
+          minRemainingBytes = curRemainingBytes;
+          msgSelected = true;
+        }
       }
     }
+    else // Expired messages should be removed from the state
+    {
+      expiredMsgIds.push_back(it.first); 
+    }
   }
+    
+  /*
+   * We only record the txMsgId of the expired msgs above and only remove them
+   * after the for loop above finishes because the ClearStateForMsg function
+   * also iterates over m_outboundMsgs and erases an element which may cause the
+   * iterator to skip elements in the for loop above.
+   */
+  for (const auto& expiredTxMsgId : expiredMsgIds)
+  {
+    this->ClearStateForMsg (expiredTxMsgId);
+  }
+    
   return msgSelected;
 }
     

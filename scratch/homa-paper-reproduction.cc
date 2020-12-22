@@ -121,9 +121,9 @@ main (int argc, char *argv[])
 //   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
-//   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
-//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ERROR);
+  LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
+  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
   std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces.tr");
