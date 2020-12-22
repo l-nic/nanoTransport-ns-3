@@ -229,6 +229,8 @@ uint32_t MsgGeneratorApp::GetNextMsgSizeFromDist ()
   }
     
   NS_ASSERT(msgSizePkts >= 0);
+  // Homa header can't handle msgs larger than 0xffff pkts
+  msgSizePkts = std::min(0xffff, msgSizePkts);
     
   if (m_maxPayloadSize > 0)
     return m_maxPayloadSize * (uint32_t)msgSizePkts;
