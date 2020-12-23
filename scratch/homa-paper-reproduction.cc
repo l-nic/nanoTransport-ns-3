@@ -113,17 +113,19 @@ int
 main (int argc, char *argv[])
 {
   double duration = 0.01;
+  double networkLoad = 0.5;
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
+  cmd.AddValue ("load", "The network load to simulate the network at, ie 0.5 for 50%.", networkLoad);
   cmd.Parse (argc, argv);
     
   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
-//   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
   std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces.tr");
@@ -131,8 +133,6 @@ main (int argc, char *argv[])
   int nHosts = 144;
   int nTors = 9;
   int nSpines = 4;
-    
-  double networkLoad = 0.5;
   
   /******** Create Nodes ********/
   NodeContainer hostNodes;
