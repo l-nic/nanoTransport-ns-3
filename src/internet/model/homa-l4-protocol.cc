@@ -576,7 +576,7 @@ uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
     
 bool HomaOutboundMsg::IsFullyDelivered ()
 {
-  for (uint16_t i = 0; i < m_deliveredPackets.size(); i++)
+  for (uint16_t i = 0; i < m_msgSizePkts; i++)
   {
     if (!m_deliveredPackets[i])
     {
