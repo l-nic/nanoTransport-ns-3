@@ -307,6 +307,11 @@ public:
    */
   uint32_t GetRemainingBytes(void);
   /**
+   * \brief Get the total number of bytes for this message.
+   * \return The message size in bytes
+   */
+  uint32_t GetMsgSizeBytes(void);
+  /**
    * \brief Get the total number of packets for this message.
    * \return The number of packets
    */

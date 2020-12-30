@@ -120,13 +120,13 @@ public:
 //   uint16_t GetIncoming (void) const;
   
   /**
-   * \param msgLen The message length for this NdpHeader in packets
+   * \param msgSizeBytes The message size for this HomaHeader in bytes
    */
-  void SetMsgLen (uint16_t msgLen);
+  void SetMsgSize (uint32_t msgSizeBytes);
   /**
-   * \return The message length for this NdpHeader in packets
+   * \return The message size for this HomaHeader in bytes
    */
-  uint16_t GetMsgLen (void) const;
+  uint32_t GetMsgSize (void) const;
   
   /**
    * \param pktOffset The packet identifier for this HomaHeader in number of packets 
@@ -182,8 +182,8 @@ public:
     DATA = 1,     //!< DATA Packet
     GRANT = 2,    //!< GRANT
     RESEND = 4,   //!< RESEND (Only sent from senders)
-    RSNDRSPNS = 8,//!< Response to RESEND (sent from receivers)
-    BUSY = 16,    //!< Busy
+    ACK = 8,      //!< ACK (sent once the msg is completely received)
+    BUSY = 16,    //!< BUSY
     CUTOFFS = 32, //!< Priority cutoffs
     FREEZE = 64,  //!< 
     BOGUS = 128   //!< Used only in unit tests.
@@ -200,7 +200,7 @@ private:
   uint8_t m_prio;         //!< Priority to be used for the response
 //   Use grantOffset for the initial window size
 //   uint16_t m_incoming;    //!< Initial window size (in packets)
-  uint16_t m_msgLen;      //!< Length of the message (in packets)
+  uint32_t m_msgSizeBytes;//!< Size of the message in bytes
   uint16_t m_pktOffset;   //!< Similar to seq number (in packets)
   uint16_t m_grantOffset; //!< Similar to ack number (in packets)
   uint16_t m_payloadSize; //!< Payload size

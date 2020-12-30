@@ -543,7 +543,11 @@ uint32_t HomaOutboundMsg::GetRemainingBytes()
 {
   return m_remainingBytes;
 }
-    
+
+uint32_t HomaOutboundMsg::GetMsgSizeBytes()
+{
+  return m_msgSizeBytes;
+}
 uint16_t HomaOutboundMsg::GetMsgSizePkts()
 {
   return m_msgSizePkts;
@@ -749,7 +753,7 @@ Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
   homaHeader.SetSrcPort (m_sport); 
   homaHeader.SetDstPort (m_dport);
   homaHeader.SetTxMsgId (targetTxMsgId);
-  homaHeader.SetMsgLen (m_msgSizePkts);
+  homaHeader.SetMsgSize (m_msgSizeBytes);
   homaHeader.SetPktOffset (nextPktOffsetToSend); // TODO: Is this correct?
   homaHeader.SetGrantOffset (m_maxGrantedIdx); // TODO: Is this correct?
   homaHeader.SetPrio (m_prio); // TODO: Is this correct?
@@ -980,7 +984,7 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
     homaHeader.SetSrcPort (candidateMsg->GetSrcPort ());
     homaHeader.SetTxMsgId (txMsgId);
     homaHeader.SetFlags (HomaHeader::Flags_t::DATA); 
-    homaHeader.SetMsgLen (candidateMsg->GetMsgSizePkts ());
+    homaHeader.SetMsgSize (candidateMsg->GetMsgSizeBytes ());
     homaHeader.SetPktOffset (pktOffset);
     homaHeader.SetPayloadSize (p->GetSize ());
     
@@ -1202,14 +1206,10 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   m_dport = homaHeader.GetDstPort ();
   m_txMsgId = homaHeader.GetTxMsgId ();
    
-  m_msgSizePkts = homaHeader.GetMsgLen ();
-  /*
-   * Note that since the Homa header doesn't include the total message size in bytes,
-   * we can only estimate it from the provided message size in packets times the 
-   * maximum payload size per packet. The error margin in this estimation comes from 
-   * the last packet of the message which may be smaller than the maximum allowed payload size.
-   */
-  m_msgSizeBytes = m_msgSizePkts * (mtuBytes - homaHeader.GetSerializedSize () - ipv4Header.GetSerializedSize ());
+  m_msgSizeBytes = homaHeader.GetMsgSize ();
+  uint32_t maxPayloadSize = mtuBytes - homaHeader.GetSerializedSize () - ipv4Header.GetSerializedSize ();
+  m_msgSizePkts = m_msgSizeBytes / maxPayloadSize + (m_msgSizeBytes % maxPayloadSize != 0);
+          
   // The remaining undelivered message size equals to the total message size in the beginning
   m_remainingBytes = m_msgSizeBytes - p->GetSize();
   
@@ -1414,7 +1414,7 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
   homaHeader.SetSrcPort (m_dport); 
   homaHeader.SetDstPort (m_sport);
   homaHeader.SetTxMsgId (m_txMsgId);
-  homaHeader.SetMsgLen (m_msgSizePkts);
+  homaHeader.SetMsgSize (m_msgSizeBytes);
   homaHeader.SetPktOffset (ackNo); // TODO: Is this correct?
   homaHeader.SetGrantOffset (m_maxGrantableIdx);
   homaHeader.SetPrio (m_prio);
@@ -1451,7 +1451,7 @@ std::list<Ptr<Packet>> HomaInboundMsg::GenerateResends (uint16_t maxRsndPktOffse
       homaHeader.SetSrcPort (m_dport); 
       homaHeader.SetDstPort (m_sport);
       homaHeader.SetTxMsgId (m_txMsgId);
-      homaHeader.SetMsgLen (m_msgSizePkts);
+      homaHeader.SetMsgSize (m_msgSizeBytes);
       homaHeader.SetPktOffset (i); // TODO: Is this correct?
       homaHeader.SetGrantOffset (m_maxGrantedIdx);
       homaHeader.SetPrio (m_prio);
