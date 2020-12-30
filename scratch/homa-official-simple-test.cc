@@ -50,7 +50,7 @@ AppSendTo (Ptr<Socket> senderSocket,
                   "Sending an application message.");
     
   int sentBytes = senderSocket->SendTo (appMsg, 0, receiverAddr);
-  NS_LOG_DEBUG(sentBytes << " Bytes sent to " << receiverAddr);
+  NS_LOG_INFO(sentBytes << " Bytes sent to " << receiverAddr);
 }
 
 void
@@ -74,12 +74,14 @@ void TraceMsgBegin (Ptr<OutputStreamWrapper> stream,
                     Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
                     uint16_t sport, uint16_t dport, int txMsgId)
 {
-  NS_LOG_UNCOND("+ " << Simulator::Now ().GetNanoSeconds () 
+  NS_LOG_DEBUG("+ " << Simulator::Now ().GetNanoSeconds ()
+                << " " << msg->GetSize()
                 << " " << saddr << ":" << sport 
                 << " "  << daddr << ":" << dport 
                 << " " << txMsgId);
     
   *stream->GetStream () << "+ " << Simulator::Now ().GetNanoSeconds () 
+      << " " << msg->GetSize()
       << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
       << " " << txMsgId << std::endl;
 }
@@ -88,12 +90,14 @@ void TraceMsgFinish (Ptr<OutputStreamWrapper> stream,
                      Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
                      uint16_t sport, uint16_t dport, int txMsgId)
 {
-  NS_LOG_UNCOND("- " << Simulator::Now ().GetNanoSeconds () 
+  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
+                << " " << msg->GetSize()
                 << " " << saddr << ":" << sport 
                 << " "  << daddr << ":" << dport 
                 << " " << txMsgId);
     
   *stream->GetStream () << "- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << msg->GetSize()
       << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
       << " " << txMsgId << std::endl;
 }
@@ -108,7 +112,7 @@ main (int argc, char *argv[])
   Time::SetResolution (Time::NS);
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
 //   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
-//   LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
+  LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 
   /******** Create Nodes ********/
@@ -127,6 +131,7 @@ main (int argc, char *argv[])
   PointToPointHelper pointToPoint;
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("1us"));
+  pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
 
   /******** Create NetDevices ********/
   NetDeviceContainer switchDevices;
@@ -207,6 +212,7 @@ main (int argc, char *argv[])
   Simulator::Schedule (Seconds (3.0), &AppSendTo, senderSocket, appMsg, receiverAddr);
   receiverSocket->SetRecvCallback (MakeCallback (&AppReceive));
 
+  /******** Run the Actual Simulation ********/
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;
