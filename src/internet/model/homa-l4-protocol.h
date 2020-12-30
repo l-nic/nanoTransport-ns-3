@@ -345,11 +345,6 @@ public:
   uint16_t GetMaxGrantedIdx(void);
   
   /**
-   * \return Whether this message has been fully acknowledged by the receiver
-   */
-  bool IsFullyDelivered (void);
-  
-  /**
    * \return Whether this message has expired and to be cleared upon rtx timeouts
    */
   bool IsExpired (void);
@@ -370,16 +365,16 @@ public:
   /**
    * \brief Determines which packet should be sent next for this message
    * \param pktOffset The index of the selected packet (determined inside this function)
-   * \param p The selected packet (determined inside this function)
    * \return Whether a packet was successfully selected for this message 
    */
-  bool GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p);
+  bool GetNextPktOffset (uint16_t &pktOffset);
   
   /**
    * \brief Remove the next packet from the TX queue of this message
    * \param pktOffset The offset of the packet which is to be set as sent
+   * \return The packet that is to be sent next from this message
    */
-  void SetNextPktAsSent (uint16_t pktOffset);
+  Ptr<Packet> RemoveNextPktFromTxQ (uint16_t pktOffset);
   
   /**
    * \brief Update the state per the received Grant

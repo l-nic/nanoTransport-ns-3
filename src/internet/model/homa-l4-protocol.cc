@@ -297,7 +297,7 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
 {
   NS_LOG_FUNCTION (this << packet << saddr << daddr << route);
     
-  m_downTarget (packet->Copy(), saddr, daddr, PROT_NUMBER, route);
+  m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
 }
 
 /*
@@ -343,7 +343,8 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
     m_recvScheduler->ReceivePacket(cp, header, homaHeader, interface);
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
-           (rxFlag & HomaHeader::Flags_t::RESEND))
+           (rxFlag & HomaHeader::Flags_t::RESEND) ||
+           (rxFlag & HomaHeader::Flags_t::ACK))
   {
     m_sendScheduler->CtrlPktRecvdForOutboundMsg(header, homaHeader);
   }
@@ -575,11 +576,6 @@ uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
   return m_maxGrantedIdx;
 }
     
-bool HomaOutboundMsg::IsFullyDelivered ()
-{
-  return m_remainingBytes == 0;
-}
-    
 bool HomaOutboundMsg::IsExpired ()
 {
   return m_isExpired;
@@ -603,7 +599,7 @@ EventId HomaOutboundMsg::GetRtxEvent ()
   return m_rtxEvent;
 }
     
-bool HomaOutboundMsg::GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p)
+bool HomaOutboundMsg::GetNextPktOffset (uint16_t &pktOffset)
 {
   NS_LOG_FUNCTION (this);
     
@@ -617,7 +613,6 @@ bool HomaOutboundMsg::GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p)
       NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                    << ") can send packet " << nextPktOffset << " next.");
       pktOffset = nextPktOffset;
-      p = m_packets[nextPktOffset];
       return true;
     }
   }
@@ -626,7 +621,7 @@ bool HomaOutboundMsg::GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p)
   return false;
 }
     
-void HomaOutboundMsg::SetNextPktAsSent (uint16_t pktOffset)
+Ptr<Packet> HomaOutboundMsg::RemoveNextPktFromTxQ (uint16_t pktOffset)
 {
   NS_LOG_FUNCTION (this << pktOffset);
     
@@ -643,6 +638,8 @@ void HomaOutboundMsg::SetNextPktAsSent (uint16_t pktOffset)
   {
     m_pktTxQ.pop();
   }
+    
+  return m_packets[pktOffset]->Copy();
 }
     
 /*
@@ -699,9 +696,8 @@ void HomaOutboundMsg::HandleResend (HomaHeader const &homaHeader)
   NS_LOG_FUNCTION (this << homaHeader);
     
   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::RESEND);
-    
-  uint16_t pktOffset = homaHeader.GetPktOffset ();
-  m_pktTxQ.push(pktOffset);
+  
+  m_pktTxQ.push(homaHeader.GetPktOffset ());
 }
     
 void HomaOutboundMsg::HandleAck (HomaHeader const &homaHeader)
@@ -753,7 +749,7 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t lastRtxGrntIdx)
     return;
   }
     
-  if (this->IsFullyDelivered ())
+  if (m_remainingBytes == 0) // Fully delivered (ACK received)
   {
     return;
   }
@@ -883,7 +879,6 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
   std::list<uint16_t> expiredMsgIds;
   uint32_t minRemainingBytes = std::numeric_limits<uint32_t>::max();
   uint16_t pktOffset;
-  Ptr<Packet> p;
   bool msgSelected = false;
   /*
    * Iterate over all pending outbound messages and select the one 
@@ -897,11 +892,11 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
     if (!currentMsg->IsExpired ())
     { 
       uint32_t curRemainingBytes = currentMsg->GetRemainingBytes();
-      // Accept current msg if the remainig size is smaller than minRemainingBytes
-      if (curRemainingBytes < minRemainingBytes)
+      // Accept current msg if it has a granted but not transmitted packet
+      if (currentMsg->GetNextPktOffset(pktOffset))
       {
-        // Accept current msg if it has a granted but not transmitted packet
-        if (currentMsg->GetNextPkt(pktOffset, p))
+        // Accept current msg if the remainig size is smaller than minRemainingBytes
+        if (curRemainingBytes < minRemainingBytes)
         {
           candidateMsg = currentMsg;
           txMsgId = it.first;
@@ -937,8 +932,10 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
   uint16_t pktOffset;
   Ptr<HomaOutboundMsg> candidateMsg = m_outboundMsgs[txMsgId];
     
-  if (candidateMsg->GetNextPkt(pktOffset, p))
+  if (candidateMsg->GetNextPktOffset(pktOffset))
   {
+    p = candidateMsg->RemoveNextPktFromTxQ(pktOffset);
+      
     HomaHeader homaHeader;
     homaHeader.SetDstPort (candidateMsg->GetDstPort ());
     homaHeader.SetSrcPort (candidateMsg->GetSrcPort ());
@@ -972,11 +969,6 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
     NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                   " HomaL4Protocol sending: " << p->ToString ());
     
-    /*
-     * Set the corresponding packet as "not to be sent" (ie. on-flight)
-     * to prevent redundant re-transmissions.
-     */
-    candidateMsg->SetNotToBeTx(pktOffset);
     return true;
   }
   else
@@ -998,8 +990,8 @@ HomaSendScheduler::TxDataPacket ()
     
   NS_ASSERT(m_txEvent.IsExpired());
     
-  Ipv4Header iph;
   PppHeader pph;
+  Ipv4Header iph;
   HomaHeader homah;
   uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
   Time timeToTx;
@@ -1034,7 +1026,6 @@ HomaSendScheduler::TxDataPacket ()
     Ptr<Ipv4Route> route = nextMsg->GetRoute ();
     
     m_homa->SendDown(p, saddr, daddr, route);
-    p->RemoveHeader(homah); // Keep storing the packet without the header for future retransmissions
       
     /* 
      * Calculate the time it would take to serialize this packet and schedule
@@ -1079,31 +1070,12 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
   if (ctrlFlag & HomaHeader::Flags_t::GRANT)
   {
     targetMsg->HandleGrantOffset (homaHeader);
-      
-    // Only GRANT packets explicitly have the acknowledgement number
-    targetMsg->SetDeliveredUntil (homaHeader.GetPktOffset ());
   }
   else if (ctrlFlag & HomaHeader::Flags_t::RESEND)
   {
     targetMsg->HandleGrantOffset (homaHeader);
     targetMsg->HandleResend (homaHeader);
-  }
-  else
-  {
-    NS_LOG_ERROR("ERROR: HomaSendScheduler (" << this 
-                 << ") has received an unexpected control packet ("
-                 << homaHeader.FlagsToString(ctrlFlag) << ")");
       
-    return;
-  }
-    
-  if (targetMsg->IsFullyDelivered ())
-  {
-    NS_LOG_LOGIC("The HomaOutboundMsg (" << targetMsg << ") is fully delivered!");
-    this->ClearStateForMsg (targetTxMsgId);
-  }
-  else
-  {
     uint16_t nextTxMsgID;
     this->GetNextMsgId (nextTxMsgID);
     if (nextTxMsgID != targetTxMsgId) 
@@ -1118,6 +1090,21 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
                        targetMsg->GetRoute ());
       m_numCtrlPktsSinceLastTx++;
     }
+  }
+  else if (ctrlFlag & HomaHeader::Flags_t::ACK)
+  {
+    NS_LOG_LOGIC("The HomaOutboundMsg (" << targetMsg << ") is fully delivered!");
+    
+    targetMsg->HandleAck (homaHeader); // Asserts some sanity checks.
+    this->ClearStateForMsg (targetTxMsgId);
+  }
+  else
+  {
+    NS_LOG_ERROR("ERROR: HomaSendScheduler (" << this 
+                 << ") has received an unexpected control packet ("
+                 << homaHeader.FlagsToString(ctrlFlag) << ")");
+      
+    return;
   }
     
   /* 
