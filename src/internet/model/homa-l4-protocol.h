@@ -299,9 +299,8 @@ public:
   /**
    * \brief Set the retransmission timeout interval for this message
    * \param rtxTimeout The time interval between each timeout
-   * \param maxNumRtxPerMsg Maximum allowed rtx timeout count for this message
    */
-  void SetRtxTimeout (Time rtxTimeout, uint16_t maxNumRtxPerMsg);
+  void SetRtxTimeout (Time rtxTimeout);
   
   /**
    * \brief Get the remaining undelivered bytes of this message.
@@ -430,8 +429,6 @@ private:
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
   
   Time m_rtxTimeout;         //!< Time to expire the retransmission events.
-  uint16_t m_maxNumRtxPerMsg;//!< Maximum allowed rtx timeout count per outbound message
-  uint16_t m_numRtxWithoutProgress;   //!< The number of retransmission timeouts without receiving any new grant
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
   bool m_isExpired;          //!< Whether this message has expired and to be cleared upon rtx timeouts
 };

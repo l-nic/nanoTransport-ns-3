@@ -74,8 +74,8 @@ HomaL4Protocol::GetTypeId (void)
                    TimeValue (MicroSeconds (50)),
                    MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
-    .AddAttribute ("OutbndRtxTimeout", "Time value to determine the retransmission timeout of OutboundMsgs",
-                   TimeValue (MicroSeconds (100)),
+    .AddAttribute ("OutbndRtxTimeout", "Time value to determine the timeout of OutboundMsgs",
+                   TimeValue (MilliSeconds (5)),
                    MakeTimeAccessor (&HomaL4Protocol::m_outboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
     .AddAttribute ("MaxRtxCnt", "Maximum allowed consecutive rtx timeout count per message",
@@ -278,7 +278,7 @@ HomaL4Protocol::Send (Ptr<Packet> message,
   Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, sport, dport, 
                                                                m_mtu, m_bdp);
   outMsg->SetRoute (route); // This is mostly unnecessary
-  outMsg->SetRtxTimeout (m_outboundRtxTimeout, m_maxNumRtxPerMsg);
+  outMsg->SetRtxTimeout (m_outboundRtxTimeout);
   int txMsgId = m_sendScheduler->ScheduleNewMsg(outMsg);
     
   if (txMsgId >= 0)
@@ -527,12 +527,11 @@ Ptr<Ipv4Route> HomaOutboundMsg::GetRoute ()
   return m_route;
 }
     
-void HomaOutboundMsg::SetRtxTimeout (Time rtxTimeout, uint16_t maxNumRtxPerMsg)
+void HomaOutboundMsg::SetRtxTimeout (Time rtxTimeout)
 {
   NS_LOG_FUNCTION(this << rtxTimeout);
     
   m_rtxTimeout = rtxTimeout;
-  m_maxNumRtxPerMsg = maxNumRtxPerMsg;
   m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
                                     this, m_maxGrantedIdx);
 }
@@ -740,32 +739,21 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t lastRtxGrntIdx)
 {
   NS_LOG_FUNCTION(this << lastRtxGrntIdx);
     
-  if (m_numRtxWithoutProgress >= m_maxNumRtxPerMsg)
-  {
-    NS_LOG_WARN("Rtx Limit has been reached for the HomaOutboundMsg (" 
-                << this << ").");
-    m_isExpired = true;
-      
-    return;
-  }
-    
   if (m_remainingBytes == 0) // Fully delivered (ACK received)
   {
     return;
   }
-    
-  // Update the LastRtxGrntIdx value of this message for the next timeout event
+  
   if (lastRtxGrntIdx < m_maxGrantedIdx)
   {
-    m_numRtxWithoutProgress = 0;
+    m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
+                                      this, m_maxGrantedIdx);
   }
   else
   {
-    m_numRtxWithoutProgress++;
+    NS_LOG_WARN("HomaOutboundMsg (" << this << ") has timed-out.");
+    m_isExpired = true;
   }
-    
-  m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
-                                    this, m_maxGrantedIdx);
 }
     
 /******************************************************************************/
