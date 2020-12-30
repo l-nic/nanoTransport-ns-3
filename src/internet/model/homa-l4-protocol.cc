@@ -471,6 +471,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     : m_route(0),
       m_prio(0),
       m_prioSetByReceiver(false),
+      m_numRtxWithoutProgress (0),
       m_isExpired(false)
 {
   NS_LOG_FUNCTION (this);
@@ -496,11 +497,10 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   while (unpacketizedBytes > 0)
   {
     nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
-    nextPkt = message->CreateFragment ((uint32_t)m_msgSizeBytes - unpacketizedBytes, nextPktSize);
+    nextPkt = message->CreateFragment (m_msgSizeBytes - unpacketizedBytes, nextPktSize);
 
     m_packets.push_back(nextPkt);
-    m_deliveredPackets.push_back(false);
-    m_toBeTxPackets.push_back(true);
+    m_pktTxQ.push(numPkts);
 
     unpacketizedBytes -= nextPktSize;
     numPkts++;
@@ -509,9 +509,6 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
           
   m_rttPackets = rttPackets;
   m_maxGrantedIdx = std::min(m_rttPackets, m_msgSizePkts);
-  m_lastRtxGrntIdx = m_maxGrantedIdx;
-    
-  m_numConsecRtx = 0;
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -580,24 +577,12 @@ uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
     
 bool HomaOutboundMsg::IsFullyDelivered ()
 {
-  for (uint16_t i = 0; i < m_msgSizePkts; i++)
-  {
-    if (!m_deliveredPackets[i])
-    {
-      return false;
-    }
-  }
-  return true;
+  return m_remainingBytes == 0;
 }
     
 bool HomaOutboundMsg::IsExpired ()
 {
   return m_isExpired;
-}
-    
-void HomaOutboundMsg::SetPrio (uint8_t prio)
-{
-  m_prio = prio;
 }
     
 uint8_t HomaOutboundMsg::GetPrio (uint16_t pktOffset)
@@ -618,66 +603,46 @@ EventId HomaOutboundMsg::GetRtxEvent ()
   return m_rtxEvent;
 }
     
-bool HomaOutboundMsg::GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p)
+bool HomaOutboundMsg::GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p)
 {
   NS_LOG_FUNCTION (this);
     
-  uint16_t i = 0;
-  while (i <= m_maxGrantedIdx && i < m_msgSizePkts)
+  if (!m_pktTxQ.empty ())
   {
-    if (!m_deliveredPackets[i] && m_toBeTxPackets[i])
+    uint16_t nextPktOffset = m_pktTxQ.top();
+    
+    if (nextPktOffset <= m_maxGrantedIdx && nextPktOffset < m_msgSizePkts)
     {
       // The selected packet is not delivered and not on flight
       NS_LOG_LOGIC("HomaOutboundMsg (" << this 
-                   << ") will send packet " << i << " next.");
-      pktOffset = i;
-      p = m_packets[i];
+                   << ") can send packet " << nextPktOffset << " next.");
+      pktOffset = nextPktOffset;
+      p = m_packets[nextPktOffset];
       return true;
     }
-    i++;
   }
   NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                << ") doesn't have any packet to send!");
-  pktOffset = i;
   return false;
 }
     
-/*
- * This method is called when a GRANT or a BUSY packet is received. 
- * The pktOffset value on a control packet denotes that the receiver
- * has received the corresponding data packet, so the packet can be 
- * marked delivered.
- */    
-void HomaOutboundMsg::SetDeliveredUntil (uint16_t pktOffset)
+void HomaOutboundMsg::SetNextPktAsSent (uint16_t pktOffset)
 {
   NS_LOG_FUNCTION (this << pktOffset);
     
-  NS_LOG_DEBUG("HomaOutboundMsg (" << this 
-               << ") is setting ackNo as " << pktOffset);
-    
-  pktOffset = std::min(pktOffset, m_msgSizePkts);
-  for (uint16_t i = 0; i < pktOffset; i++)
+  NS_ASSERT_MSG(!m_pktTxQ.empty (), 
+                "HomaOutboundMsg can't send a pkt if its TX queue is empty!");
+  NS_ASSERT_MSG(m_pktTxQ.top() == pktOffset,
+                "HomaOutboundMsg can only send the packet at the head of TX queue!");
+  
+  /*
+   * In case a pktOffset was added multiple times to the tx queue,
+   * we remove all of them at once to prevent redundant transmissions.
+   */
+  while(m_pktTxQ.top() == pktOffset && !m_pktTxQ.empty ())
   {
-    m_deliveredPackets[i] = true;
-    m_toBeTxPackets[i] = false;
+    m_pktTxQ.pop();
   }
-}
-
-/*
- * This method is called when a packet is transmitted to note that it
- * is no longer allowed to be transmitted again. If a timeout occurs 
- * for this message, the corresponding m_toBeTxPackets entry will be
- * set back to true.
- */
-void HomaOutboundMsg::SetNotToBeTx (uint16_t pktOffset)
-{
-  NS_LOG_FUNCTION (this << pktOffset);
-    
-  NS_LOG_DEBUG("HomaOutboundMsg (" << this 
-               << ") is marking packet " << pktOffset 
-               << " as not 'to be transmitted'.");
-    
-  m_toBeTxPackets[pktOffset] = false;
 }
     
 /*
@@ -692,26 +657,35 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
   NS_LOG_FUNCTION (this << homaHeader);
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
+  NS_ASSERT_MSG(grantOffset <= m_msgSizePkts, 
+                "HomaOutboundMsg shouldn't be granted after it is already fully granted!");
     
   if (grantOffset >= m_maxGrantedIdx)
   {
-    uint8_t prio = homaHeader.GetPrio();
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                  << ") is increasing the Grant index to "
-                 << grantOffset << " and setting priority as "
-                 << (uint16_t) prio);
+                 << grantOffset << ".");
+      
     m_maxGrantedIdx = grantOffset;
       
-    m_prio = prio;
-    m_prioSetByReceiver = true;
+    uint8_t prio = homaHeader.GetPrio();
+    if (prio < m_prio || !m_prioSetByReceiver)
+    {
+      NS_LOG_LOGIC("HomaOutboundMsg (" << this 
+                   << ") is setting priority to "
+                   << (uint16_t) prio << ".");
+        
+      m_prio = prio;
+      m_prioSetByReceiver = true;
+    }
       
     /*
      * Since Homa doesn't explicitly acknowledge the delivery of data packets,
      * one way to estimate the remaining bytes is to exploit the mechanism where
-     * Homa grants messages in a way that there is always exactly BDP worth of 
-     * packet on flight. Then we can calculate the remaining bytes as the following.
+     * Homa grants messages in a way that there is always exactly 1 BDP worth of 
+     * packets on flight. Then we can calculate the remaining bytes as the following.
      */
-    m_remainingBytes = (m_maxGrantedIdx - m_rttPackets) * m_maxPayloadSize;
+    m_remainingBytes = m_msgSizeBytes - (m_maxGrantedIdx - m_rttPackets) * m_maxPayloadSize;
   }
   else
   {
@@ -727,34 +701,29 @@ void HomaOutboundMsg::HandleResend (HomaHeader const &homaHeader)
   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::RESEND);
     
   uint16_t pktOffset = homaHeader.GetPktOffset ();
-  if (!m_deliveredPackets[pktOffset])
-  {
-    m_toBeTxPackets[pktOffset] = true;
-  }
-  else
-  {
-    NS_LOG_LOGIC("HomaOutboundMsg (" << this <<
-                 ") has received a RESEND for pkt " << pktOffset <<
-                 " which is already delivered to the receiver.");
-  }
+  m_pktTxQ.push(pktOffset);
+}
     
-  // TODO: Is this really all we need to do for RESEND?
+void HomaOutboundMsg::HandleAck (HomaHeader const &homaHeader)
+{
+  NS_LOG_FUNCTION (this << homaHeader);
+    
+  NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::ACK);
+    
+  NS_ASSERT(homaHeader.GetPktOffset () == m_msgSizePkts);
+  m_remainingBytes = 0;
 }
     
 Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
 {
   NS_LOG_FUNCTION (this);
   
-  Ptr<Packet> p;
-  uint16_t nextPktOffsetToSend;
-  this->GetNextPacket(nextPktOffsetToSend, p);
-  
   HomaHeader homaHeader;
   homaHeader.SetSrcPort (m_sport); 
   homaHeader.SetDstPort (m_dport);
   homaHeader.SetTxMsgId (targetTxMsgId);
   homaHeader.SetMsgSize (m_msgSizeBytes);
-  homaHeader.SetPktOffset (nextPktOffsetToSend); // TODO: Is this correct?
+//   homaHeader.SetPktOffset (0); // TODO: Is this correct?
   homaHeader.SetGrantOffset (m_maxGrantedIdx); // TODO: Is this correct?
   homaHeader.SetPrio (m_prio); // TODO: Is this correct?
   homaHeader.SetPayloadSize (0);
@@ -771,45 +740,36 @@ Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
   return busyPacket;
 }
     
-void HomaOutboundMsg::ExpireRtxTimeout(uint16_t maxRtxPktOffset)
+void HomaOutboundMsg::ExpireRtxTimeout(uint16_t lastRtxGrntIdx)
 {
-  NS_LOG_FUNCTION(this << maxRtxPktOffset);
+  NS_LOG_FUNCTION(this << lastRtxGrntIdx);
     
-  if (m_numConsecRtx >= m_maxNumRtxPerMsg)
+  if (m_numRtxWithoutProgress >= m_maxNumRtxPerMsg)
   {
-    NS_LOG_WARN(" Rtx Limit has been reached for the outbound Msg (" 
+    NS_LOG_WARN("Rtx Limit has been reached for the HomaOutboundMsg (" 
                 << this << ").");
     m_isExpired = true;
       
     return;
   }
     
-  for (uint16_t i = 0; i < maxRtxPktOffset; i++)
+  if (this->IsFullyDelivered ())
   {
-    if (!m_deliveredPackets[i])
-    {
-      m_toBeTxPackets[i] = true;
-    }
+    return;
   }
     
-  // TODO: The rtx timeout doesn't actually send any data packets out,
-  //       but instead marks packets to be retransmitted if needed.
-  //       It is HomaSendScheduler's job to pick this message to txDataPkts
-  //       according to the priority rules.
-    
-  m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
-                                    this, m_maxGrantedIdx);
-    
   // Update the LastRtxGrntIdx value of this message for the next timeout event
-  if (m_lastRtxGrntIdx < m_maxGrantedIdx)
+  if (lastRtxGrntIdx < m_maxGrantedIdx)
   {
-    m_numConsecRtx = 0;
+    m_numRtxWithoutProgress = 0;
   }
   else
   {
-    m_numConsecRtx++;
+    m_numRtxWithoutProgress++;
   }
-  m_lastRtxGrntIdx = m_maxGrantedIdx;
+    
+  m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
+                                    this, m_maxGrantedIdx);
 }
     
 /******************************************************************************/
@@ -941,7 +901,7 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
       if (curRemainingBytes < minRemainingBytes)
       {
         // Accept current msg if it has a granted but not transmitted packet
-        if (currentMsg->GetNextPacket(pktOffset, p))
+        if (currentMsg->GetNextPkt(pktOffset, p))
         {
           candidateMsg = currentMsg;
           txMsgId = it.first;
@@ -977,7 +937,7 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
   uint16_t pktOffset;
   Ptr<HomaOutboundMsg> candidateMsg = m_outboundMsgs[txMsgId];
     
-  if (candidateMsg->GetNextPacket(pktOffset, p))
+  if (candidateMsg->GetNextPkt(pktOffset, p))
   {
     HomaHeader homaHeader;
     homaHeader.SetDstPort (candidateMsg->GetDstPort ());

@@ -22,6 +22,8 @@
 #define HOMA_L4_PROTOCOL_H
 
 #include <stdint.h>
+#include <functional>
+#include <queue>
 #include <vector>
 #include <unordered_map>
 
@@ -353,11 +355,6 @@ public:
   bool IsExpired (void);
   
   /**
-   * \brief Set the the priority requested for this message by the receiver.
-   * \param prio the priority of this message
-   */
-  void SetPrio(uint8_t prio);
-  /**
    * \brief Get the priority requested for this message by the receiver.
    * \param The offset of the packet that priority is being calculated for
    * \return The priority of this message
@@ -376,19 +373,13 @@ public:
    * \param p The selected packet (determined inside this function)
    * \return Whether a packet was successfully selected for this message 
    */
-  bool GetNextPacket (uint16_t &pktOffset, Ptr<Packet> &p);
+  bool GetNextPkt (uint16_t &pktOffset, Ptr<Packet> &p);
   
   /**
-   * \brief Set the the corresponding state entries to true/false to mark acknowledgement.
-   * \param pktOffset The offset of the packet within the message that is to be marked.
+   * \brief Remove the next packet from the TX queue of this message
+   * \param pktOffset The offset of the packet which is to be set as sent
    */
-  void SetDeliveredUntil (uint16_t pktOffset);
-  
-  /**
-   * \brief Set the the corresponding m_deliveredPackets entry to true to mark on-flight or delivered.
-   * \param pktOffset The offset of the packet within the message that is to be marked.
-   */
-  void SetNotToBeTx (uint16_t pktOffset);
+  void SetNextPktAsSent (uint16_t pktOffset);
   
   /**
    * \brief Update the state per the received Grant
@@ -398,9 +389,15 @@ public:
   
   /**
    * \brief Update the m_toBeTxPackets state per the received Resend
-   * \param homaHeader The header information for the received Grant
+   * \param homaHeader The header information for the received Resend
    */
   void HandleResend (HomaHeader const &homaHeader);
+  
+  /**
+   * \brief Reset the remaining bytes state per the received Ack
+   * \param homaHeader The header information for the received Ack
+   */
+  void HandleAck (HomaHeader const &homaHeader);
   
   /**
    * \brief Generates a busy packet to the receiver of the this message
@@ -411,9 +408,9 @@ public:
   
   /**
    * \brief Determines whether there exists some data packets to retransmit
-   * \param maxRtxPktOffset The highest packet index to retransmit data packets for 
+   * \param lastRtxGrntIdx The m_maxGrantedIdx value as of the time rtx timer was set
    */
-  void ExpireRtxTimeout(uint16_t maxRtxPktOffset);
+  void ExpireRtxTimeout(uint16_t lastRtxGrntIdx);
   
 private:
   Ipv4Address m_saddr;       //!< Source IP address of this message
@@ -423,23 +420,23 @@ private:
   Ptr<Ipv4Route> m_route;    //!< Route of the message determined by the sender socket 
   
   std::vector<Ptr<Packet>> m_packets;   //!< Packet buffer for the message
-  std::vector<bool> m_deliveredPackets; //!< State to store whether the packets are delivered to the receiver
-  std::vector<bool> m_toBeTxPackets;    //!< State to store whether a packet is allowed to be transmitted, ie. not in flight
   
-  uint32_t m_maxPayloadSize; //!< Number of bytes that can be stored in packet excluding headers 
-  uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
+  uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
+  std::priority_queue<uint16_t, std::vector<uint16_t>, std::greater<uint16_t> > m_pktTxQ; //!< The sorted queue of pkt offsets for tx
+  
+  uint32_t m_maxPayloadSize; //!< Number of bytes that can be stored in packet excluding headers
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
+  
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: m_rttPackets)
-  uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantedIdx value as of last time rtx timer expired (default: 0)
   
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
   
   Time m_rtxTimeout;         //!< Time to expire the retransmission events.
   uint16_t m_maxNumRtxPerMsg;//!< Maximum allowed rtx timeout count per outbound message
-  uint16_t m_numConsecRtx;   //!< The number of retransmission timeouts without receiving any new packet
+  uint16_t m_numRtxWithoutProgress;   //!< The number of retransmission timeouts without receiving any new grant
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
   bool m_isExpired;          //!< Whether this message has expired and to be cleared upon rtx timeouts
 };
