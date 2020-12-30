@@ -189,6 +189,16 @@ public:
   void SendDown (Ptr<Packet> packet, 
                  Ipv4Address saddr, Ipv4Address daddr, 
                  Ptr<Ipv4Route> route=0);
+  
+  /**
+   * \brief Calculate the time it will take to drain the current TX queue
+   *
+   * Note that this function assumes the corresponding node only has Homa
+   * traffic on the tx direction.
+   *
+   * \return The time it will take to drain the current TX queue
+   */
+  Time GetTimeToDrainTxQueue (void);
     
   // inherited from Ipv4L4Protocol
   /**
@@ -251,8 +261,13 @@ private:
   
   uint32_t m_mtu; //!< The MTU of the bounded NetDevice
   uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
+    
   uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+    
+  DataRate m_linkRate;          //!< Data Rate of the corresponding net device for this prototocol
+  Time m_nextTimeTxQueWillBeEmpty;   //!< Total amount of bytes serialized since the last time 
+    
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
   Ptr<HomaRecvScheduler> m_recvScheduler;  //!< The scheduler that manages arrival of HomaInboundMsg
     
@@ -416,13 +431,12 @@ private:
   std::vector<Ptr<Packet>> m_packets;   //!< Packet buffer for the message
   
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
-  uint16_t m_msgSizePkts;    //!< Number packets this message occupies
+  uint32_t m_maxPayloadSize; //!< Number of bytes that can be stored in packet excluding headers
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
+  
   std::priority_queue<uint16_t, std::vector<uint16_t>, std::greater<uint16_t> > m_pktTxQ; //!< The sorted queue of pkt offsets for tx
   
-  uint32_t m_maxPayloadSize; //!< Number of bytes that can be stored in packet excluding headers
   uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
-  
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: m_rttPackets)
   
   uint8_t m_prio;            //!< The most recent priority of the message
@@ -457,11 +471,6 @@ public:
 
   HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
   ~HomaSendScheduler (void);
-  
-  /**
-   * \brief Set state values that are used by the tx pacing logic
-   */
-  void SetPacer (void);
   
   /**
    * \brief Accept a new message from the upper layers and add to the list of pending messages
@@ -507,9 +516,7 @@ public:
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   
-  DataRate m_txRate;          //!< Data Rate of the corresponding net device for this prototocol
   EventId m_txEvent;          //!< The EventID for the next scheduled transmission
-  uint32_t m_numCtrlPktsSinceLastTx; //!< Number of control packets sent since last data packet TX
   
   std::list<uint16_t> m_txMsgIdFreeList;  //!< List of free TX msg IDs
   std::unordered_map<uint16_t, Ptr<HomaOutboundMsg>> m_outboundMsgs; //!< state to keep HomaOutboundMsg with the key as txMsgId
@@ -690,7 +697,7 @@ private:
   uint8_t m_prio;            //!< The most recent granted priority set for this message
   
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
-  uint16_t m_numConsecRtx;   //!< The number of retransmission timeouts without receiving any new packet
+  uint16_t m_numRtxWithoutProgress;   //!< The number of rtx timeouts without receiving any new packet
 };
     
 /******************************************************************************/

@@ -102,7 +102,7 @@ HomaL4Protocol::HomaL4Protocol ()
   NS_LOG_FUNCTION (this);
       
   m_sendScheduler = CreateObject<HomaSendScheduler> (this);
-  m_recvScheduler = CreateObject<HomaRecvScheduler> (this);
+  m_recvScheduler = CreateObject<HomaRecvScheduler> (this); 
 }
 
 HomaL4Protocol::~HomaL4Protocol ()
@@ -114,7 +114,14 @@ void
 HomaL4Protocol::SetNode (Ptr<Node> node)
 {
   m_node = node;
-  m_mtu = m_node->GetDevice (0)->GetMtu ();
+    
+  Ptr<NetDevice> netDevice = m_node->GetDevice (0);
+  m_mtu = netDevice->GetMtu ();
+    
+  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice)));
+  m_linkRate = p2pNetDevice->GetDataRate ();
+    
+  m_nextTimeTxQueWillBeEmpty = Simulator::Now ();
 }
     
 Ptr<Node> 
@@ -151,8 +158,6 @@ HomaL4Protocol::NotifyNewAggregate ()
           Ptr<HomaSocketFactory> homaFactory = CreateObject<HomaSocketFactory> ();
           homaFactory->SetHoma (this);
           node->AggregateObject (homaFactory);
-          
-          m_sendScheduler->SetPacer();
           
           NS_ASSERT(m_mtu); // m_mtu is set inside SetNode() above.
           NS_ASSERT_MSG(m_numTotalPrioBands > m_numUnschedPrioBands,
@@ -286,9 +291,10 @@ HomaL4Protocol::Send (Ptr<Packet> message,
 }
 
 /*
- * This method is called by the associated HomaSendScheduler after the  
- * next data packet to transmit is selected. The selected packet is then
- * pushed down to the lower IP layer.
+ * This method is called either by the associated HomaSendScheduler after 
+ * the next data packet to transmit is selected or by the associated
+ * HomaRecvScheduler once a control packet is generated. The selected 
+ * packet is then pushed down to the lower IP layer.
  */
 void
 HomaL4Protocol::SendDown (Ptr<Packet> packet, 
@@ -297,7 +303,35 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
 {
   NS_LOG_FUNCTION (this << packet << saddr << daddr << route);
     
+  PppHeader pph;
+  Ipv4Header iph;
+  uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();  
+  Time timeToSerialize = m_linkRate.CalculateBytesTxTime (packet->GetSize () + headerSize);
+    
+  if(Simulator::Now() < m_nextTimeTxQueWillBeEmpty)
+  {
+    m_nextTimeTxQueWillBeEmpty += timeToSerialize;
+  }
+  else
+  {
+    m_nextTimeTxQueWillBeEmpty = Simulator::Now() + timeToSerialize;
+  }
+   
   m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
+}
+    
+Time HomaL4Protocol::GetTimeToDrainTxQueue ()
+{
+  NS_LOG_FUNCTION(this);
+    
+  if(Simulator::Now() < m_nextTimeTxQueWillBeEmpty)
+  {
+    return m_nextTimeTxQueWillBeEmpty - Simulator::Now();
+  }
+  else
+  {
+    return Time(0);
+  }
 }
 
 /*
@@ -472,7 +506,6 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     : m_route(0),
       m_prio(0),
       m_prioSetByReceiver(false),
-      m_numRtxWithoutProgress (0),
       m_isExpired(false)
 {
   NS_LOG_FUNCTION (this);
@@ -506,10 +539,10 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     unpacketizedBytes -= nextPktSize;
     numPkts++;
   } 
-  m_msgSizePkts = numPkts;
+  NS_ASSERT(numPkts == m_msgSizeBytes / m_maxPayloadSize + (m_msgSizeBytes % m_maxPayloadSize != 0));
           
   m_rttPackets = rttPackets;
-  m_maxGrantedIdx = std::min(m_rttPackets, m_msgSizePkts);
+  m_maxGrantedIdx = std::min(m_rttPackets, numPkts);
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -547,7 +580,7 @@ uint32_t HomaOutboundMsg::GetMsgSizeBytes()
 }
 uint16_t HomaOutboundMsg::GetMsgSizePkts()
 {
-  return m_msgSizePkts;
+  return m_msgSizeBytes / m_maxPayloadSize + (m_msgSizeBytes % m_maxPayloadSize != 0);
 }
     
 Ipv4Address HomaOutboundMsg::GetSrcAddress ()
@@ -606,7 +639,7 @@ bool HomaOutboundMsg::GetNextPktOffset (uint16_t &pktOffset)
   {
     uint16_t nextPktOffset = m_pktTxQ.top();
     
-    if (nextPktOffset <= m_maxGrantedIdx && nextPktOffset < m_msgSizePkts)
+    if (nextPktOffset <= m_maxGrantedIdx && nextPktOffset < this->GetMsgSizePkts ())
     {
       // The selected packet is not delivered and not on flight
       NS_LOG_LOGIC("HomaOutboundMsg (" << this 
@@ -653,7 +686,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
   NS_LOG_FUNCTION (this << homaHeader);
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
-  NS_ASSERT_MSG(grantOffset <= m_msgSizePkts, 
+  NS_ASSERT_MSG(grantOffset <= this->GetMsgSizePkts (), 
                 "HomaOutboundMsg shouldn't be granted after it is already fully granted!");
     
   if (grantOffset >= m_maxGrantedIdx)
@@ -705,7 +738,7 @@ void HomaOutboundMsg::HandleAck (HomaHeader const &homaHeader)
     
   NS_ASSERT(homaHeader.GetFlags() & HomaHeader::Flags_t::ACK);
     
-  NS_ASSERT(homaHeader.GetPktOffset () == m_msgSizePkts);
+  NS_ASSERT(homaHeader.GetPktOffset () == this->GetMsgSizePkts ());
   m_remainingBytes = 0;
 }
     
@@ -770,7 +803,6 @@ TypeId HomaSendScheduler::GetTypeId (void)
 }
     
 HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
-  : m_numCtrlPktsSinceLastTx(0)
 {
   NS_LOG_FUNCTION (this);
       
@@ -795,25 +827,6 @@ HomaSendScheduler::~HomaSendScheduler ()
 }
 
 /*
- * This method is called by the NotifyNewAggregate() method of the 
- * associated HomaL4Protocol instance to calculate dataRate of the 
- * corresponding NetDevice, so that TX decisions are made after the 
- * previous packet is completely serialized. This allows scheduling 
- * decisions to be made as late as possible which is valuable to make 
- * sure the message with the shortest remaining size most recently is
- * selected.
- */
-void HomaSendScheduler::SetPacer ()
-{
-  NS_LOG_FUNCTION (this);
-    
-  Ptr<NetDevice> netDevice = m_homa->GetNode ()->GetDevice (0);
-  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
-    
-  m_txRate = p2pNetDevice->GetDataRate ();
-}
-
-/*
  * This method is called upon receiving a new message from the application layer.
  * It inserts the message into the list of pending outbound messages and updates
  * the scheduler's state accordingly.
@@ -825,7 +838,7 @@ int HomaSendScheduler::ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg)
   uint16_t txMsgId;
   if (m_txMsgIdFreeList.size() > 0)
   {
-    // Assign a txMsgId which will be unique tothis message on this host while the message lasts
+    // Assign a unique txMsgId which will persist while the message lasts
     txMsgId = m_txMsgIdFreeList.front ();
     NS_LOG_LOGIC("HomaSendScheduler allocating txMsgId: " << txMsgId);
     m_txMsgIdFreeList.pop_front ();
@@ -839,7 +852,8 @@ int HomaSendScheduler::ScheduleNewMsg (Ptr<HomaOutboundMsg> outMsg)
      * to send next. 
      */
     if(m_txEvent.IsExpired()) 
-      this->TxDataPacket();
+      m_txEvent = Simulator::Schedule (m_homa->GetTimeToDrainTxQueue(), 
+                                       &HomaSendScheduler::TxDataPacket, this);
   }
   else
   {
@@ -967,9 +981,9 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
  
 /*
  * This method is called either when a new packet to send is found after
- * an idle time period or when the serialization of the previous packet finishes.
- * This allows HomaSendScheduler to choose the most recent highest priority packet
- * just before sending it.
+ * an idle time period or when the serialization of the previous packets 
+ * finish. This allows HomaSendScheduler to choose the most recent highest 
+ * priority packet just before sending it.
  */
 void
 HomaSendScheduler::TxDataPacket ()
@@ -978,25 +992,12 @@ HomaSendScheduler::TxDataPacket ()
     
   NS_ASSERT(m_txEvent.IsExpired());
     
-  PppHeader pph;
-  Ipv4Header iph;
-  HomaHeader homah;
-  uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();
-  Time timeToTx;
-  if (m_numCtrlPktsSinceLastTx != 0)
+  Time timeToDrainTxQ = m_homa->GetTimeToDrainTxQueue();
+  if (timeToDrainTxQ != Time(0))
   {
-    NS_LOG_LOGIC("HomaSendScheduler (" << this <<
-                  ") has " <<  m_numCtrlPktsSinceLastTx <<
-                  " control packets being transmitted. Postponing data TX.");
-    
-    headerSize += homah.GetSerializedSize(); // Control packets only have homa header after IP header
-    timeToTx = m_txRate.CalculateBytesTxTime (headerSize * m_numCtrlPktsSinceLastTx);
-    m_txEvent = Simulator::Schedule (timeToTx, &HomaSendScheduler::TxDataPacket, this);
-      
-    m_numCtrlPktsSinceLastTx = 0;
+    m_txEvent = Simulator::Schedule (timeToDrainTxQ, 
+                                     &HomaSendScheduler::TxDataPacket, this);
     return;
-      
-    // TODO: The logic here doesn't help with the control packets sent from the HomaRecvScheduler!
   }
     
   uint16_t nextTxMsgID;
@@ -1014,13 +1015,9 @@ HomaSendScheduler::TxDataPacket ()
     Ptr<Ipv4Route> route = nextMsg->GetRoute ();
     
     m_homa->SendDown(p, saddr, daddr, route);
-      
-    /* 
-     * Calculate the time it would take to serialize this packet and schedule
-     * the next TX of this scheduler accordingly.
-     */
-    timeToTx = m_txRate.CalculateBytesTxTime (p->GetSize () + headerSize);
-    m_txEvent = Simulator::Schedule (timeToTx, &HomaSendScheduler::TxDataPacket, this);
+    
+    m_txEvent = Simulator::Schedule (m_homa->GetTimeToDrainTxQueue(), 
+                                     &HomaSendScheduler::TxDataPacket, this);
   }
   else
   {
@@ -1076,7 +1073,6 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
                        targetMsg->GetSrcAddress (), 
                        targetMsg->GetDstAddress (), 
                        targetMsg->GetRoute ());
-      m_numCtrlPktsSinceLastTx++;
     }
   }
   else if (ctrlFlag & HomaHeader::Flags_t::ACK)
@@ -1100,7 +1096,8 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
    * to transmit those packets.
    */
   if(m_txEvent.IsExpired()) 
-    this->TxDataPacket();
+    m_txEvent = Simulator::Schedule (m_homa->GetTimeToDrainTxQueue(), 
+                                     &HomaSendScheduler::TxDataPacket, this);
 }
     
 void HomaSendScheduler::ClearStateForMsg (uint16_t txMsgId)
@@ -1130,7 +1127,7 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
                                 Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
                                 Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets)
     : m_prio(0),
-      m_numConsecRtx (0)
+      m_numRtxWithoutProgress (0)
 {
   NS_LOG_FUNCTION (this);
 
@@ -1271,15 +1268,15 @@ bool HomaInboundMsg::IsFullyReceived ()
     
 uint16_t HomaInboundMsg::GetNumCosecRtx ()
 {
-  return m_numConsecRtx;
+  return m_numRtxWithoutProgress;
 }
 void HomaInboundMsg::IncrementNumConsecRtx ()
 {
-  m_numConsecRtx++;
+  m_numRtxWithoutProgress++;
 }
 void HomaInboundMsg::ResetNumConsecRtx ()
 {
-  m_numConsecRtx = 0;
+  m_numRtxWithoutProgress = 0;
 }
     
 /*
