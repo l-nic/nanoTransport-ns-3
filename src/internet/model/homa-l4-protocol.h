@@ -353,11 +353,6 @@ public:
    * \return The port number of the receiver
    */
   uint16_t GetDstPort (void);
-  /**
-   * \brief Get the highest Granted packet index so far for this message.
-   * \return The highest Grant Offset received so far
-   */
-  uint16_t GetMaxGrantedIdx(void);
   
   /**
    * \return Whether this message has expired and to be cleared upon rtx timeouts
@@ -547,11 +542,6 @@ public:
    * \return The amount of undelivered bytes
    */
   uint32_t GetRemainingBytes(void);
-  /**
-   * \brief Get the total number of packets for this message.
-   * \return The number of packets
-   */
-  uint16_t GetMsgSizePkts(void);
   
   /**
    * \brief Get the sender's IP address for this message.
@@ -640,15 +630,15 @@ public:
    * \brief Get the number of rtx timeouts without receiving any new packet
    * \return The number of consecutive retransmission timeouts
    */
-  uint16_t GetNumCosecRtx (void);
+  uint16_t GetNumRtxWithoutProgress (void);
   /**
    * \brief Increments the number of rtx timeouts by 1
    */
-  void IncrementNumConsecRtx (void);
+  void IncrNumRtxWithoutProgress (void);
   /**
    * \brief Resent the number of rtx timeouts to 0
    */
-  void ResetNumConsecRtx (void);
+  void ResetNumRtxWithoutProgress (void);
   
   /**
    * \brief Insert the received data packet in the buffer and update state
@@ -664,11 +654,12 @@ public:
   Ptr<Packet> GetReassembledMsg (void);
   
   /**
-   * \brief Generate a GRANT packet with the most recent state of this message
+   * \brief Generate a GRANT or an ACK packet with the most recent state of this message
    * \param grantedPrio The priority to grant DATA packets with
-   * \return The generated GRANT packet
+   * \param pktTypeFlag The type of the packet (Grant or ACK)
+   * \return The generated GRANT or ACK packet
    */
-  Ptr<Packet> GenerateGrant(uint8_t grantedPrio);
+  Ptr<Packet> GenerateGrantOrAck(uint8_t grantedPrio, uint8_t pktTypeFlag);
   
   /**
    * \brief Generate a list of RESEND packets to send upon retransmission timeout
@@ -691,7 +682,6 @@ private:
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not received yet
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
-  uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
   uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far
   uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantableIdx value as of last time rtx timer expired (default: 0)

@@ -546,7 +546,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   NS_ASSERT(numPkts == m_msgSizeBytes / m_maxPayloadSize + (m_msgSizeBytes % m_maxPayloadSize != 0));
           
   m_rttPackets = rttPackets;
-  m_maxGrantedIdx = std::min(m_rttPackets, numPkts);
+  m_maxGrantedIdx = std::min((uint16_t)(m_rttPackets-1), numPkts);
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -605,11 +605,6 @@ uint16_t HomaOutboundMsg::GetSrcPort ()
 uint16_t HomaOutboundMsg::GetDstPort ()
 {
   return m_dport;
-}
-    
-uint16_t HomaOutboundMsg::GetMaxGrantedIdx()
-{
-  return m_maxGrantedIdx;
 }
     
 bool HomaOutboundMsg::IsExpired ()
@@ -1159,10 +1154,8 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   m_packets[pktOffset] = p;
   m_receivedPackets[pktOffset] = true;
           
-  m_rttPackets = rttPackets;
-  uint16_t grantIdx = std::min(m_rttPackets, m_msgSizePkts);
-  m_maxGrantableIdx = grantIdx + 1; // 1 Data packet is already received
-  m_maxGrantedIdx = grantIdx; // We think of unscheduled packets as already granted
+  m_maxGrantedIdx = std::min((uint16_t)(rttPackets-1), m_msgSizePkts); // Unscheduled pkts are already granted
+  m_maxGrantableIdx = m_maxGrantedIdx + 1; // 1 Data pkt is already received
   m_lastRtxGrntIdx = m_maxGrantableIdx;
 }
 
@@ -1174,11 +1167,6 @@ HomaInboundMsg::~HomaInboundMsg ()
 uint32_t HomaInboundMsg::GetRemainingBytes()
 {
   return m_remainingBytes;
-}
-    
-uint16_t HomaInboundMsg::GetMsgSizePkts()
-{
-  return m_msgSizePkts;
 }
     
 Ipv4Address HomaInboundMsg::GetSrcAddress ()
@@ -1260,25 +1248,28 @@ bool HomaInboundMsg::IsGrantable ()
     
 bool HomaInboundMsg::IsFullyReceived ()
 {
-  for (uint16_t i = 0; i < m_msgSizePkts; i++)
-  {
-    if (!m_receivedPackets[i])
-    {
-      return false;
-    }
-  }
-  return true;
+//   for (uint16_t i = 0; i < m_msgSizePkts; i++)
+//   {
+//     if (!m_receivedPackets[i])
+//     {
+//       return false;
+//     }
+//   }
+//   return true;
+  return std::none_of(m_receivedPackets.begin(), 
+                      m_receivedPackets.end(), 
+                      std::logical_not<bool>());
 }
     
-uint16_t HomaInboundMsg::GetNumCosecRtx ()
+uint16_t HomaInboundMsg::GetNumRtxWithoutProgress ()
 {
   return m_numRtxWithoutProgress;
 }
-void HomaInboundMsg::IncrementNumConsecRtx ()
+void HomaInboundMsg::IncrNumRtxWithoutProgress ()
 {
   m_numRtxWithoutProgress++;
 }
-void HomaInboundMsg::ResetNumConsecRtx ()
+void HomaInboundMsg::ResetNumRtxWithoutProgress ()
 {
   m_numRtxWithoutProgress = 0;
 }
@@ -1329,9 +1320,14 @@ Ptr<Packet> HomaInboundMsg::GetReassembledMsg ()
   return completeMsg;
 }
     
-Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
+Ptr<Packet> HomaInboundMsg::GenerateGrantOrAck(uint8_t grantedPrio,
+                                               uint8_t pktTypeFlag)
 {
   NS_LOG_FUNCTION (this << grantedPrio);
+  NS_ASSERT(this->IsGrantable());
+  NS_ASSERT_MSG((pktTypeFlag & HomaHeader::Flags_t::GRANT) || 
+                (pktTypeFlag & HomaHeader::Flags_t::ACK),
+                "GenerateGrantOrAck() can only be called to generate GRANT or ACK packets!");
     
   m_prio = grantedPrio; // Updated with the most recent granted priority value
     
@@ -1355,7 +1351,7 @@ Ptr<Packet> HomaInboundMsg::GenerateGrant(uint8_t grantedPrio)
   homaHeader.SetGrantOffset (m_maxGrantableIdx);
   homaHeader.SetPrio (m_prio);
   homaHeader.SetPayloadSize (0);
-  homaHeader.SetFlags (HomaHeader::Flags_t::GRANT);
+  homaHeader.SetFlags (pktTypeFlag);
   
   Ptr<Packet> p = Create<Packet> ();
   p->AddHeader (homaHeader);
@@ -1685,8 +1681,8 @@ void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
                      inboundMsg->GetTxMsgId(),
                      inboundMsg->GetIpv4Interface());
         
-  // TODO: Send one last Grant as below to acknowledge the arrival of whole message?
-  m_homa->SendDown(inboundMsg->GenerateGrant(m_numUnschedPrioBands),
+  m_homa->SendDown(inboundMsg->GenerateGrantOrAck(m_numUnschedPrioBands, 
+                                                  HomaHeader::Flags_t::ACK),
                    inboundMsg->GetDstAddress (),
                    inboundMsg->GetSrcAddress ());
     
@@ -1835,7 +1831,8 @@ void HomaRecvScheduler::SendAppropriateGrants()
       {
         if (currentMsg->IsGrantable ())
         {
-          m_homa->SendDown(currentMsg->GenerateGrant(grantingPrio),
+          m_homa->SendDown(currentMsg->GenerateGrantOrAck(grantingPrio, 
+                                                          HomaHeader::Flags_t::GRANT),
                            currentMsg->GetDstAddress (),
                            senderAddress);
         }
@@ -1864,7 +1861,7 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
   if (this->GetInboundMsg(inboundMsg->GetIpv4Header (), homaHeader, 
                           inboundMsg, activeMsgIdx))
   {
-    if (inboundMsg->GetNumCosecRtx () >= m_maxNumRtxPerMsg)
+    if (inboundMsg->GetNumRtxWithoutProgress () >= m_maxNumRtxPerMsg)
     {
       NS_LOG_WARN(" Rtx Limit has been reached for the inbound Msg (" 
                   << inboundMsg << ").");
@@ -1902,11 +1899,11 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
     uint16_t maxGrantableIdx = inboundMsg->GetMaxGrantableIdx ();
     if (inboundMsg->GetLastRtxGrntIdx () < maxGrantableIdx)
     {
-      inboundMsg->ResetNumConsecRtx ();
+      inboundMsg->ResetNumRtxWithoutProgress ();
     }
     else
     {
-      inboundMsg->IncrementNumConsecRtx ();
+      inboundMsg->IncrNumRtxWithoutProgress ();
     }
     inboundMsg->SetLastRtxGrntIdx (maxGrantableIdx);
       
