@@ -26,6 +26,7 @@
 #include <queue>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "ns3/ptr.h"
 #include "ns3/log.h"
@@ -726,10 +727,10 @@ private:
   uint16_t m_msgSizePkts;    //!< Number packets this message occupies
   uint16_t m_maxGrantableIdx;//!< Highest Grant Offset determined so far (default: m_rttPackets)
   uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset sent so far
-  uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantableIdx value as of last time rtx timer expired (default: 0)
   uint8_t m_prio;            //!< The most recent granted priority set for this message
   
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
+  uint16_t m_lastRtxGrntIdx; //!< The m_maxGrantableIdx value as of last time rtx timer expired
   uint16_t m_numRtxWithoutProgress;   //!< The number of rtx timeouts without receiving any new packet
 };
     
@@ -785,69 +786,35 @@ public:
    * \brief Try to find the message of the provided headers among the pending inbound messages.
    * \param ipv4Header IPv4 header of the received packet.
    * \param homaHeader The Homa header of the received packet.
-   * \param inboundMsg The corresponding inbound message. (determined inside this function)
-   * \param activeMsgIdx The index of the message if it is already an active (not busy) one. (determined inside this function)
-   *
+   * \param msgIdx The index of the message if it is already an active (not busy) one. (determined inside this function)
    * \return Whether the corresponding inbound message was found among the pending messages.
    */
   bool GetInboundMsg(Ipv4Header const &ipv4Header, 
-                     HomaHeader const &homaHeader, 
-                     Ptr<HomaInboundMsg> &inboundMsg,
-                     int &activeMsgIdx);
+                     HomaHeader const &homaHeader,
+                     int &msgIdx);
   
   /**
-   * \brief Insert a new message into the list of active messages with the correct ordering.
-   *
-   * Once the requested message is scheduled, the sender of the message 
-   * is considered not busy, and all the inactive messages for the sender 
-   * are also scheduled.
-   * 
+   * \brief Insert or reorder a message within the list of pending inbound messages.
    * \param inboundMsg The message that is asked to be scheduled
+   * \param msgIdx The index of the message if it is already a pending one, -1 otherwise.
    */
-  void ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg);
-  
-  /**
-   * \brief Change the priority ordering of an existing message. 
-   * 
-   * If the message was previously marked as busy, this function schedules it
-   * along with all the other messages that sre from the same sender.
-   * 
-   * \param inboundMsg The message that is asked to be rescheduled.
-   * \param activeMsgIdx The index of the message if it is an active (not busy) one.
-   */
-  void RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, int activeMsgIdx);
-  
-  /**
-   * \brief Schedule all the inactive messages for the sender.
-   * \param senderIP The address of the sender that is to be marked as not busy.
-   */
-  void SchedulePreviouslyBusySender(uint32_t senderIP);
+  void ScheduleMsgAtIdx(Ptr<HomaInboundMsg> inboundMsg, int msgIdx);
   
   /**
    * \brief Reassemble the packets of the incoming message and forward up to the sockets.
    * \param inboundMsg The incoming message that is fully received.
+   * \param msgIdx The index of the message if it is a pending one, -1 otherwise.
    */
-  void ForwardUp(Ptr<HomaInboundMsg> inboundMsg);
+  void ForwardUp(Ptr<HomaInboundMsg> inboundMsg, int msgIdx);
   
   /**
-   * \brief Remove the given message from the list of active messages upon completion
+   * \brief Cancel timer of the given message and remove from the pending messages list if needed
    * \param inboundMsg The incoming message that is to be removed.
+   * \param msgIdx The index of the message if it is a pending one, -1 otherwise.
    */
-  void RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg);
+  void ClearStateForMsg(Ptr<HomaInboundMsg> inboundMsg, int msgIdx);
   
-  /**
-   * \brief Remove the given message from the list of busy messages upon timeout
-   * \param inboundMsg The incoming message that is to be removed.
-   */
-  void RemoveMsgFromBusyMsgsList(Ptr<HomaInboundMsg> inboundMsg);
-  
-  /**
-   * \brief Updates the state for the corresponding inbound message per the received BUSY.
-   * \param senderAddress The address of the sender who is busy
-   */
-  void BusyReceivedForMsg(Ipv4Address senderAddress);
-  
-  /**
+    /**
    * \brief Loop through the list of active messages and send Grants to the grantable ones
    */
   void SendAppropriateGrants(void);
@@ -862,8 +829,8 @@ public:
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   
-  std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
-  std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address
+  std::vector<Ptr<HomaInboundMsg>> m_inboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
+  std::unordered_set<uint32_t>  m_busySenders; //!< Set of senders from whom the last received pkt type is BUSY
 };
     
 } // namespace ns3

@@ -1466,7 +1466,7 @@ HomaRecvScheduler::~HomaRecvScheduler ()
 {
   NS_LOG_FUNCTION_NOARGS ();
     
-  int numIncmpltMsg = m_activeInboundMsgs.size();
+  int numIncmpltMsg = m_inboundMsgs.size();
   if (numIncmpltMsg > 0)
   {
     NS_LOG_ERROR("ERROR: HomaRecvScheduler (" << this <<
@@ -1486,10 +1486,13 @@ void HomaRecvScheduler::ReceivePacket (Ptr<Packet> packet,
   if (rxFlag & HomaHeader::Flags_t::DATA )
   {
     this->ReceiveDataPacket (packet, ipv4Header, homaHeader, interface);
+    // Sender is not busy since it is able to send data packets
+    m_busySenders.erase(ipv4Header.GetSource().Get ());
   }
   else if (rxFlag & HomaHeader::Flags_t::BUSY)
   {
-    this->BusyReceivedForMsg (ipv4Header.GetSource());
+    m_busySenders.insert(ipv4Header.GetSource().Get ());
+    // TODO: Is there anything else to do with a BUSY packet?
   }
     
   this->SendAppropriateGrants();
@@ -1503,13 +1506,14 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
   Ptr<Packet> cp = packet->Copy();
-    
   Ptr<HomaInboundMsg> inboundMsg;
-  int activeMsgIdx = -1;
-  if (this->GetInboundMsg(ipv4Header, homaHeader, inboundMsg, activeMsgIdx))
+    
+  int msgIdx = -1;
+  if (this->GetInboundMsg(ipv4Header, homaHeader, msgIdx))
   {
+    NS_ASSERT(msgIdx >= 0);
+    inboundMsg = m_inboundMsgs[msgIdx];
     inboundMsg->ReceiveDataPacket (cp, homaHeader.GetPktOffset());
-    this->RescheduleMsg (inboundMsg, activeMsgIdx);
   }
   else
   {
@@ -1518,178 +1522,79 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
     inboundMsg-> SetRtxEvent (Simulator::Schedule (m_homa->GetInboundRtxTimeout(), 
                                                    &HomaRecvScheduler::ExpireRtxTimeout, this, 
                                                    inboundMsg, inboundMsg->GetMaxGrantedIdx ()));
-    /*
-     * Even if the message was a single packet one and now is fully received,
-     * we should still schedule it first because ScheduleNewMsg also lets 
-     * HomaRecvScheduler know that the sender is not busy anymore.
-     */
-    this->ScheduleNewMsg(inboundMsg);
   }
     
   if (inboundMsg->IsFullyReceived ())
   {
     NS_LOG_LOGIC("HomaInboundMsg (" << inboundMsg <<
                  ") is fully received. Forwarding the message to applications.");
-    // Once the message fowarded, it will also be removed from the active msg list
-    this->ForwardUp (inboundMsg);
+    this->ForwardUp (inboundMsg, msgIdx);
+  }
+  else
+  {
+    this->ScheduleMsgAtIdx(inboundMsg, msgIdx);
   }
 }
     
 bool HomaRecvScheduler::GetInboundMsg(Ipv4Header const &ipv4Header, 
-                                      HomaHeader const &homaHeader, 
-                                      Ptr<HomaInboundMsg> &inboundMsg,
-                                      int &activeMsgIdx)
+                                      HomaHeader const &homaHeader,
+                                      int &msgIdx)
 {
   NS_LOG_FUNCTION (this << ipv4Header << homaHeader);
     
-  Ptr<HomaInboundMsg> currentMsg;
-  // First look for the message in the list of active messages
-  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  for (std::size_t i = 0; i < m_inboundMsgs.size(); ++i) 
   {
-    currentMsg = m_activeInboundMsgs[i];
-    if (currentMsg->GetSrcAddress() == ipv4Header.GetSource() &&
-        currentMsg->GetDstAddress() == ipv4Header.GetDestination() &&
-        currentMsg->GetSrcPort() == homaHeader.GetSrcPort() &&
-        currentMsg->GetDstPort() == homaHeader.GetDstPort() &&
-        currentMsg->GetTxMsgId() == homaHeader.GetTxMsgId())
+    if (m_inboundMsgs[i]->GetSrcAddress() == ipv4Header.GetSource() &&
+        m_inboundMsgs[i]->GetDstAddress() == ipv4Header.GetDestination() &&
+        m_inboundMsgs[i]->GetSrcPort() == homaHeader.GetSrcPort() &&
+        m_inboundMsgs[i]->GetDstPort() == homaHeader.GetDstPort() &&
+        m_inboundMsgs[i]->GetTxMsgId() == homaHeader.GetTxMsgId())
     {
-      NS_LOG_LOGIC("The HomaInboundMsg (" << currentMsg
-                   << ") is found among the active messages.");
-      inboundMsg = currentMsg;
-      activeMsgIdx = i;
+      NS_LOG_LOGIC("The HomaInboundMsg (" << m_inboundMsgs[i]
+                   << ") is found among the pending messages.");
+      msgIdx = i;
       return true;
     }
   }
-    
-  // If the message is not found above, it might be marked as busy
-  auto busyMsgs = m_busyInboundMsgs.find(ipv4Header.GetSource().Get());
-  if (busyMsgs != m_busyInboundMsgs.end())
-  {
-    for (std::size_t i = 0; i < busyMsgs->second.size(); ++i) 
-    {
-      currentMsg = busyMsgs->second[i];
-      if (currentMsg->GetSrcAddress() == ipv4Header.GetSource() &&
-          currentMsg->GetDstAddress() == ipv4Header.GetDestination() &&
-          currentMsg->GetSrcPort() == homaHeader.GetSrcPort() &&
-          currentMsg->GetDstPort() == homaHeader.GetDstPort() &&
-          currentMsg->GetTxMsgId() == homaHeader.GetTxMsgId())
-      {
-        NS_LOG_LOGIC("The HomaInboundMsg (" << currentMsg
-                     << ") is found among the messages that were marked as busy.");
-        inboundMsg = currentMsg;
-        return true;
-      }
-    }
-  }
   
-  NS_LOG_LOGIC("Incoming packet doesn't belong to an existing inbound message.");
+  NS_LOG_LOGIC("Incoming packet doesn't belong to a pending inbound message.");
   return false;
 }
     
-void HomaRecvScheduler::ScheduleNewMsg(Ptr<HomaInboundMsg> inboundMsg)
+void HomaRecvScheduler::ScheduleMsgAtIdx(Ptr<HomaInboundMsg> inboundMsg,
+                                         int msgIdx)
 {
-  NS_LOG_FUNCTION (this << inboundMsg);
+  NS_LOG_FUNCTION (this << inboundMsg << msgIdx);
     
-  bool msgInserted = false;
-  for(std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
-  {
-    if(inboundMsg->GetRemainingBytes () < m_activeInboundMsgs[i]->GetRemainingBytes())
-    {
-      m_activeInboundMsgs.insert(m_activeInboundMsgs.begin()+i, inboundMsg);
-      msgInserted = true;
-      break;
-    }
-  }
-  if (!msgInserted)
-  {
-    // The remaining size of the inboundMsg is larger than all the active messages
-    m_activeInboundMsgs.push_back(inboundMsg);
-  }
-    
-  /*
-   * Scheduling a new message means the sender is not busy anymore, so we should 
-   * try to schedule the pending inbound messages that were previously marked as busy
-   * from the same sender.
-   */
-  this->SchedulePreviouslyBusySender(inboundMsg->GetSrcAddress().Get());
-}
-    
-/*
- * This method is called after the corresponding inbound message is found among the
- * pending messages. This means if the message was found to be active, its index (order)
- * was also detected. Then this method takes this index as an optimization which
- * prevents looping through all the active messages once again. 
- */
-void HomaRecvScheduler::RescheduleMsg (Ptr<HomaInboundMsg> inboundMsg, 
-                                       int activeMsgIdx)
-{
-  NS_LOG_FUNCTION (this << inboundMsg << activeMsgIdx);
-    
-  if (activeMsgIdx >= 0)
+  if (msgIdx >= 0)
   {
     NS_LOG_LOGIC("The HomaInboundMsg (" << inboundMsg 
                  << ") is already an active message. Reordering it.");
     
     // Make sure the activeMsgIdx matches inboundMsg
-    Ptr<HomaInboundMsg> msgToReschedule = m_activeInboundMsgs[activeMsgIdx];
+    Ptr<HomaInboundMsg> msgToReschedule = m_inboundMsgs[msgIdx];
     NS_ASSERT(msgToReschedule->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
               msgToReschedule->GetDstAddress() == inboundMsg->GetDstAddress() &&
               msgToReschedule->GetSrcPort() == inboundMsg->GetSrcPort() &&
               msgToReschedule->GetDstPort() == inboundMsg->GetDstPort() &&
               msgToReschedule->GetTxMsgId() == inboundMsg->GetTxMsgId());
     
-    // Remove the corresponding message and re-insert with the correct ordering
-    m_activeInboundMsgs.erase(m_activeInboundMsgs.begin() + activeMsgIdx);
-    this->ScheduleNewMsg(inboundMsg);
+    m_inboundMsgs.erase(m_inboundMsgs.begin() + msgIdx);
   }
-  else
+  
+  for(std::size_t i = 0; i < m_inboundMsgs.size(); ++i) 
   {
-    uint32_t senderIP = inboundMsg->GetSrcAddress().Get();
-    NS_LOG_LOGIC("The sender (" << senderIP 
-                 << ") was previously marked as Busy."
-                 << " Scheduling all pending messages from this sender.");
-    this->SchedulePreviouslyBusySender(senderIP);
+    if(inboundMsg->GetRemainingBytes () < m_inboundMsgs[i]->GetRemainingBytes())
+    {
+      m_inboundMsgs.insert(m_inboundMsgs.begin()+i, inboundMsg);
+      return;
+    }
   }
-}
- 
-/*
- * This method takes the first busy inbound message of the sender and 
- * schedules it (ie, inserts it into the list of active messages). The 
- * ScheduleNewMsg method calls this one again until the all busy messages
- * of the same sender are scheduled one by one.
- */
-void HomaRecvScheduler::SchedulePreviouslyBusySender(uint32_t senderIp)
-{
-  NS_LOG_FUNCTION (this << senderIp);
-    
-  Ptr<HomaInboundMsg> previouslyBusyMsg;
-  auto busyMsgsOfSender = m_busyInboundMsgs.find(senderIp);
-  if (busyMsgsOfSender != m_busyInboundMsgs.end())
-  {
-    if (busyMsgsOfSender->second.size() > 0)
-    {
-      previouslyBusyMsg = busyMsgsOfSender->second[0]; // Get the message at the head of the vector
-      
-      busyMsgsOfSender->second.erase(busyMsgsOfSender->second.begin()); // Remove the head from the vector
-      if (busyMsgsOfSender->second.size() == 0)
-      {
-        m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
-      }
-      
-      this->ScheduleNewMsg(previouslyBusyMsg);
-    }
-    else
-    {
-      NS_LOG_ERROR("HomaRecvScheduler (" << this << ") detected a "
-                   "Busy sender (" << senderIp << ") which doesn't "
-                   "have a pending message");
-        
-      m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
-    }
-  } 
+  // The remaining size of the inboundMsg is larger than all the active messages
+  m_inboundMsgs.push_back(inboundMsg);
 }
     
-void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
+void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg, int msgIdx)
 {
   NS_LOG_FUNCTION (this << inboundMsg);
     
@@ -1705,118 +1610,30 @@ void HomaRecvScheduler::ForwardUp(Ptr<HomaInboundMsg> inboundMsg)
                    inboundMsg->GetDstAddress (),
                    inboundMsg->GetSrcAddress ());
     
-  /*
-   * Since the message is being forwarded up, it should have been 
-   * received completely which means the sender is not marked as busy.
-   * Therefore the completed message should be listed on the active 
-   * messages list.
-   */
-  this->RemoveMsgFromActiveMsgsList (inboundMsg);
+  this->ClearStateForMsg (inboundMsg, msgIdx);
 }
     
-void HomaRecvScheduler::RemoveMsgFromActiveMsgsList(Ptr<HomaInboundMsg> inboundMsg)
+void HomaRecvScheduler::ClearStateForMsg(Ptr<HomaInboundMsg> inboundMsg, int msgIdx)
 {
-  NS_LOG_FUNCTION (this << inboundMsg);
+  NS_LOG_FUNCTION (this << inboundMsg << msgIdx);
   
-  bool msgRemoved = false;
-  Ptr<HomaInboundMsg> currentMsg;
-  // First look for the message in the list of active messages
-  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  Simulator::Cancel (inboundMsg->GetRtxEvent ());
+    
+  if (msgIdx >= 0)
   {
-    currentMsg = m_activeInboundMsgs[i];
-    if (currentMsg->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
-        currentMsg->GetDstAddress() == inboundMsg->GetDstAddress() &&
-        currentMsg->GetSrcPort() == inboundMsg->GetSrcPort() &&
-        currentMsg->GetDstPort() == inboundMsg->GetDstPort() &&
-        currentMsg->GetTxMsgId() == inboundMsg->GetTxMsgId())
-    {
-      NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
-                   ") from the active messages list of HomaRecvScheduler (" << 
-                   this << ").");
-        
-      Simulator::Cancel (currentMsg->GetRtxEvent ());
-      m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
-      msgRemoved = true;
-      break;
-    }
-  }
-    
-  if (!msgRemoved)
-  {
-    NS_LOG_ERROR("ERROR: HomaInboundMsg (" << inboundMsg <<
-                 ") couldn't be found inside the active messages list!");
-  }
-}
-    
-void HomaRecvScheduler::RemoveMsgFromBusyMsgsList(Ptr<HomaInboundMsg> inboundMsg)
-{
-  NS_LOG_FUNCTION (this << inboundMsg);
-    
-  uint32_t senderIp = inboundMsg->GetSrcAddress().Get();
-    
-  bool msgRemoved = false;
-  Ptr<HomaInboundMsg> currentMsg;
-  auto busyMsgsOfSender = m_busyInboundMsgs.find(senderIp);
-  if (busyMsgsOfSender != m_busyInboundMsgs.end())
-  {
-    for (std::size_t i = 0; i < busyMsgsOfSender->second.size(); ++i) 
-    {
-      currentMsg = busyMsgsOfSender->second[i];
-      if (currentMsg->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
-          currentMsg->GetDstAddress() == inboundMsg->GetDstAddress() &&
-          currentMsg->GetSrcPort() == inboundMsg->GetSrcPort() &&
-          currentMsg->GetDstPort() == inboundMsg->GetDstPort() &&
-          currentMsg->GetTxMsgId() == inboundMsg->GetTxMsgId())
-      {
-        NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
-                     ") from the busy messages list of HomaRecvScheduler (" << 
-                     this << ").");
-        busyMsgsOfSender->second.erase(busyMsgsOfSender->second.begin()+i);
-        if (busyMsgsOfSender->second.size() == 0)
-        {
-          m_busyInboundMsgs.erase(senderIp); // Delete the entry for the sender because it is empty
-        }
-        msgRemoved = true;
-        break;
-      }
-    }
-  }
-    
-  if (!msgRemoved)
-  {
-    NS_LOG_ERROR("ERROR: HomaInboundMsg (" << inboundMsg <<
-                 ") couldn't be found inside the busy messages list!");
-  }
-}
-    
-void HomaRecvScheduler::BusyReceivedForMsg(Ipv4Address senderAddress)
-{
-  NS_LOG_FUNCTION (this << senderAddress);
-    
-  std::vector<Ptr<HomaInboundMsg>> msgsToMarkBusy;
-  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
-  {
-    if (m_activeInboundMsgs[i]->GetSrcAddress() == senderAddress)
-    {
-      msgsToMarkBusy.push_back(m_activeInboundMsgs[i]);
-      m_activeInboundMsgs.erase(m_activeInboundMsgs.begin()+i);
-    } 
-  }
-   
-  if (msgsToMarkBusy.size() > 0)
-  {
-    uint32_t senderIP = senderAddress.Get();
-    auto busySenderMsgs = m_busyInboundMsgs.find(senderIP);
-    if (busySenderMsgs != m_busyInboundMsgs.end())
-    {
-      // Sender was already marked busy before, append the active messages detected above
-      busySenderMsgs->second.insert (busySenderMsgs->second.end(), 
-                                     msgsToMarkBusy.begin(), msgsToMarkBusy.end());
-    }
-    else
-    {
-      m_busyInboundMsgs[senderIP] = msgsToMarkBusy;
-    }
+    NS_ASSERT_MSG(m_inboundMsgs[msgIdx]->GetSrcAddress() == inboundMsg->GetSrcAddress() &&
+                  m_inboundMsgs[msgIdx]->GetDstAddress() == inboundMsg->GetDstAddress() &&
+                  m_inboundMsgs[msgIdx]->GetSrcPort() == inboundMsg->GetSrcPort() &&
+                  m_inboundMsgs[msgIdx]->GetDstPort() == inboundMsg->GetDstPort() &&
+                  m_inboundMsgs[msgIdx]->GetTxMsgId() == inboundMsg->GetTxMsgId(),
+                  "State can not be cleared for HomaInboundMsg because the given msgIdx "
+                  "is not consistent with the message itself!");
+      
+    NS_LOG_DEBUG("Erasing HomaInboundMsg (" << inboundMsg << 
+                 ") from the pending messages list of HomaRecvScheduler (" << 
+                 this << ").");
+      
+    m_inboundMsgs.erase(m_inboundMsgs.begin() + msgIdx);
   }
 }
 
@@ -1834,29 +1651,35 @@ void HomaRecvScheduler::SendAppropriateGrants()
 {
   NS_LOG_FUNCTION (this);
     
-  std::list<Ipv4Address> grantedSenders; // Same sender can't be granted for multiple msgs at the same time
-  uint8_t grantingPrio = m_homa->GetNumUnschedPrioBands(); // Scheduled priorities start here
+  std::unordered_set<uint32_t> grantedSenders; // Same sender can't be granted for multiple msgs at oonce
+  uint8_t grantingPrio = m_homa->GetNumUnschedPrioBands (); // Scheduled priorities start here
+  uint8_t overcommitDue = m_homa->GetOvercommitLevel ();
+    
   Ptr<HomaInboundMsg> currentMsg;
-  for (std::size_t i = 0; i < m_activeInboundMsgs.size(); ++i) 
+  for (std::size_t i = 0; i < m_inboundMsgs.size(); ++i) 
   {
-    if (grantingPrio >= m_homa->GetNumTotalPrioBands()) 
+    if (overcommitDue <= 0)
       break;
     
-    currentMsg = m_activeInboundMsgs[i];
+    grantingPrio = std::min(grantingPrio, m_homa->GetNumTotalPrioBands());
+    
+    currentMsg = m_inboundMsgs[i];
     Ipv4Address senderAddress = currentMsg->GetSrcAddress ();
-    if (std::find(grantedSenders.begin(),grantedSenders.end(),senderAddress) == grantedSenders.end())
+    if (!currentMsg->IsFullyGranted () &&
+        grantedSenders.find(senderAddress.Get ()) == grantedSenders.end())
     {
-      if (!currentMsg->IsFullyGranted ()) // TODO: Fully granted active messages don't get reGranted?
+      if (currentMsg->IsGrantable () &&
+          m_busySenders.find(senderAddress.Get ()) == m_busySenders.end())
       {
-        if (currentMsg->IsGrantable ())
-        {
-          m_homa->SendDown(currentMsg->GenerateGrantOrAck(grantingPrio, 
-                                                          HomaHeader::Flags_t::GRANT),
-                           currentMsg->GetDstAddress (),
-                           senderAddress);
-        }
-        grantingPrio++;
+        m_homa->SendDown(currentMsg->GenerateGrantOrAck(grantingPrio, 
+                                                        HomaHeader::Flags_t::GRANT),
+                         currentMsg->GetDstAddress (),
+                         senderAddress);
+        overcommitDue--;
+        grantedSenders.insert(senderAddress.Get ());
       }
+        
+      grantingPrio++;
     }
   }
 }
@@ -1866,8 +1689,6 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
 {
   NS_LOG_FUNCTION (this << inboundMsg << maxRsndPktOffset);
     
-  // TODO: We need a cap for the max number of rtxTimeouts
-    
   if (inboundMsg->IsFullyReceived ())
     return;
     
@@ -1876,23 +1697,19 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
   homaHeader.SetSrcPort (inboundMsg->GetSrcPort ());
   homaHeader.SetDstPort (inboundMsg->GetDstPort ());
   homaHeader.SetTxMsgId (inboundMsg->GetTxMsgId ());
-  int activeMsgIdx = -1;
-  if (this->GetInboundMsg(inboundMsg->GetIpv4Header (), homaHeader, 
-                          inboundMsg, activeMsgIdx))
+  int msgIdx = -1;
+  if (this->GetInboundMsg(inboundMsg->GetIpv4Header (), homaHeader, msgIdx))
   {
+    NS_ASSERT(msgIdx >= 0);
     if (inboundMsg->GetNumRtxWithoutProgress () >= m_homa->GetMaxNumRtxPerMsg())
     {
-      NS_LOG_WARN(" Rtx Limit has been reached for the inbound Msg (" 
+      NS_LOG_WARN("Rtx Limit has been reached for the inbound Msg (" 
                   << inboundMsg << ").");
-      if (activeMsgIdx >= 0)
-        this->RemoveMsgFromActiveMsgsList (inboundMsg);
-      else
-        this->RemoveMsgFromBusyMsgsList (inboundMsg);
-      
+      this->ClearStateForMsg (inboundMsg, msgIdx);
       return;
     }
       
-    if (activeMsgIdx >= 0)
+    if (m_busySenders.find(inboundMsg->GetSrcAddress ().Get ()) == m_busySenders.end())
     {
       // We send RESEND packets only to non-busy senders
       NS_LOG_LOGIC(Simulator::Now().GetNanoSeconds () << 
