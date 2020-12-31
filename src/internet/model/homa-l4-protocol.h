@@ -264,8 +264,9 @@ private:
     
   uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+  uint8_t m_overcommitLevel;     //!< Minimum number of messages to Grant at the same time
     
-  DataRate m_linkRate;          //!< Data Rate of the corresponding net device for this prototocol
+  DataRate m_linkRate;       //!< Data Rate of the corresponding net device for this prototocol
   Time m_nextTimeTxQueWillBeEmpty;   //!< Total amount of bytes serialized since the last time 
     
   Ptr<HomaSendScheduler> m_sendScheduler;  //!< The scheduler that manages transmission of HomaOutboundMsg
@@ -728,12 +729,15 @@ public:
    * \brief Set state values that are used by the rx logic
    * \param mtuBytes The maximum transmission unit of the netDevice in bytes
    * \param rttPackets The average BDP value inside the network in packets
+   * \param rtxTimeout Time it takes to expire the retransmission timer
    * \param numTotalPrioBands Total number of priority levels used within the network
    * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
+   * \param overcommitLevel Minimum number of messages to grant at the same time
+   * \param maxNumRtxPerMsg Maximum number of timer expirations before clearing the state for the msg
    */
   void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
                          uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands,
-                         uint16_t maxNumRtxPerMsg);
+                         uint8_t overcommitLevel, uint16_t maxNumRtxPerMsg);
   
   /**
    * \brief Notify this HomaRecvScheduler upon arrival of a packet
@@ -844,6 +848,7 @@ private:
   uint16_t m_rttPackets; //!< The number of packets required for full utilization, ie. BDP.
   uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+  uint8_t m_overcommitLevel;     //!< Maximum number of messages to grant at the same time
   
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address

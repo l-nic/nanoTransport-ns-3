@@ -70,6 +70,10 @@ HomaL4Protocol::GetTypeId (void)
                    UintegerValue (2),
                    MakeUintegerAccessor (&HomaL4Protocol::m_numUnschedPrioBands),
                    MakeUintegerChecker<uint8_t> ())
+    .AddAttribute ("OvercommitLevel", "Minimum number of messages to Grant at the same time",
+                   UintegerValue (6),
+                   MakeUintegerAccessor (&HomaL4Protocol::m_overcommitLevel),
+                   MakeUintegerChecker<uint8_t> ())
     .AddAttribute ("InbndRtxTimeout", "Time value to determine the retransmission timeout of InboundMsgs",
                    TimeValue (MicroSeconds (50)),
                    MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
@@ -164,7 +168,7 @@ HomaL4Protocol::NotifyNewAggregate ()
                 "Total number of priority bands should be larger than the number of bands dedicated for unscheduled packets.");
           m_recvScheduler->SetNetworkConfig (m_mtu, m_bdp, m_inboundRtxTimeout,
                                              m_numTotalPrioBands, m_numUnschedPrioBands,
-                                             m_maxNumRtxPerMsg);
+                                             m_overcommitLevel, m_maxNumRtxPerMsg);
         }
     }
   
@@ -1443,7 +1447,7 @@ HomaRecvScheduler::~HomaRecvScheduler ()
  */
 void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
                                           uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands,
-                                          uint16_t maxNumRtxPerMsg)
+                                          uint8_t overcommitLevel, uint16_t maxNumRtxPerMsg)
 {
   NS_LOG_FUNCTION (this << mtuBytes << rttPackets);
     
@@ -1452,6 +1456,7 @@ void HomaRecvScheduler::SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets
   m_rtxTimeout = rtxTimeout;
   m_numTotalPrioBands = numTotalPrioBands;
   m_numUnschedPrioBands = numUnschedPrioBands;
+  m_overcommitLevel = overcommitLevel;
   m_maxNumRtxPerMsg = maxNumRtxPerMsg;
 }
     
