@@ -194,7 +194,7 @@ main (int argc, char *argv[])
   /* Set the message traces for the Homa clients*/
   AsciiTraceHelper asciiTraceHelper;
   Ptr<OutputStreamWrapper> qStream;
-  qStream = asciiTraceHelper.CreateFileStream ("HomaOfficialSimpleTestMsgTraces.tr");
+  qStream = asciiTraceHelper.CreateFileStream ("outputs/homa-official-simple-test/HomaOfficialSimpleTestMsgTraces.tr");
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
                                 MakeBoundCallback(&TraceMsgBegin, qStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 

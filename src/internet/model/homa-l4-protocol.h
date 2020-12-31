@@ -97,10 +97,52 @@ public:
   Ptr<Node> GetNode(void) const;
     
   /**
+   * \brief Get the MTU of the associated net device
+   * \return The corresponding MTU size in bytes.
+   */
+  uint32_t GetMtu(void) const;
+    
+  /**
+   * \brief Get the approximated BDP value of the network in packets
+   * \return The number of packets required for full utilization, ie. BDP.
+   */
+  uint16_t GetBdp(void) const;
+    
+  /**
    * \brief Get the protocol number associated with Homa Transport.
    * \return The protocol identifier of Homa used in IP headers.
    */
   virtual int GetProtocolNumber (void) const;
+    
+  /**
+   * \brief Get rtx timeout duration for inbound messages
+   * \return Time value to determine the retransmission timeout of InboundMsgs
+   */
+  Time GetInboundRtxTimeout(void) const;
+    
+  /**
+   * \brief Get the maximum number of rtx timeouts allowed per message
+   * \return Maximum allowed rtx timeout count per message
+   */
+  uint16_t GetMaxNumRtxPerMsg(void) const;
+    
+  /**
+   * \brief Get total number of priority levels in the network
+   * \return Total number of priority levels used within the network
+   */
+  uint8_t GetNumTotalPrioBands (void) const;
+    
+  /**
+   * \brief Get number of priority levels dedicated to unscheduled packets in the network
+   * \return Number of priority bands dedicated for unscheduled packets
+   */
+  uint8_t GetNumUnschedPrioBands (void) const;
+  
+  /**
+   * \brief Get the configured number of messages to grant at the same time
+   * \return Minimum number of messages to Grant at the same time
+   */
+  uint8_t GetOvercommitLevel (void) const;
     
   /**
    * \brief Create a HomaSocket and associate it with this Homa Protocol instance.
@@ -677,7 +719,7 @@ private:
   uint16_t m_txMsgId;         //!< TX msg ID of the message determined by the sender
   
   std::vector<Ptr<Packet>> m_packets;  //!< Packet buffer for the message
-  std::vector<bool> m_receivedPackets; //!< State to store whether the packets are delivered to the receiver
+  std::vector<bool> m_receivedPackets; //!< State to store which packets are delivered to the receiver
    
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not received yet
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
@@ -714,20 +756,6 @@ public:
 
   HomaRecvScheduler (Ptr<HomaL4Protocol> homaL4Protocol);
   ~HomaRecvScheduler (void);
-  
-  /**
-   * \brief Set state values that are used by the rx logic
-   * \param mtuBytes The maximum transmission unit of the netDevice in bytes
-   * \param rttPackets The average BDP value inside the network in packets
-   * \param rtxTimeout Time it takes to expire the retransmission timer
-   * \param numTotalPrioBands Total number of priority levels used within the network
-   * \param numUnschedPrioBands Number of priority bands dedicated for unscheduled packets
-   * \param overcommitLevel Minimum number of messages to grant at the same time
-   * \param maxNumRtxPerMsg Maximum number of timer expirations before clearing the state for the msg
-   */
-  void SetNetworkConfig (uint32_t mtuBytes, uint16_t rttPackets, Time rtxTimeout,
-                         uint8_t numTotalPrioBands, uint8_t numUnschedPrioBands,
-                         uint8_t overcommitLevel, uint16_t maxNumRtxPerMsg);
   
   /**
    * \brief Notify this HomaRecvScheduler upon arrival of a packet
@@ -834,17 +862,8 @@ public:
 private:
   Ptr<HomaL4Protocol> m_homa; //!< the protocol instance itself that sends/receives messages
   
-  uint32_t m_mtuBytes;   //!< The MTU of the corresponding netDevice
-  uint16_t m_rttPackets; //!< The number of packets required for full utilization, ie. BDP.
-  uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
-  uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
-  uint8_t m_overcommitLevel;     //!< Maximum number of messages to grant at the same time
-  
   std::vector<Ptr<HomaInboundMsg>> m_activeInboundMsgs; //!< Sorted vector of inbound messages that are to be scheduled
   std::unordered_map<uint32_t, std::vector<Ptr<HomaInboundMsg>>> m_busyInboundMsgs; //!< state to keep busy HomaInboundMsg with the key as the sender's IP address
-  
-  Time m_rtxTimeout;     //!< Time to expire the retransmission events.
-  uint16_t m_maxNumRtxPerMsg;    //!< Maximum allowed rtx timeout count per inbound message
 };
     
 } // namespace ns3
