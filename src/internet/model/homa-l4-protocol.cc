@@ -1661,22 +1661,25 @@ void HomaRecvScheduler::SendAppropriateGrants()
     if (overcommitDue <= 0)
       break;
     
-    grantingPrio = std::min(grantingPrio, m_homa->GetNumTotalPrioBands());
+    grantingPrio = std::min(grantingPrio, (uint8_t)(m_homa->GetNumTotalPrioBands()-1));
     
     currentMsg = m_inboundMsgs[i];
     Ipv4Address senderAddress = currentMsg->GetSrcAddress ();
     if (!currentMsg->IsFullyGranted () &&
         grantedSenders.find(senderAddress.Get ()) == grantedSenders.end())
     {
-      if (currentMsg->IsGrantable () &&
-          m_busySenders.find(senderAddress.Get ()) == m_busySenders.end())
+      if (m_busySenders.find(senderAddress.Get ()) == m_busySenders.end())
       {
-        m_homa->SendDown(currentMsg->GenerateGrantOrAck(grantingPrio, 
-                                                        HomaHeader::Flags_t::GRANT),
-                         currentMsg->GetDstAddress (),
-                         senderAddress);
-        overcommitDue--;
+        if (currentMsg->IsGrantable ())
+        {
+          m_homa->SendDown(currentMsg->GenerateGrantOrAck(grantingPrio, 
+                                                          HomaHeader::Flags_t::GRANT),
+                           currentMsg->GetDstAddress (),
+                           senderAddress); 
+        }
+        
         grantedSenders.insert(senderAddress.Get ());
+        overcommitDue--;
       }
         
       grantingPrio++;
