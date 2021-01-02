@@ -128,7 +128,7 @@ main (int argc, char *argv[])
 //   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_WARN);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
   std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces");
@@ -204,7 +204,7 @@ main (int argc, char *argv[])
   //       value for rare overflows.
   TrafficControlHelper tchPfifoHoma;
   tchPfifoHoma.SetRootQueueDisc ("ns3::PfifoHomaQueueDisc", 
-                             "MaxSize", StringValue("150p"),
+                             "MaxSize", StringValue("500p"),
                              "NumBands", UintegerValue(numTotalPrioBands));
   for (int i = 0; i < nHosts; i++)
   {
@@ -275,6 +275,8 @@ main (int argc, char *argv[])
                                 MakeBoundCallback(&TraceMsgBegin, qStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
                                 MakeBoundCallback(&TraceMsgFinish, qStream));
+  
+//   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/pcaps/tor-spine", false);
 
   /******** Run the Actual Simulation ********/
   Simulator::Run ();

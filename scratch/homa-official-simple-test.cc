@@ -111,7 +111,7 @@ main (int argc, char *argv[])
   Packet::EnablePrinting ();
   Time::SetResolution (Time::NS);
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_ALL);
   LogComponentEnable ("OfficialHomaSimpleTest", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PointToPointNetDevice", LOG_LEVEL_ALL);
 

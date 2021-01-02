@@ -75,7 +75,7 @@ HomaL4Protocol::GetTypeId (void)
                    MakeUintegerAccessor (&HomaL4Protocol::m_overcommitLevel),
                    MakeUintegerChecker<uint8_t> ())
     .AddAttribute ("InbndRtxTimeout", "Time value to determine the retransmission timeout of InboundMsgs",
-                   TimeValue (MicroSeconds (50)),
+                   TimeValue (MilliSeconds (1)),
                    MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
     .AddAttribute ("OutbndRtxTimeout", "Time value to determine the timeout of OutboundMsgs",
@@ -208,6 +208,8 @@ HomaL4Protocol::NotifyNewAggregate ()
           NS_ASSERT(m_mtu); // m_mtu is set inside SetNode() above.
           NS_ASSERT_MSG(m_numTotalPrioBands > m_numUnschedPrioBands,
                 "Total number of priority bands should be larger than the number of bands dedicated for unscheduled packets.");
+          NS_ASSERT(m_outboundRtxTimeout != Time(0));
+          NS_ASSERT(m_inboundRtxTimeout != Time(0));
         }
     }
   
@@ -321,7 +323,6 @@ HomaL4Protocol::Send (Ptr<Packet> message,
                      uint16_t sport, uint16_t dport, Ptr<Ipv4Route> route)
 {
   NS_LOG_FUNCTION (this << message << saddr << daddr << sport << dport << route);
-    
   
   Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, sport, dport, 
                                                                this->GetMtu(), m_bdp);
@@ -427,7 +428,7 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
   }
   else
   {
-    NS_LOG_ERROR("HomaL4Protocol received an unknown type of a packet: " 
+    NS_LOG_ERROR("ERROR: HomaL4Protocol received an unknown type of a packet: " 
                  << homaHeader.FlagsToString(rxFlag));
     return IpL4Protocol::RX_ENDPOINT_UNREACH;
   }
@@ -724,7 +725,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
   NS_LOG_FUNCTION (this << homaHeader);
     
   uint16_t grantOffset = homaHeader.GetGrantOffset();
-  NS_ASSERT_MSG(grantOffset <= this->GetMsgSizePkts (), 
+  NS_ASSERT_MSG(grantOffset < this->GetMsgSizePkts (), 
                 "HomaOutboundMsg shouldn't be granted after it is already fully granted!");
     
   if (grantOffset >= m_maxGrantedIdx)
@@ -822,7 +823,8 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t lastRtxGrntIdx)
   }
   else
   {
-    NS_LOG_WARN("HomaOutboundMsg (" << this << ") has timed-out.");
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () << 
+                " HomaOutboundMsg (" << this << ") has timed-out.");
     m_isExpired = true;
   }
 }
@@ -1075,10 +1077,22 @@ void HomaSendScheduler::CtrlPktRecvdForOutboundMsg(Ipv4Header const &ipv4Header,
   uint16_t targetTxMsgId = homaHeader.GetTxMsgId();
   if(m_outboundMsgs.find(targetTxMsgId) == m_outboundMsgs.end())
   {
-    NS_LOG_ERROR("ERROR: HomaSendScheduler (" << this <<
-                 ") received a " << homaHeader.FlagsToString(homaHeader.GetFlags()) << 
-                 " packet for an unknown txMsgId (" << 
-                 targetTxMsgId << ").");
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                " HomaSendScheduler (" << this <<
+                ") received a " << homaHeader.FlagsToString(homaHeader.GetFlags()) << 
+                " packet for an unknown txMsgId (" << 
+                targetTxMsgId << ").");
+    return;
+  }
+    
+  if (m_outboundMsgs[targetTxMsgId]->IsExpired ())
+  {
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                " HomaSendScheduler (" << this <<
+                ") received a " << homaHeader.FlagsToString(homaHeader.GetFlags()) << 
+                " packet for an expired txMsgId (" << 
+                targetTxMsgId << ").");
+    this->ClearStateForMsg (targetTxMsgId);
     return;
   }
     
@@ -1277,7 +1291,7 @@ uint16_t HomaInboundMsg::GetLastRtxGrntIdx ()
     
 bool HomaInboundMsg::IsFullyGranted ()
 {
-  return m_maxGrantedIdx >= m_msgSizePkts;
+  return m_maxGrantedIdx >= m_msgSizePkts-1;
 }
 
 bool HomaInboundMsg::IsGrantable ()
@@ -1338,7 +1352,8 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
   }
   else
   {
-    NS_LOG_WARN("HomaInboundMsg (" << this << ") has received a packet for offset "
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                " HomaInboundMsg (" << this << ") has received a packet for offset "
                 << pktOffset << " which was already received.");
     // TODO: How do we manage the GrantOffset if this was a spurious retransmission?
   }
@@ -1706,7 +1721,8 @@ void HomaRecvScheduler::ExpireRtxTimeout(Ptr<HomaInboundMsg> inboundMsg,
     NS_ASSERT(msgIdx >= 0);
     if (inboundMsg->GetNumRtxWithoutProgress () >= m_homa->GetMaxNumRtxPerMsg())
     {
-      NS_LOG_WARN("Rtx Limit has been reached for the inbound Msg (" 
+      NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                  " Rtx Limit has been reached for the inbound Msg (" 
                   << inboundMsg << ").");
       this->ClearStateForMsg (inboundMsg, msgIdx);
       return;
