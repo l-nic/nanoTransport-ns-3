@@ -79,6 +79,18 @@ void TraceMsgFinish (Ptr<OutputStreamWrapper> stream,
       << " " << txMsgId << std::endl;
 }
 
+static void
+BytesInQueueDiscTrace (Ptr<OutputStreamWrapper> stream, int hostIdx, 
+                       uint32_t oldval, uint32_t newval)
+{
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+               " Queue Disc size from " << oldval << " to " << newval);
+    
+  *stream->GetStream () << Simulator::Now ().GetNanoSeconds ()
+                        << " HostIdx=" << hostIdx
+                        << " NewQueueSize=" << newval << std::endl;
+}
+
 std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &avgMsgSizePkts)
 {
   std::ifstream msgSizeDistFile;
@@ -112,6 +124,7 @@ std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &a
 int
 main (int argc, char *argv[])
 {
+  AsciiTraceHelper asciiTraceHelper;
   double duration = 0.01;
   double networkLoad = 0.5;
   uint32_t simIdx = 0;
@@ -131,10 +144,13 @@ main (int argc, char *argv[])
   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_WARN);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
-  std::string msgTracesFileName ("outputs/homa-paper-reproduction/MsgTraces");
-  msgTracesFileName += "_W5";
-  msgTracesFileName += "_load-" + std::to_string((int)(networkLoad*100)) + "p";
-  msgTracesFileName += "_" + std::to_string(simIdx) + ".tr";
+  std::string tracesFileName ("outputs/homa-paper-reproduction/MsgTraces");
+  tracesFileName += "_W5";
+  tracesFileName += "_load-" + std::to_string((int)(networkLoad*100)) + "p";
+  tracesFileName += "_" + std::to_string(simIdx);
+    
+  std::string qStreamName = tracesFileName + ".qlen";
+  std::string msgTracesFileName = tracesFileName + ".tr";
     
   int nHosts = 144;
   int nTors = 9;
@@ -181,10 +197,6 @@ main (int argc, char *argv[])
     
   /******** Install Internet Stack ********/
     
-  /* Enable multi-path routing */
-  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
-                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
-    
   /* Set default BDP value in packets */
   Config::SetDefault("ns3::HomaL4Protocol::RttPackets", UintegerValue(7));
     
@@ -197,7 +209,14 @@ main (int argc, char *argv[])
                      UintegerValue(numUnschedPrioBands));
   
   InternetStackHelper stack;
-  stack.InstallAll ();
+  stack.Install (spineNodes);
+    
+  /* Enable multi-path routing */
+  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
+    
+  stack.Install (torNodes);
+  stack.Install (hostNodes);
     
   /* Link traffic control configuration for Homa compatibility */
   // TODO: The paper doesn't provide buffer sizes, so we set some large 
@@ -206,9 +225,15 @@ main (int argc, char *argv[])
   tchPfifoHoma.SetRootQueueDisc ("ns3::PfifoHomaQueueDisc", 
                              "MaxSize", StringValue("500p"),
                              "NumBands", UintegerValue(numTotalPrioBands));
+  QueueDiscContainer hostFacingTorQdiscs[nHosts];
+  Ptr<OutputStreamWrapper> qStream;
+  qStream = asciiTraceHelper.CreateFileStream (qStreamName);
   for (int i = 0; i < nHosts; i++)
   {
-    tchPfifoHoma.Install (hostTorDevices[i].Get(1));
+    hostFacingTorQdiscs[i] = tchPfifoHoma.Install (hostTorDevices[i].Get(1));
+    hostFacingTorQdiscs[i].Get(0)->TraceConnectWithoutContext ("BytesInQueue", 
+                                          MakeBoundCallback (&BytesInQueueDiscTrace, 
+                                                             qStream, i));
   }
   for (int i = 0; i < nTors*nSpines; i++)
   {
@@ -268,13 +293,12 @@ main (int argc, char *argv[])
   }
       
   /* Set the message traces for the Homa clients*/
-  AsciiTraceHelper asciiTraceHelper;
-  Ptr<OutputStreamWrapper> qStream;
-  qStream = asciiTraceHelper.CreateFileStream (msgTracesFileName);
+  Ptr<OutputStreamWrapper> msgStream;
+  msgStream = asciiTraceHelper.CreateFileStream (msgTracesFileName);
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgBegin", 
-                                MakeBoundCallback(&TraceMsgBegin, qStream));
+                                MakeBoundCallback(&TraceMsgBegin, msgStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
-                                MakeBoundCallback(&TraceMsgFinish, qStream));
+                                MakeBoundCallback(&TraceMsgFinish, msgStream));
   
 //   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/pcaps/tor-spine", false);
 

@@ -79,7 +79,7 @@ HomaL4Protocol::GetTypeId (void)
                    MakeTimeAccessor (&HomaL4Protocol::m_inboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
     .AddAttribute ("OutbndRtxTimeout", "Time value to determine the timeout of OutboundMsgs",
-                   TimeValue (MilliSeconds (5)),
+                   TimeValue (MilliSeconds (10)),
                    MakeTimeAccessor (&HomaL4Protocol::m_outboundRtxTimeout),
                    MakeTimeChecker (MicroSeconds (0)))
     .AddAttribute ("MaxRtxCnt", "Maximum allowed consecutive rtx timeout count per message",
@@ -728,7 +728,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
   NS_ASSERT_MSG(grantOffset < this->GetMsgSizePkts (), 
                 "HomaOutboundMsg shouldn't be granted after it is already fully granted!");
     
-  if (grantOffset >= m_maxGrantedIdx)
+  if (grantOffset > m_maxGrantedIdx)
   {
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 
                  << ") is increasing the Grant index to "
@@ -737,15 +737,10 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
     m_maxGrantedIdx = grantOffset;
       
     uint8_t prio = homaHeader.GetPrio();
-    if (prio < m_prio || !m_prioSetByReceiver)
-    {
-      NS_LOG_LOGIC("HomaOutboundMsg (" << this 
-                   << ") is setting priority to "
-                   << (uint16_t) prio << ".");
-        
-      m_prio = prio;
-      m_prioSetByReceiver = true;
-    }
+    NS_LOG_LOGIC("HomaOutboundMsg (" << this << ") is setting priority to "
+                 << (uint16_t) prio << ".");
+    m_prio = prio;
+    m_prioSetByReceiver = true;
       
     /*
      * Since Homa doesn't explicitly acknowledge the delivery of data packets,
@@ -783,14 +778,20 @@ void HomaOutboundMsg::HandleAck (HomaHeader const &homaHeader)
     
 Ptr<Packet> HomaOutboundMsg::GenerateBusy (uint16_t targetTxMsgId)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << targetTxMsgId);
+    
+  uint16_t pktOffset;
+  if (!m_pktTxQ.empty ())
+    pktOffset = m_pktTxQ.top();
+  else
+    pktOffset = this->GetMsgSizePkts ();
   
   HomaHeader homaHeader;
   homaHeader.SetSrcPort (m_sport); 
   homaHeader.SetDstPort (m_dport);
   homaHeader.SetTxMsgId (targetTxMsgId);
   homaHeader.SetMsgSize (m_msgSizeBytes);
-//   homaHeader.SetPktOffset (0); // TODO: Is this correct?
+  homaHeader.SetPktOffset (pktOffset); // TODO: Is this correct?
   homaHeader.SetGrantOffset (m_maxGrantedIdx); // TODO: Is this correct?
   homaHeader.SetPrio (m_prio); // TODO: Is this correct?
   homaHeader.SetPayloadSize (0);
@@ -934,11 +935,11 @@ bool HomaSendScheduler::GetNextMsgId (uint16_t &txMsgId)
     if (!currentMsg->IsExpired ())
     { 
       uint32_t curRemainingBytes = currentMsg->GetRemainingBytes();
-      // Accept current msg if it has a granted but not transmitted packet
-      if (currentMsg->GetNextPktOffset(pktOffset))
+      // Accept current msg if the remainig size is smaller than minRemainingBytes
+      if (curRemainingBytes < minRemainingBytes)
       {
-        // Accept current msg if the remainig size is smaller than minRemainingBytes
-        if (curRemainingBytes < minRemainingBytes)
+        // Accept current msg if it has a granted but not transmitted packet
+        if (currentMsg->GetNextPktOffset(pktOffset))
         {
           candidateMsg = currentMsg;
           txMsgId = it.first;
@@ -1048,13 +1049,11 @@ HomaSendScheduler::TxDataPacket ()
       
     NS_LOG_LOGIC("HomaSendScheduler (" << this <<
                   ") will transmit a packet from msg " << nextTxMsgID);
-      
-    Ptr<HomaOutboundMsg> nextMsg = m_outboundMsgs[nextTxMsgID];
-    Ipv4Address saddr = nextMsg->GetSrcAddress ();
-    Ipv4Address daddr = nextMsg->GetDstAddress ();
-    Ptr<Ipv4Route> route = nextMsg->GetRoute ();
     
-    m_homa->SendDown(p, saddr, daddr, route);
+    m_homa->SendDown(p, 
+                     m_outboundMsgs[nextTxMsgID]->GetSrcAddress (), 
+                     m_outboundMsgs[nextTxMsgID]->GetDstAddress (), 
+                     m_outboundMsgs[nextTxMsgID]->GetRoute ());
     
     m_txEvent = Simulator::Schedule (m_homa->GetTimeToDrainTxQueue(), 
                                      &HomaSendScheduler::TxDataPacket, this);
@@ -1301,14 +1300,6 @@ bool HomaInboundMsg::IsGrantable ()
     
 bool HomaInboundMsg::IsFullyReceived ()
 {
-//   for (uint16_t i = 0; i < m_msgSizePkts; i++)
-//   {
-//     if (!m_receivedPackets[i])
-//     {
-//       return false;
-//     }
-//   }
-//   return true;
   return std::none_of(m_receivedPackets.begin(), 
                       m_receivedPackets.end(), 
                       std::logical_not<bool>());
@@ -1401,7 +1392,7 @@ Ptr<Packet> HomaInboundMsg::GenerateGrantOrAck(uint8_t grantedPrio,
   homaHeader.SetDstPort (m_sport);
   homaHeader.SetTxMsgId (m_txMsgId);
   homaHeader.SetMsgSize (m_msgSizeBytes);
-  homaHeader.SetPktOffset (ackNo); // TODO: Is this correct?
+  homaHeader.SetPktOffset (ackNo);
   homaHeader.SetGrantOffset (m_maxGrantableIdx);
   homaHeader.SetPrio (m_prio);
   homaHeader.SetPayloadSize (0);
@@ -1438,7 +1429,7 @@ std::list<Ptr<Packet>> HomaInboundMsg::GenerateResends (uint16_t maxRsndPktOffse
       homaHeader.SetDstPort (m_sport);
       homaHeader.SetTxMsgId (m_txMsgId);
       homaHeader.SetMsgSize (m_msgSizeBytes);
-      homaHeader.SetPktOffset (i); // TODO: Is this correct?
+      homaHeader.SetPktOffset (i); 
       homaHeader.SetGrantOffset (m_maxGrantedIdx);
       homaHeader.SetPrio (m_prio);
       homaHeader.SetPayloadSize (0);
