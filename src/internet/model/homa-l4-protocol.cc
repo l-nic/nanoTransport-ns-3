@@ -851,7 +851,11 @@ HomaSendScheduler::HomaSendScheduler (Ptr<HomaL4Protocol> homaL4Protocol)
   
   // Initially, all the txMsgId values between 0 and MAX_N_MSG are listed as free
   m_txMsgIdFreeList.resize(MAX_N_MSG);
-  std::iota(m_txMsgIdFreeList.begin(), m_txMsgIdFreeList.end(), 0);
+  uint16_t i = 0;
+  for (auto it = m_txMsgIdFreeList.begin(); it != m_txMsgIdFreeList.end(); it++) {
+    *it = i;
+    i++;
+  }
 }
 
 HomaSendScheduler::~HomaSendScheduler ()
