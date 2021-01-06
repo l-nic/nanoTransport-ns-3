@@ -79,6 +79,10 @@ main (int argc, char *argv[])
 //   pointToPoint.SetQueue ("ns3::DropTailQueue", 
 //                          "MaxSize", StringValue ("1p"));
 //   deviceContainers[1] = pointToPoint.Install (nodeContainers[1]);
+  
+//   // Enable multi-path routing
+//   Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+//                      EnumValue(Ipv4GlobalRouting::ECMP_RANDOM)); 
       
 //   InternetStackHelper stack;
 //   stack.InstallAll ();
@@ -89,10 +93,6 @@ main (int argc, char *argv[])
 //                              "MaxSize", StringValue("9p"),
 //                              "NumBands", UintegerValue(4));
 //   tchPfifo.Install (deviceContainers[1].Get (0));
-
-//   // Enable multi-path routing
-//   Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
-//                      EnumValue(Ipv4GlobalRouting::ECMP_RANDOM)); 
     
 //   Ipv4AddressHelper address;
 //   address.SetBase ("10.0.0.0", "255.255.255.0");
