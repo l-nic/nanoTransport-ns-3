@@ -128,11 +128,13 @@ main (int argc, char *argv[])
   double duration = 0.01;
   double networkLoad = 0.5;
   uint32_t simIdx = 0;
+  bool traceQueues = false;
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
   cmd.AddValue ("load", "The network load to simulate the network at, ie 0.5 for 50%.", networkLoad);
   cmd.AddValue ("simIdx", "The index of the simulation used to identify parallel runs.", simIdx);
+  cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.Parse (argc, argv);
     
   SeedManager::SetRun (simIdx);
@@ -227,11 +229,14 @@ main (int argc, char *argv[])
                              "NumBands", UintegerValue(numTotalPrioBands));
   QueueDiscContainer hostFacingTorQdiscs[nHosts];
   Ptr<OutputStreamWrapper> qStream;
-  qStream = asciiTraceHelper.CreateFileStream (qStreamName);
+  if (traceQueues)
+    qStream = asciiTraceHelper.CreateFileStream (qStreamName);
+    
   for (int i = 0; i < nHosts; i++)
   {
     hostFacingTorQdiscs[i] = tchPfifoHoma.Install (hostTorDevices[i].Get(1));
-    hostFacingTorQdiscs[i].Get(0)->TraceConnectWithoutContext ("BytesInQueue", 
+    if (traceQueues)
+      hostFacingTorQdiscs[i].Get(0)->TraceConnectWithoutContext ("BytesInQueue", 
                                           MakeBoundCallback (&BytesInQueueDiscTrace, 
                                                              qStream, i));
   }
