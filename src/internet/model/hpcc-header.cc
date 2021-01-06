@@ -25,7 +25,7 @@
  * network where HPCC (thus INT) is used, a packet has the following
  * headers respectively:
  *
- * IP -> UDP -> INT -> HPCC
+ * IP -> INT -> HPCC
  * This allows INT header to be easily accessed by regular NetDevice logic
  * without major changes to InternetStack of the simulator. It is simply
  * seen as payload for the InternetStack.
@@ -48,7 +48,9 @@ NS_OBJECT_ENSURE_REGISTERED (HpccHeader);
  * problems so you can see the patterns in memory.
  */
 HpccHeader::HpccHeader ()
-  : m_txMsgId (0),
+  : m_srcPort (0xfffd),
+    m_dstPort (0xfffd),
+    m_txMsgId (0),
     m_flags (0),
     m_pktOffset (0),
     m_msgSizeBytes (0),
@@ -80,6 +82,7 @@ void
 HpccHeader::Print (std::ostream &os) const
 {
   os << "length: " << m_payloadSize + GetSerializedSize ()
+     << " " << m_srcPort << " > " << m_dstPort
      << " txMsgId: " << m_txMsgId
      << " pktOffset: " << m_pktOffset
      << " msgSize: " << m_msgSizeBytes
@@ -90,7 +93,7 @@ HpccHeader::Print (std::ostream &os) const
 uint32_t 
 HpccHeader::GetSerializedSize (void) const
 {
-  return 11;
+  return 15;
 }
     
 std::string
@@ -125,7 +128,9 @@ void
 HpccHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
-    
+   
+  i.WriteHtonU16 (m_srcPort);
+  i.WriteHtonU16 (m_dstPort);
   i.WriteHtonU16 (m_txMsgId);
   i.WriteU8 (m_flags);
   i.WriteHtonU16 (m_pktOffset);
@@ -136,6 +141,8 @@ uint32_t
 HpccHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
+  m_srcPort = i.ReadNtohU16 ();
+  m_dstPort = i.ReadNtohU16 ();
   m_txMsgId = i.ReadNtohU16 ();
   m_flags = i.ReadU8 ();
   m_pktOffset = i.ReadNtohU16 ();
@@ -143,6 +150,28 @@ HpccHeader::Deserialize (Buffer::Iterator start)
   m_payloadSize = i.ReadNtohU16 ();
 
   return GetSerializedSize ();
+}
+    
+void 
+HpccHeader::SetSrcPort (uint16_t port)
+{
+  m_srcPort = port;
+}
+uint16_t 
+HpccHeader::GetSrcPort (void) const
+{
+  return m_srcPort;
+}
+    
+void 
+HpccHeader::SetDstPort (uint16_t port)
+{
+  m_dstPort = port;
+}
+uint16_t 
+HpccHeader::GetDstPort (void) const
+{
+  return m_dstPort;
 }
     
 void 

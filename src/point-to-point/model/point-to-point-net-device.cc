@@ -272,32 +272,28 @@ PointToPointNetDevice::TransmitStart (Ptr<Packet> p)
     
     Ipv4Header iph;
     p->RemoveHeader(iph);
-    uint8_t protNumber = iph.GetProtocol();
-    NS_ASSERT_MSG(protNumber == 17 /*UDP*/,
-                  "Currently INT works only over UDP packets");
     
-    UdpHeader udph;
-    p->RemoveHeader(udph);
-     
-    IntHeader inth;
-    p->RemoveHeader(inth);
-      
-    if(inth.GetIntIdentifier()==IntHeader::IDENTIFIER)
+    if(iph.GetProtocol() == IntHeader::PROT_NUMBER)
     {
-      NS_LOG_LOGIC("Appending INT info onto the packet");
+      IntHeader inth;
+      p->RemoveHeader(inth);
       
       uint64_t time = Simulator::Now ().GetNanoSeconds ();
-      uint32_t bytes = m_queue->GetTotalReceivedBytes () - m_queue->GetTotalDroppedBytes();
       uint32_t qlen = m_queue->GetNBytes ();
+      uint32_t bytes = m_queue->GetTotalReceivedBytes () 
+                       - m_queue->GetTotalDroppedBytes() - qlen;
       uint64_t rate = m_bps.GetBitRate();
       if (!inth.PushHop(time, bytes, qlen,rate))
-        NS_LOG_WARN("The packet doesn't accept INT info anymore");
+        NS_LOG_WARN("New INT info cannot be appended onto the packet (" << p << ").");
+      else
+        NS_LOG_LOGIC("INT info appended onto the packet (" << p << ").");
+        
+      p->AddHeader(inth);
     }
     else
-      NS_LOG_WARN("Non-INT packet is received by an INT enabled device.");
-      
-    p->AddHeader(inth);
-    p->AddHeader(udph);
+      NS_LOG_WARN("Non-INT packet is received by an INT enabled device. "
+                  "Make sure to use IPv4 in order to utilize INT.");
+    
     p->AddHeader(iph);
     p->AddHeader(ppphdr);
   }
