@@ -79,7 +79,9 @@ public:
   HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                               Ptr<NanoPuArchtPacketize> packetize,
                               Ptr<HpccNanoPuArchtPktGen> pktgen,
-                              uint16_t rttPkts);
+                              Time baseRtt, uint32_t mtu,
+                              uint32_t initWin, uint32_t winAI,
+                              double utilFac, uint16_t maxStage);
   ~HpccNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
@@ -90,9 +92,20 @@ protected:
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
     Ptr<HpccNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
-    uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
     
-    std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
+    Time m_baseRTT;      //!< The base propagation RTT.
+    uint32_t m_mtu;      //!< The MTU size of the network
+    uint32_t m_initWin;  //!< The initial window size for all flows
+    uint32_t m_winAI;    //!< Additive increase factor in Bytes
+    double m_utilFac;    //!< Utilization Factor (defined as eta in HPCC paper)
+    uint16_t m_maxStage; //!< Maximum number of stages before window is updated wrt. utilization
+    
+    std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track credit {txMsgId => state valid or not}
+    std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track credit {txMsgId => ack No}
+    std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track credit {txMsgId => Window Size in Bytes}
+    std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track credit {txMsgId => Last Update Seq}
+    std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track credit {txMsgId => inc Stage}
+    std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track credit {txMsgId => Prev INT hdr}
 };
  
 /******************************************************************************/
@@ -140,12 +153,16 @@ public:
   static TypeId GetTypeId (void);
   
   HpccNanoPuArcht (Ptr<Node> node,
-                  Ptr<NetDevice> device,
-                  Time timeoutInterval,
-                  uint16_t maxMessages=100,
-                  uint16_t payloadSize=1445,
-                  uint16_t initialCredit=10,
-                  uint16_t maxTimeoutCnt=5);
+                   Ptr<NetDevice> device,
+                   Time timeoutInterval=MicroSeconds(100),
+                   uint16_t maxMessages=100,
+                   uint16_t payloadSize=1445,
+                   uint16_t initialCredit=10,
+                   uint16_t maxTimeoutCnt=5,
+                   Time baseRtt=MicroSeconds (13),
+                   uint32_t winAI=80,
+                   double utilFac=0.95,
+                   uint16_t maxStage=5);
   virtual ~HpccNanoPuArcht (void);
   
   /**

@@ -102,23 +102,33 @@ main (int argc, char *argv[])
     
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
-  /* Define an optional parameter for capacity of reassembly and packetize modules*/
-  Time timeoutInterval = Time("100us");
+  /* Define an optional/default parameters for modules*/
+  Time timeoutInterval = MicroSeconds(100);
   uint16_t maxMessages = 100;
   HpccHeader hpcch;
   IntHeader inth;
   Ipv4Header ipv4h;
   uint16_t payloadSize = switchDevices.Get (1)->GetMtu () - ipv4h.GetSerializedSize () 
                          - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
+  uint16_t initialCredit = 10; // in packets
+  uint16_t maxTimeoutCnt = 5;
+  Time baseRtt = MicroSeconds (13);
+  uint32_t winAI = 80; // in Bytes    
+  double utilFac = 0.95;
+  uint16_t maxStage = 5;
    
   Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>(sender2switch.Get (1), 
                                                                  senderDevices.Get (1),
                                                                  timeoutInterval, maxMessages, 
-                                                                 payloadSize);
+                                                                 payloadSize, initialCredit,
+                                                                 maxTimeoutCnt, baseRtt, winAI,
+                                                                 utilFac, maxStage);
   Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>(receiver2switch.Get (1), 
                                                                  receiveDevices.Get (1),
                                                                  timeoutInterval, maxMessages, 
-                                                                 payloadSize);
+                                                                 payloadSize, initialCredit,
+                                                                 maxTimeoutCnt, baseRtt, winAI,
+                                                                 utilFac, maxStage);
     
   /* Currently each nanopu is able to connect to a single application only.
    *

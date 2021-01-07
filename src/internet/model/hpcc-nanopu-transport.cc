@@ -23,6 +23,8 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "ns3/uinteger.h"
+#include "ns3/double.h"
 
 #include "hpcc-nanopu-transport.h"
 #include "ns3/nanopu-archt.h"
@@ -107,14 +109,22 @@ TypeId HpccNanoPuArchtIngressPipe::GetTypeId (void)
 HpccNanoPuArchtIngressPipe::HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                                                         Ptr<NanoPuArchtPacketize> packetize,
                                                         Ptr<HpccNanoPuArchtPktGen> pktgen,
-                                                        uint16_t rttPkts)
+                                                        Time baseRtt, uint32_t mtu,
+                                                        uint32_t initWin, uint32_t winAI,
+                                                        double utilFac, uint16_t maxStage)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_reassemble = reassemble;
   m_packetize = packetize;
   m_pktgen = pktgen;
-  m_rttPkts = rttPkts;
+    
+  m_baseRTT = baseRtt;
+  m_mtu = mtu;
+  m_initWin = initWin;
+  m_winAI = winAI;
+  m_utilFac = utilFac;
+  m_maxStage = maxStage;
 }
 
 HpccNanoPuArchtIngressPipe::~HpccNanoPuArchtIngressPipe ()
@@ -321,21 +331,28 @@ HpccNanoPuArcht::HpccNanoPuArcht (Ptr<Node> node,
                                   uint16_t maxMessages,
                                   uint16_t payloadSize,
                                   uint16_t initialCredit,
-                                  uint16_t maxTimeoutCnt) : NanoPuArcht (node,
-                                                                         device,
-                                                                         timeoutInterval,
-                                                                         maxMessages,
-                                                                         payloadSize,
-                                                                         initialCredit,
-                                                                         maxTimeoutCnt)
+                                  uint16_t maxTimeoutCnt,
+                                  Time baseRtt,
+                                  uint32_t winAI,
+                                  double utilFac,
+                                  uint16_t maxStage) : NanoPuArcht (node, device,
+                                                                    timeoutInterval,
+                                                                    maxMessages,
+                                                                    payloadSize,
+                                                                    initialCredit,
+                                                                    maxTimeoutCnt)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
   m_pktgen = CreateObject<HpccNanoPuArchtPktGen> (this);
-  m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble,
-                                                            m_packetize,
-                                                            m_pktgen,
-                                                            initialCredit);
+    
+  uint32_t initWin = (uint32_t)initialCredit * (uint32_t)payloadSize;
+  m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble, m_packetize,
+                                                            m_pktgen, baseRtt, 
+                                                            device->GetMtu (),
+                                                            initWin, winAI,
+                                                            utilFac, maxStage);
+    
   m_egresspipe = CreateObject<HpccNanoPuArchtEgressPipe> (this);
     
   m_arbiter->SetEgressPipe (m_egresspipe);
