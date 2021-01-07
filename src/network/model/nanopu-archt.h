@@ -489,9 +489,7 @@ protected:
     Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
     
     uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
-    uint16_t m_maxMessages; //!< Max number of msg Reassembly and Packetize modules can handle at a time
     uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
-    uint16_t m_initialCredit; //!< Initial credit to be given to new messages (in packets)
     
     Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
     Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

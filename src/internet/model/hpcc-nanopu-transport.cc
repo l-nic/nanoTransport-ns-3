@@ -411,12 +411,12 @@ HpccNanoPuArcht::HpccNanoPuArcht (Ptr<Node> node,
   
   m_pktgen = CreateObject<HpccNanoPuArchtPktGen> (this);
   m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble,
-                                                           m_packetize,
-                                                           m_pktgen,
-                                                           initialCredit);
+                                                            m_packetize,
+                                                            m_pktgen,
+                                                            initialCredit);
   m_egresspipe = CreateObject<HpccNanoPuArchtEgressPipe> (this);
     
-  m_arbiter->SetEgressPipe(m_egresspipe);
+  m_arbiter->SetEgressPipe (m_egresspipe);
 }
 
 HpccNanoPuArcht::~HpccNanoPuArcht ()

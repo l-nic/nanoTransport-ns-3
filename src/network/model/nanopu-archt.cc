@@ -809,15 +809,13 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
   m_boundnetdevice = device;
   BindToNetDevice ();
     
-  m_maxMessages = maxMessages;
   m_payloadSize = payloadSize;
-  m_initialCredit = initialCredit;
     
-  m_reassemble = CreateObject<NanoPuArchtReassemble> (m_maxMessages);
+  m_reassemble = CreateObject<NanoPuArchtReassemble> (maxMessages);
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
   m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
-                                                    m_maxMessages,
-                                                    m_initialCredit,
+                                                    maxMessages,
+                                                    initialCredit,
                                                     m_payloadSize,
                                                     maxTimeoutCnt);
   m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, timeoutInterval);
