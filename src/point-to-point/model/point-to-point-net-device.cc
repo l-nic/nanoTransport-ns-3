@@ -264,7 +264,6 @@ PointToPointNetDevice::TransmitStart (Ptr<Packet> p)
   
   if (m_intEnabled)
   {
-    NS_LOG_UNCOND(p->ToString());
     PppHeader ppphdr;
     p->RemoveHeader(ppphdr);
     NS_ASSERT_MSG(ppphdr.GetProtocol() == 0x0021,
@@ -286,7 +285,10 @@ PointToPointNetDevice::TransmitStart (Ptr<Packet> p)
       if (!inth.PushHop(time, bytes, qlen,rate))
         NS_LOG_WARN("New INT info cannot be appended onto the packet (" << p << ").");
       else
-        NS_LOG_LOGIC("INT info appended onto the packet (" << p << ").");
+      {
+        NS_LOG_LOGIC("INT info appended onto the packet (" << p << ").");  
+        iph.SetPayloadSize(iph.GetPayloadSize() + sizeof(intHop_t));
+      }
         
       p->AddHeader(inth);
     }

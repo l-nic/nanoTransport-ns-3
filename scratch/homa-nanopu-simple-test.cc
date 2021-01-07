@@ -138,9 +138,6 @@ main (int argc, char *argv[])
     
 //   NanoPuTrafficGenerator sender = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
 //   sender.SetLocalPort(111);
-//   // TODO: Currectly NanoPU archt can handle msgLen of 64 max due to the 
-//   //       bitmap size limitations. Ideally, it should be able to tolerate
-//   //       much longer messages.
 //   sender.SetMsgSize(1,1); // Deterministically set the message size
 //   sender.SetMaxMsg(1);
 //   sender.StartImmediately();

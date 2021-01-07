@@ -29,8 +29,8 @@
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/ipv4.h"
 #include "ns3/ipv4-header.h"
-#include "ns3/hpcc-header.h"
 #include "ns3/int-header.h"
+#include "ns3/hpcc-header.h"
 
 namespace ns3 {
     
@@ -346,7 +346,7 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     hpcch.SetTxMsgId (meta.txMsgId);
     hpcch.SetFlags (HpccHeader::Flags_t::DATA);
     hpcch.SetPktOffset (meta.pktOffset);
-    hpcch.SetMsgSize ((uint32_t)meta.msgLen);
+    hpcch.SetMsgSize ((uint32_t)meta.msgLen); // MsgSize in pkts is given by meta
     hpcch.SetPayloadSize ((uint16_t) cp->GetSize ());
     cp-> AddHeader (hpcch);
       

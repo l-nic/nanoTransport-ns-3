@@ -71,7 +71,7 @@ IntHeader::Print (std::ostream &os) const
        << " bitRate: " << m_intHops[i].bitRate
        << " ]";
   }
-  os << " nextProt: " << m_protocol;
+  os << " nextProt: " << (uint32_t)m_protocol;
 }
 
 uint32_t 
