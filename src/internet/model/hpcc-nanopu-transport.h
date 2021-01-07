@@ -25,6 +25,7 @@
 
 #include "ns3/object.h"
 #include "ns3/nanopu-archt.h"
+#include "ns3/int-header.h"
 
 // Define module delay in nano seconds
 #define HPCC_INGRESS_PIPE_DELAY 5
@@ -50,10 +51,9 @@ public:
   HpccNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
-                     Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
-                     uint16_t txMsgId, uint16_t msgLen, uint16_t pktOffset, 
-                     uint16_t pullOffset);
+  void CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
+                     uint16_t txMsgId, uint16_t pktOffset, uint16_t msgLen,
+                     IntHeader receivedIntHeader);
   
 protected:
   Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets

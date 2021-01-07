@@ -29,7 +29,6 @@
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/ipv4.h"
 #include "ns3/ipv4-header.h"
-#include "ns3/int-header.h"
 #include "ns3/hpcc-header.h"
 
 namespace ns3 {
@@ -61,89 +60,37 @@ HpccNanoPuArchtPktGen::~HpccNanoPuArchtPktGen ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-void HpccNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
-                                          Ipv4Address dstIp, uint16_t dstPort, 
-                                          uint16_t srcPort, uint16_t txMsgId, 
-                                          uint16_t msgLen, uint16_t pktOffset, 
-                                          uint16_t pullOffset)
+void HpccNanoPuArchtPktGen::CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
+                                          uint16_t txMsgId, uint16_t pktOffset, uint16_t msgLen,
+                                          IntHeader receivedIntHeader)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-//   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-//                " NanoPU NDP PktGen processing CtrlPktEvent." <<
-//                " GenACK: " << genACK << " GenNACK: " << genNACK <<
-//                " GenPULL: " << genPULL);
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+               " NanoPU HPCC PktGen processing CtrlPktEvent." <<
+               " txMsgId: " << txMsgId << " pktOffset: " << pktOffset);
     
-//   Time delay = Time(0);
+  egressMeta_t meta;
+  meta.isData = false;
+  meta.dstIP = dstIp;
     
-//   egressMeta_t meta;
-//   meta.isData = false;
-//   meta.dstIP = dstIp;
+  Ptr<Packet> p = Create<Packet> ();
+  receivedIntHeader.SetProtocol(0); // Nothing else will exist after this in an ACK packet.
+  p-> AddHeader (receivedIntHeader); // This will be payload of HPCC header.
     
-//   NdpHeader ndph;
-//   ndph.SetSrcPort (srcPort);
-//   ndph.SetDstPort (dstPort);
-//   ndph.SetTxMsgId (txMsgId);
-//   ndph.SetMsgLen (msgLen);
-//   ndph.SetPktOffset (pktOffset);
-//   ndph.SetPullOffset (pullOffset);
-//   ndph.SetPayloadSize (0);
+  HpccHeader hpcch;
+  hpcch.SetSrcPort (srcPort);
+  hpcch.SetDstPort (dstPort);
+  hpcch.SetTxMsgId (txMsgId);
+  hpcch.SetFlags (HpccHeader::Flags_t::ACK);
+  hpcch.SetPktOffset (pktOffset);
+  hpcch.SetMsgSize (msgLen);
+  hpcch.SetPayloadSize ((uint16_t)p->GetSize ());
+  p-> AddHeader (hpcch); 
     
-//   if (genPULL)
-//   {
-//     Time now = Simulator::Now ();
-//     Time txTime = m_pacerLastTxTime + m_packetTxTime;
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU HPCC PktGen generated: " << p->ToString ());
     
-//     if (now < txTime)
-//     {
-//       delay = txTime - now;
-//       m_pacerLastTxTime = txTime;
-//     }
-//     else
-//     {
-//       m_pacerLastTxTime = now;
-//     }
-      
-//     ndph.SetFlags (NdpHeader::Flags_t::PULL);
-    
-//     if (genACK && delay==Time(0))
-//     {
-//       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::ACK);
-//       genACK = false;
-//     }
-//     if (genNACK && delay==Time(0))
-//     {
-//       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::NACK);
-//       genNACK = false;
-//     }
-    
-//     Ptr<Packet> p = Create<Packet> ();
-//     p-> AddHeader (ndph);
-    
-//     Ptr<NanoPuArchtArbiter> arbiter = m_nanoPuArcht->GetArbiter ();
-//     Simulator::Schedule (delay, &NanoPuArchtArbiter::Receive, arbiter, p, meta);
-    
-// //     NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-// //                   " NanoPU NDP PktGen generated: " << 
-// //                   p->ToString ());
-     
-//   }
-    
-//   if (genACK)
-//   {   
-//     ndph.SetFlags (NdpHeader::Flags_t::ACK);
-      
-//     Ptr<Packet> p = Create<Packet> ();
-//     p-> AddHeader (ndph);
-//     m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
-//   }
-//   if (genNACK)
-//   {
-//     ndph.SetFlags (NdpHeader::Flags_t::NACK);
-      
-//     Ptr<Packet> p = Create<Packet> ();
-//     p-> AddHeader (ndph);
-//     m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
-//   }
+  m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
 }
 
 /******************************************************************************/
@@ -187,94 +134,63 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
   NS_ASSERT_MSG (protocol==0x0800,
                  "HpccNanoPuArcht works only with IPv4 packets!");
     
-//   Ipv4Header iph;
-//   cp->RemoveHeader (iph);  
+  Ipv4Header iph;
+  cp->RemoveHeader (iph);  
     
-//   NS_ASSERT_MSG(iph.GetProtocol() == NdpHeader::PROT_NUMBER,
-//                   "This ingress pipeline only works for NDP Transport");
+  NS_ASSERT_MSG(iph.GetProtocol() == IntHeader::PROT_NUMBER,
+                "This ingress pipeline only works for HPCC Transport "
+                "which requires an INT header to be appended after the IPv4 header!");
     
-//   NdpHeader ndph;
-//   cp->RemoveHeader (ndph);
+  IntHeader inth;
+  cp->RemoveHeader (inth);
     
-//   uint16_t txMsgId = ndph.GetTxMsgId ();
-//   uint16_t pktOffset = ndph.GetPktOffset ();
-//   uint16_t msgLen = ndph.GetMsgLen ();
+  NS_ASSERT_MSG(inth.GetProtocol() == HpccHeader::PROT_NUMBER,
+                "This ingress pipeline only works for HPCC Transport "
+                "which requires an HPCC header to be appended after the INT header!");
     
-//   if (ndph.GetFlags () & NdpHeader::Flags_t::DATA)
-//   {   
-//     bool genACK = false;
-//     bool genNACK = false;
-//     bool genPULL = false;
-//     Ipv4Address srcIp = iph.GetSource ();
-//     uint16_t srcPort = ndph.GetSrcPort ();
-//     uint16_t dstPort = ndph.GetDstPort ();
+  HpccHeader hpcch;
+  cp->RemoveHeader (hpcch);
+    
+  uint16_t txMsgId = hpcch.GetTxMsgId ();
+  uint16_t pktOffset = hpcch.GetPktOffset ();
+  uint16_t msgLen = (uint16_t)hpcch.GetMsgSize (); // Msg Len is in pkts for nanoPU Archt
+    
+  if (hpcch.GetFlags () & HpccHeader::Flags_t::DATA)
+  {   
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC IngressPipe processing a DATA packet.");
       
-//     rxMsgInfoMeta_t rxMsgInfo = m_reassemble->GetRxMsgInfo (srcIp, 
-//                                                             srcPort, 
-//                                                             txMsgId,
-//                                                             msgLen, 
-//                                                             pktOffset);
+    Ipv4Address srcIp = iph.GetSource ();
+    uint16_t srcPort = hpcch.GetSrcPort ();
+    uint16_t dstPort = hpcch.GetDstPort ();
       
-//     // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
-//     //       before processing this incoming data packet because this
-//     //       packet has not updated the receivedBitmap in the reassembly
-//     //       buffer yet.
-//     uint16_t pullOffsetDiff;
-//     if (ndph.GetFlags () & NdpHeader::Flags_t::CHOP)
-//     {
-//       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-//                    " NanoPU NDP IngressPipe processing chopped data packet.");
-//       genNACK = true;
-//       genPULL = true;
-//       pullOffsetDiff = 0;
-//     } 
-//     else 
-//     {
-//       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-//                    " NanoPU NDP IngressPipe processing data packet.");
-//       genACK = true;
+    rxMsgInfoMeta_t rxMsgInfo = m_reassemble->GetRxMsgInfo (srcIp, 
+                                                            srcPort, 
+                                                            txMsgId,
+                                                            msgLen, 
+                                                            pktOffset);
     
-//       if (pktOffset + m_rttPkts <= msgLen )
-//           genPULL = true;
+    uint16_t ackNo = rxMsgInfo.ackNo;
+    if (rxMsgInfo.ackNo == pktOffset)
+      ackNo++;
         
-//       reassembleMeta_t metaData;
-//       metaData.rxMsgId = rxMsgInfo.rxMsgId;
-//       metaData.srcIp = srcIp;
-//       metaData.srcPort = srcPort;
-//       metaData.dstPort = dstPort;
-//       metaData.txMsgId = txMsgId;
-//       metaData.msgLen = msgLen;
-//       metaData.pktOffset = pktOffset;
-        
-//       pullOffsetDiff = 1;
-// //       m_reassemble->ProcessNewPacket (cp, metaData);
-//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
-//                            &NanoPuArchtReassemble::ProcessNewPacket, 
-//                            m_reassemble, cp, metaData);
-//     }
+    reassembleMeta_t metaData;
+    metaData.rxMsgId = rxMsgInfo.rxMsgId;
+    metaData.srcIp = srcIp;
+    metaData.srcPort = srcPort;
+    metaData.dstPort = dstPort;
+    metaData.txMsgId = txMsgId;
+    metaData.msgLen = msgLen;
+    metaData.pktOffset = pktOffset;
+
+//     m_reassemble->ProcessNewPacket (cp, metaData);
+    Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
+                         &NanoPuArchtReassemble::ProcessNewPacket, 
+                         m_reassemble, cp, metaData);
       
-//     // Compute pullOffset with a PRAW extern
-//     uint16_t pullOffset = 0;
-//     if (rxMsgInfo.isNewMsg)
-//     {
-//       m_credits[rxMsgInfo.rxMsgId] = m_rttPkts + pullOffsetDiff;
-//     }
-//     else
-//     {
-//       m_credits[rxMsgInfo.rxMsgId] += pullOffsetDiff;
-//     }
-//     pullOffset = m_credits[rxMsgInfo.rxMsgId];
-      
-//     m_pktgen->CtrlPktEvent (genACK, genNACK, genPULL, 
-//                             srcIp, srcPort, dstPort, txMsgId,
-//                             msgLen, pktOffset, pullOffset);
-// //     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
-// //                          &NdpNanoPuArchtPktGen::CtrlPktEvent, 
-// //                          m_pktgen, genACK, genNACK, genPULL, 
-// //                          srcIp, srcPort, dstPort, txMsgId,
-// //                          msgLen, pktOffset, pullOffset);  
+    m_pktgen->CtrlPktEvent (srcIp, srcPort, dstPort, txMsgId, ackNo, msgLen, inth);  
     
-//   }  
+  }  
 //   else // not a DATA packet
 //   {
 //     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
@@ -303,8 +219,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
 //     }
 //   }
     
-//   return true;
-  return false;
+  return true;
 }
     
 /******************************************************************************/
@@ -350,16 +265,17 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     hpcch.SetPayloadSize ((uint16_t) cp->GetSize ());
     cp-> AddHeader (hpcch);
       
-    IntHeader inth;
-    inth.SetProtocol(HpccHeader::PROT_NUMBER);
-    inth.SetPayloadSize ((uint16_t) cp->GetSize ());
-    cp->AddHeader (inth);
   }
   else
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU HPCC EgressPipe processing control packet.");
   }
+    
+  IntHeader inth;
+  inth.SetProtocol(HpccHeader::PROT_NUMBER);
+  inth.SetPayloadSize ((uint16_t) cp->GetSize ());
+  cp->AddHeader (inth);
   
   Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
   
