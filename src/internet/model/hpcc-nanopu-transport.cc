@@ -191,21 +191,16 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
     m_pktgen->CtrlPktEvent (srcIp, srcPort, dstPort, txMsgId, ackNo, msgLen, inth);  
     
   }  
-//   else // not a DATA packet
-//   {
-//     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-//                  " NanoPU NDP IngressPipe processing a control packet.");
+  else if (hpcch.GetFlags () & HpccHeader::Flags_t::ACK)
+  {
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC IngressPipe processing an ACK packet.");
       
-//     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
-//     {
-//       m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
-// //       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
-// //                            &NanoPuArchtPacketize::DeliveredEvent, 
-// //                            m_packetize, txMsgId, msgLen, (1<<pktOffset));
-//     }
-//     if (ndph.GetFlags () & NdpHeader::Flags_t::PULL ||
-//         ndph.GetFlags () & NdpHeader::Flags_t::NACK)
-//     {
+    m_packetize->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(pktOffset));
+//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//                          &NanoPuArchtPacketize::DeliveredEvent, 
+//                          m_packetize, txMsgId, msgLen, setBitMapUntil(pktOffset));
+      
 //       int rtxPkt = (ndph.GetFlags () & NdpHeader::Flags_t::NACK) ? (int) pktOffset : -1;
 //       int credit = (ndph.GetFlags () & NdpHeader::Flags_t::PULL) ? (int) ndph.GetPullOffset () : -1;
 //       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
@@ -216,8 +211,13 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
 // //                            m_packetize, txMsgId, rtxPkt, credit, credit,
 // //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
 // //                            std::greater<int>());
-//     }
-//   }
+  }
+  else
+  {
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU HPCC IngressPipe received an unknown type of packet!");
+    return false;
+  }
     
   return true;
 }

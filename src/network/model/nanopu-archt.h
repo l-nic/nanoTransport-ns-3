@@ -45,6 +45,10 @@ typedef std::bitset<1024> bitmap_t ;
 // typedef uint64_t bitmap_t ;
 #define BITMAP_SIZE sizeof(bitmap_t)*8
     
+uint16_t getFirstSetBitPos(bitmap_t n);
+    
+bitmap_t setBitMapUntil(uint16_t n);
+    
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIp;
