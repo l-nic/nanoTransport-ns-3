@@ -100,7 +100,7 @@ protected:
     double m_utilFac;    //!< Utilization Factor (defined as eta in HPCC paper)
     uint16_t m_maxStage; //!< Maximum number of stages before window is updated wrt. utilization
     
-    std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track credit {txMsgId => state valid or not}
+//     std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track credit {txMsgId => state valid or not}
     std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track credit {txMsgId => ack No}
     std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track credit {txMsgId => Window Size in Bytes}
     std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track credit {txMsgId => Last Update Seq}

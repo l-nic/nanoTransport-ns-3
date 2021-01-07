@@ -205,12 +205,30 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU HPCC IngressPipe processing an ACK packet.");
+    
+    if (m_ackNos.find(txMsgId) == m_ackNos.end())
+    {
+      // This is a new message
+      m_ackNos[txMsgId] = pktOffset;
+      m_winSizes[txMsgId] = m_initWin;
+      m_lastUpdateSeqs[txMsgId] = 0;
+      m_incStages[txMsgId] = 0;
+    }
+    else
+    {
+      // This is not a new message
+      if (pktOffset > m_ackNos[txMsgId])
+        m_ackNos[txMsgId] = pktOffset;
+    }
+    
       
-    m_packetize->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(pktOffset));
+    m_packetize->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(m_ackNos[txMsgId]));
 //     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtPacketize::DeliveredEvent, 
 //                          m_packetize, txMsgId, msgLen, setBitMapUntil(pktOffset));
       
+    // TODO: Calculate the new credit (ackNo + winSize) and trigger CreditToBtxEvent
+    //       as shown below.
 //       int rtxPkt = (ndph.GetFlags () & NdpHeader::Flags_t::NACK) ? (int) pktOffset : -1;
 //       int credit = (ndph.GetFlags () & NdpHeader::Flags_t::PULL) ? (int) ndph.GetPullOffset () : -1;
 //       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
@@ -221,6 +239,25 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
 // //                            m_packetize, txMsgId, rtxPkt, credit, credit,
 // //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
 // //                            std::greater<int>());
+      
+    if (pktOffset >= msgLen)
+    {
+      // The message has been fully acknowledged.
+      m_ackNos.erase(txMsgId);
+      m_winSizes.erase(txMsgId);
+      m_lastUpdateSeqs.erase(txMsgId);
+      m_incStages.erase(txMsgId);
+      m_prevIntHdrs.erase(txMsgId);
+        
+      // TODO: Erasing state values would be an expensive solution.
+      //       Instead, a mechanism to determine whether the current
+      //       state is valid or it belogs to an old (completed or 
+      //       expired) message.
+    }
+    else
+    {
+      m_prevIntHdrs[txMsgId] = inth;
+    }
   }
   else
   {
