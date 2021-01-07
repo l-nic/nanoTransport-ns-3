@@ -335,49 +335,55 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
   
-//   if (meta.isData)
-//   {
-//     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-//                  " NanoPU NDP EgressPipe processing data packet.");
+  if (meta.isData)
+  {
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC EgressPipe processing data packet.");
+        
+    HpccHeader hpcch;
+    hpcch.SetSrcPort (meta.srcPort);
+    hpcch.SetDstPort (meta.dstPort);
+    hpcch.SetTxMsgId (meta.txMsgId);
+    hpcch.SetFlags (HpccHeader::Flags_t::DATA);
+    hpcch.SetPktOffset (meta.pktOffset);
+    hpcch.SetMsgSize ((uint32_t)meta.msgLen);
+    hpcch.SetPayloadSize ((uint16_t) cp->GetSize ());
+    cp-> AddHeader (hpcch);
       
-//     NdpHeader ndph;
-//     ndph.SetSrcPort (meta.srcPort);
-//     ndph.SetDstPort (meta.dstPort);
-//     ndph.SetTxMsgId (meta.txMsgId);
-//     ndph.SetMsgLen (meta.msgLen);
-//     ndph.SetPktOffset (meta.pktOffset);
-//     ndph.SetFlags (NdpHeader::Flags_t::DATA);
-//     ndph.SetPayloadSize ((uint16_t) cp->GetSize ());
-//     cp-> AddHeader (ndph);
-//   }
-//   else
-//   {
-//     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-//                  " NanoPU NDP EgressPipe processing control packet.");
-//   }
+    IntHeader inth;
+    inth.SetProtocol(HpccHeader::PROT_NUMBER);
+    inth.SetPayloadSize ((uint16_t) cp->GetSize ());
+    cp->AddHeader (inth);
+  }
+  else
+  {
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC EgressPipe processing control packet.");
+  }
   
-//   Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
-    
-//   Ipv4Header iph;
-//   Ptr<Node> node = m_nanoPuArcht->GetNode ();
-//   Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
-//   int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
-//   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
-//   iph.SetSource (srcIP);
-//   iph.SetDestination (meta.dstIP);
-//   iph.SetPayloadSize (cp->GetSize ());
-//   iph.SetTtl (64);
-//   iph.SetProtocol (NdpHeader::PROT_NUMBER);
-//   cp-> AddHeader (iph);
+  Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
   
-//   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-//                " NanoPU NDP EgressPipe sending: " << 
-//                 cp->ToString ());
+  Ptr<Node> node = m_nanoPuArcht->GetNode ();
+  Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
+  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
+  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
     
-// //   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
-// //   m_nanoPuArcht->SendToNetwork(cp);
-//   Simulator::Schedule (NanoSeconds(EGRESS_PIPE_DELAY), 
-//                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
+  Ipv4Header iph;
+  iph.SetSource (srcIP);
+  iph.SetDestination (meta.dstIP);
+  iph.SetPayloadSize (cp->GetSize ());
+  iph.SetTtl (64);
+  iph.SetProtocol (IntHeader::PROT_NUMBER);
+  cp-> AddHeader (iph);
+  
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU HPCC EgressPipe sending: " << 
+                cp->ToString ());
+    
+//   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
+//   m_nanoPuArcht->SendToNetwork(cp);
+  Simulator::Schedule (NanoSeconds(HPCC_EGRESS_PIPE_DELAY), 
+                       &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
 
   return;
 }
