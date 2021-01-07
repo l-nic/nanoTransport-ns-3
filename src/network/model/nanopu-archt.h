@@ -28,9 +28,10 @@
 #include <bitset>
 
 #include "ns3/object.h"
+#include "ns3/callback.h"
+#include "ns3/node.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/nanopu-app-header.h"
-#include "ns3/callback.h"
 
 // Define module delay in nano seconds
 #define REASSEMBLE_DELAY 2
@@ -39,8 +40,6 @@
 #define NANOPU_APP_HEADER_TYPE 0x9999
 
 namespace ns3 {
-    
-class Node;
     
 typedef std::bitset<1024> bitmap_t ;
 // typedef uint64_t bitmap_t ;

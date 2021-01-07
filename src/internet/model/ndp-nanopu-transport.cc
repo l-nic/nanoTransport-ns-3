@@ -23,12 +23,12 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
-#include "ns3/node.h"
-#include "ns3/ipv4.h"
 #include "ns3/data-rate.h"
-#include "ns3/point-to-point-net-device.h"
-#include "ns3/nanopu-archt.h"
+
 #include "ndp-nanopu-transport.h"
+#include "ns3/nanopu-archt.h"
+#include "ns3/point-to-point-net-device.h"
+#include "ns3/ipv4.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/ndp-header.h"
 
