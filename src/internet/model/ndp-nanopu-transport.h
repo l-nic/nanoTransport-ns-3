@@ -27,8 +27,8 @@
 #include "ns3/nanopu-archt.h"
 
 // Define module delay in nano seconds
-#define INGRESS_PIPE_DELAY 5
-#define EGRESS_PIPE_DELAY 1
+#define NDP_INGRESS_PIPE_DELAY 5
+#define NDP_EGRESS_PIPE_DELAY 1
 
 namespace ns3 {
 

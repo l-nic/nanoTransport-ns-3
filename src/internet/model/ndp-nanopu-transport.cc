@@ -258,7 +258,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
         
       pullOffsetDiff = 1;
 //       m_reassemble->ProcessNewPacket (cp, metaData);
-      Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+      Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
                            &NanoPuArchtReassemble::ProcessNewPacket, 
                            m_reassemble, cp, metaData);
     }
@@ -278,7 +278,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     m_pktgen->CtrlPktEvent (genACK, genNACK, genPULL, 
                             srcIp, srcPort, dstPort, txMsgId,
                             msgLen, pktOffset, pullOffset);
-//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//     Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
 //                          &NdpNanoPuArchtPktGen::CtrlPktEvent, 
 //                          m_pktgen, genACK, genNACK, genPULL, 
 //                          srcIp, srcPort, dstPort, txMsgId,
@@ -293,7 +293,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
     {
       m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
-//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//       Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
 //                            &NanoPuArchtPacketize::DeliveredEvent, 
 //                            m_packetize, txMsgId, msgLen, (1<<pktOffset));
     }
@@ -305,7 +305,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                      NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                      std::greater<int>());
-//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//       Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
 //                            &NanoPuArchtPacketize::CreditToBtxEvent, 
 //                            m_packetize, txMsgId, rtxPkt, credit, credit,
 //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
@@ -385,7 +385,7 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
     
 //   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
 //   m_nanoPuArcht->SendToNetwork(cp);
-  Simulator::Schedule (NanoSeconds(EGRESS_PIPE_DELAY), 
+  Simulator::Schedule (NanoSeconds(NDP_EGRESS_PIPE_DELAY), 
                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
 
   return;

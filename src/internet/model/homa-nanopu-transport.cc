@@ -276,7 +276,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       metaData.pktOffset = pktOffset;
             
 //       m_reassemble->ProcessNewPacket (cp, metaData);
-      Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+      Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
                            &NanoPuArchtReassemble::ProcessNewPacket, 
                            m_reassemble, cp, metaData);
     }
@@ -300,7 +300,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     else
     {
       m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
-//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtPacketize::DeliveredEvent, m_packetize, 
 //                          txMsgId, msgLen, (1<<pktOffset));
       rtxPkt = -1;
@@ -321,7 +321,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                    NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                    std::greater<int>());
-//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+//     Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtPacketize::CreditToBtxEvent, m_packetize, 
 //                          txMsgId, rtxPkt, credit, credit,
 //                          NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
@@ -453,7 +453,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     
 //   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
 //   m_nanoPuArcht->SendToNetwork(cp);
-  Simulator::Schedule (NanoSeconds(EGRESS_PIPE_DELAY), 
+  Simulator::Schedule (NanoSeconds(HOMA_EGRESS_PIPE_DELAY), 
                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
 
   return;
