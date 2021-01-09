@@ -210,7 +210,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
                                              CreditEventOpCode_t opCode, 
                                              std::function<bool(int,int)> relOp)
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << rtxPkt << newCredit << compVal);
     
   NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () << 
                " NanoPU CreditToBtxEvent for msg " << txMsgId );

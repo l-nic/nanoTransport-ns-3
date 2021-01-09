@@ -79,10 +79,16 @@ public:
   HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                               Ptr<NanoPuArchtPacketize> packetize,
                               Ptr<HpccNanoPuArchtPktGen> pktgen,
-                              Time baseRtt, uint32_t mtu,
-                              uint32_t initWin, uint32_t winAI,
+                              double baseRtt, uint32_t mtu,
+                              uint16_t initCredit, uint32_t winAI,
                               double utilFac, uint16_t maxStage);
   ~HpccNanoPuArchtIngressPipe (void);
+  
+  uint16_t ComputeNumPkts (uint32_t winSizeBytes);
+  
+  double MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
+  
+  uint32_t ComputeWind (uint16_t txMsgId, double utilization, bool updateWc);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
@@ -93,19 +99,21 @@ protected:
     Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
     Ptr<HpccNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
     
-    Time m_baseRTT;      //!< The base propagation RTT.
-    uint32_t m_mtu;      //!< The MTU size of the network
-    uint32_t m_initWin;  //!< The initial window size for all flows
-    uint32_t m_winAI;    //!< Additive increase factor in Bytes
-    double m_utilFac;    //!< Utilization Factor (defined as eta in HPCC paper)
-    uint16_t m_maxStage; //!< Maximum number of stages before window is updated wrt. utilization
+    double m_baseRTT;      //!< The base propagation RTT in seconds.
+    uint32_t m_mtu;        //!< The MTU size of the network
+    uint16_t m_initCredit; //!< The initial number of packets allowed to be sent (ie. BDP in packets)
+    uint32_t m_winAI;      //!< Additive increase factor in Bytes
+    double m_utilFac;      //!< Utilization Factor (defined as \eta in HPCC paper)
+    uint16_t m_maxStage;   //!< Maximum number of stages before window is updated wrt. utilization
     
-//     std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track credit {txMsgId => state valid or not}
-    std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track credit {txMsgId => ack No}
-    std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track credit {txMsgId => Window Size in Bytes}
-    std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track credit {txMsgId => Last Update Seq}
-    std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track credit {txMsgId => inc Stage}
-    std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track credit {txMsgId => Prev INT hdr}
+//     std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track validity {txMsgId => state valid or not}
+    std::unordered_map<uint16_t, uint16_t> m_credits;        //!< State to track credit {txMsgId => max seqNo for TX}
+    std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track ackNo {txMsgId => ack No}
+    std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track W^c {txMsgId => Window Size in Bytes}
+    std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track seqNo {txMsgId => Last Update Seq}
+    std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track incStage {txMsgId => inc Stage}
+    std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track INT vector {txMsgId => Prev INT hdr}
+    std::unordered_map<uint16_t, double> m_utilizations;     //!< State to track utilization {txMsgId => U}
 };
  
 /******************************************************************************/
@@ -159,7 +167,7 @@ public:
                    uint16_t payloadSize=1445,
                    uint16_t initialCredit=10,
                    uint16_t maxTimeoutCnt=5,
-                   Time baseRtt=MicroSeconds (13),
+                   double baseRtt=MicroSeconds (13).GetSeconds (),
                    uint32_t winAI=80,
                    double utilFac=0.95,
                    uint16_t maxStage=5);

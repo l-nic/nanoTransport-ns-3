@@ -109,8 +109,8 @@ TypeId HpccNanoPuArchtIngressPipe::GetTypeId (void)
 HpccNanoPuArchtIngressPipe::HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
                                                         Ptr<NanoPuArchtPacketize> packetize,
                                                         Ptr<HpccNanoPuArchtPktGen> pktgen,
-                                                        Time baseRtt, uint32_t mtu,
-                                                        uint32_t initWin, uint32_t winAI,
+                                                        double baseRtt, uint32_t mtu,
+                                                        uint16_t initCredit, uint32_t winAI,
                                                         double utilFac, uint16_t maxStage)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
@@ -121,7 +121,7 @@ HpccNanoPuArchtIngressPipe::HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassembl
     
   m_baseRTT = baseRtt;
   m_mtu = mtu;
-  m_initWin = initWin;
+  m_initCredit = initCredit;
   m_winAI = winAI;
   m_utilFac = utilFac;
   m_maxStage = maxStage;
@@ -132,8 +132,203 @@ HpccNanoPuArchtIngressPipe::~HpccNanoPuArchtIngressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
-                                              uint16_t protocol, const Address &from)
+uint16_t HpccNanoPuArchtIngressPipe::ComputeNumPkts (uint32_t winSizeBytes)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << winSizeBytes);
+    
+  // TODO: The division operation below can be handled with
+  //       a lookup table in a programmable hardware pipeline.
+  return winSizeBytes / m_mtu + (winSizeBytes % m_mtu != 0);
+}
+    
+double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId, 
+                                                    IntHeader intHdr)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  // TODO: A P4 programmable pipeline wouldn't have double type variables.
+  //       Maybe we can represent utilization as an integer from 0 to 100?
+    
+  // TODO: The code below uses cascaded if statements to prevent the use
+  //       of for loop. This design assumes a particular MAX_INT_HOPS value.
+    
+  // TODO: The code below uses relatively complex computations. We could 
+  //       probably use lookup tables for such computations?
+    
+  uint16_t nHops = intHdr.GetNHops ();
+  intHop_t curHopInfo;
+  intHop_t oldHopInfo;
+  double maxUtil = 0.0;
+  double curUtil;
+  double tao;
+  double curTao;
+  double txRate;
+    
+  uint16_t curHopIdx = 0;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  if (curHopIdx < nHops)
+  {
+    curHopInfo = intHdr.PeekHopN (curHopIdx);
+    oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
+      
+    curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+      
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
+              / ((double)curHopInfo.bitRate * m_baseRTT);
+    curUtil += txRate / (double)curHopInfo.bitRate;
+      
+    if (curUtil > maxUtil)
+    {
+      maxUtil = curUtil;
+      tao = curTao;
+    }
+  }
+    
+  curHopIdx++;
+  NS_ASSERT_MSG(curHopIdx >= IntHeader::MAX_INT_HOPS,
+                "NanoPU HPCC Ingress pipeline is not programmed to process "
+                "all INT hop information!");
+    
+  tao = std::min(tao, m_baseRTT);
+  m_utilizations[txMsgId] = (1.0 - tao/m_baseRTT) * m_utilizations[txMsgId]
+                            + tao/m_baseRTT * maxUtil;
+    
+  return m_utilizations[txMsgId];
+}
+    
+uint32_t HpccNanoPuArchtIngressPipe::ComputeWind (uint16_t txMsgId,
+                                                  double utilization, 
+                                                  bool updateWc)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () 
+                   << this << utilization << updateWc);
+    
+  uint32_t winSize;
+  if (utilization > m_utilFac || m_incStages[txMsgId] >= m_maxStage)
+  {
+    winSize = m_winSizes[txMsgId] / (utilization / m_utilFac) + m_winAI;
+    if (updateWc)
+    {
+      m_incStages[txMsgId] = 0;
+      m_winSizes[txMsgId] = winSize;
+    }
+  }
+  else
+  {
+    winSize = m_winSizes[txMsgId] + m_winAI;
+    if (updateWc)
+    {
+      m_incStages[txMsgId]++;
+      m_winSizes[txMsgId] = winSize;
+    }
+  }
+    
+  return winSize;
+}
+    
+bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, 
+                                              Ptr<const Packet> p, 
+                                              uint16_t protocol, 
+                                              const Address &from)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
@@ -144,35 +339,36 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
   NS_ASSERT_MSG (protocol==0x0800,
                  "HpccNanoPuArcht works only with IPv4 packets!");
     
-  Ipv4Header iph;
-  cp->RemoveHeader (iph);  
+  Ipv4Header ipHdr;
+  cp->RemoveHeader (ipHdr);  
     
-  NS_ASSERT_MSG(iph.GetProtocol() == IntHeader::PROT_NUMBER,
+  NS_ASSERT_MSG(ipHdr.GetProtocol() == IntHeader::PROT_NUMBER,
                 "This ingress pipeline only works for HPCC Transport "
                 "which requires an INT header to be appended after the IPv4 header!");
     
-  IntHeader inth;
-  cp->RemoveHeader (inth);
+  IntHeader intHdr;
+  cp->RemoveHeader (intHdr);
     
-  NS_ASSERT_MSG(inth.GetProtocol() == HpccHeader::PROT_NUMBER,
+  NS_ASSERT_MSG(intHdr.GetProtocol() == HpccHeader::PROT_NUMBER,
                 "This ingress pipeline only works for HPCC Transport "
                 "which requires an HPCC header to be appended after the INT header!");
     
-  HpccHeader hpcch;
-  cp->RemoveHeader (hpcch);
+  HpccHeader hpccHdr;
+  cp->RemoveHeader (hpccHdr);
     
-  uint16_t txMsgId = hpcch.GetTxMsgId ();
-  uint16_t pktOffset = hpcch.GetPktOffset ();
-  uint16_t msgLen = (uint16_t)hpcch.GetMsgSize (); // Msg Len is in pkts for nanoPU Archt
+  uint16_t txMsgId = hpccHdr.GetTxMsgId ();
+  uint16_t pktOffset = hpccHdr.GetPktOffset ();
+  uint16_t msgLen = (uint16_t)hpccHdr.GetMsgSize (); // Msg Len is in pkts for nanoPU Archt
     
-  if (hpcch.GetFlags () & HpccHeader::Flags_t::DATA)
+  uint8_t hdrFlag = hpccHdr.GetFlags ();
+  if (hdrFlag & HpccHeader::Flags_t::DATA)
   {   
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU HPCC IngressPipe processing a DATA packet.");
       
-    Ipv4Address srcIp = iph.GetSource ();
-    uint16_t srcPort = hpcch.GetSrcPort ();
-    uint16_t dstPort = hpcch.GetDstPort ();
+    Ipv4Address srcIp = ipHdr.GetSource ();
+    uint16_t srcPort = hpccHdr.GetSrcPort ();
+    uint16_t dstPort = hpccHdr.GetDstPort ();
       
     rxMsgInfoMeta_t rxMsgInfo = m_reassemble->GetRxMsgInfo (srcIp, 
                                                             srcPort, 
@@ -198,10 +394,10 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
                          &NanoPuArchtReassemble::ProcessNewPacket, 
                          m_reassemble, cp, metaData);
       
-    m_pktgen->CtrlPktEvent (srcIp, srcPort, dstPort, txMsgId, ackNo, msgLen, inth);  
+    m_pktgen->CtrlPktEvent (srcIp, srcPort, dstPort, txMsgId, ackNo, msgLen, intHdr);  
     
   }  
-  else if (hpcch.GetFlags () & HpccHeader::Flags_t::ACK)
+  else if (hdrFlag & HpccHeader::Flags_t::ACK)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU HPCC IngressPipe processing an ACK packet.");
@@ -209,10 +405,15 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
     if (m_ackNos.find(txMsgId) == m_ackNos.end())
     {
       // This is a new message
+      m_credits[txMsgId] = m_initCredit;
       m_ackNos[txMsgId] = pktOffset;
-      m_winSizes[txMsgId] = m_initWin;
+      m_winSizes[txMsgId] = (uint32_t)m_initCredit * m_mtu;
       m_lastUpdateSeqs[txMsgId] = 0;
       m_incStages[txMsgId] = 0;
+      m_utilizations[txMsgId] = 1.0;
+      m_prevIntHdrs[txMsgId] = intHdr;
+      // TODO: Note that we are initializing some state values here
+      //       for new messages, but they are actually modified below.
     }
     else
     {
@@ -220,33 +421,48 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
       if (pktOffset > m_ackNos[txMsgId])
         m_ackNos[txMsgId] = pktOffset;
     }
-    
       
-    m_packetize->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(m_ackNos[txMsgId]));
-//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
+    m_packetize->DeliveredEvent (txMsgId, msgLen, setBitMapUntil (m_ackNos[txMsgId]));
+//     Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtPacketize::DeliveredEvent, 
-//                          m_packetize, txMsgId, msgLen, setBitMapUntil(pktOffset));
+//                          m_packetize, txMsgId, msgLen, setBitMapUntil (pktOffset));
       
-    // TODO: Calculate the new credit (ackNo + winSize) and trigger CreditToBtxEvent
-    //       as shown below.
-//       int rtxPkt = (ndph.GetFlags () & NdpHeader::Flags_t::NACK) ? (int) pktOffset : -1;
-//       int credit = (ndph.GetFlags () & NdpHeader::Flags_t::PULL) ? (int) ndph.GetPullOffset () : -1;
-//       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
-//                                      NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-//                                      std::greater<int>());
-// //       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
-// //                            &NanoPuArchtPacketize::CreditToBtxEvent, 
-// //                            m_packetize, txMsgId, rtxPkt, credit, credit,
-// //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-// //                            std::greater<int>());
+    uint32_t newWinSizeBytes;
+    if (pktOffset > m_lastUpdateSeqs[txMsgId])
+    {
+      newWinSizeBytes = this->ComputeWind (txMsgId, this->MeasureInflight (txMsgId, intHdr), true);
+      m_lastUpdateSeqs[txMsgId] = m_credits[txMsgId]+1;
+    }
+    else
+    {
+      newWinSizeBytes = this->ComputeWind (txMsgId, this->MeasureInflight (txMsgId, intHdr), false);
+    }
+    
+    uint16_t newCreditPkts = m_ackNos[txMsgId] + this->ComputeNumPkts (newWinSizeBytes);
+    if (newCreditPkts > m_credits[txMsgId])
+        m_credits[txMsgId] = newCreditPkts;
+      
+    int rtxPkt = -1;
+    m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, m_credits[txMsgId], m_credits[txMsgId],
+                                   NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+                                   std::greater<int>());
+//     Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
+//                          &NanoPuArchtPacketize::CreditToBtxEvent, m_packetize, 
+//                          txMsgId, rtxPkt, m_credits[txMsgId], m_credits[txMsgId],
+//                          NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+//                          std::greater<int>());
       
     if (pktOffset >= msgLen)
     {
-      // The message has been fully acknowledged.
+      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                   " NanoPU HPCC IngressPipe clearing state for msg " <<
+                   txMsgId << " because the msg is completed.");
+      m_credits.erase(txMsgId);
       m_ackNos.erase(txMsgId);
       m_winSizes.erase(txMsgId);
       m_lastUpdateSeqs.erase(txMsgId);
       m_incStages.erase(txMsgId);
+      m_utilizations.erase(txMsgId);
       m_prevIntHdrs.erase(txMsgId);
         
       // TODO: Erasing state values would be an expensive solution.
@@ -262,13 +478,14 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
     }
     else
     {
-      m_prevIntHdrs[txMsgId] = inth;
+      m_prevIntHdrs[txMsgId] = intHdr;
     }
   }
   else
   {
     NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () << 
-                " NanoPU HPCC IngressPipe received an unknown type of packet!");
+                " NanoPU HPCC IngressPipe received an unknown type (" <<
+                hpccHdr.FlagsToString (hdrFlag) << ") of packet!");
     return false;
   }
     
@@ -375,7 +592,7 @@ HpccNanoPuArcht::HpccNanoPuArcht (Ptr<Node> node,
                                   uint16_t payloadSize,
                                   uint16_t initialCredit,
                                   uint16_t maxTimeoutCnt,
-                                  Time baseRtt,
+                                  double baseRtt,
                                   uint32_t winAI,
                                   double utilFac,
                                   uint16_t maxStage) : NanoPuArcht (node, device,
@@ -389,11 +606,10 @@ HpccNanoPuArcht::HpccNanoPuArcht (Ptr<Node> node,
   
   m_pktgen = CreateObject<HpccNanoPuArchtPktGen> (this);
     
-  uint32_t initWin = (uint32_t)initialCredit * (uint32_t)payloadSize;
   m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble, m_packetize,
                                                             m_pktgen, baseRtt, 
                                                             device->GetMtu (),
-                                                            initWin, winAI,
+                                                            initialCredit, winAI,
                                                             utilFac, maxStage);
     
   m_egresspipe = CreateObject<HpccNanoPuArchtEgressPipe> (this);

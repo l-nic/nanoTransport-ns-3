@@ -103,7 +103,7 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
   /* Define an optional/default parameters for modules*/
-  Time timeoutInterval = MicroSeconds(100);
+  Time timeoutInterval = MilliSeconds(10);
   uint16_t maxMessages = 100;
   HpccHeader hpcch;
   IntHeader inth;
@@ -121,14 +121,14 @@ main (int argc, char *argv[])
                                                                  senderDevices.Get (1),
                                                                  timeoutInterval, maxMessages, 
                                                                  payloadSize, initialCredit,
-                                                                 maxTimeoutCnt, baseRtt, winAI,
-                                                                 utilFac, maxStage);
+                                                                 maxTimeoutCnt, baseRtt.GetSeconds (), 
+                                                                 winAI, utilFac, maxStage);
   Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>(receiver2switch.Get (1), 
                                                                  receiveDevices.Get (1),
                                                                  timeoutInterval, maxMessages, 
                                                                  payloadSize, initialCredit,
-                                                                 maxTimeoutCnt, baseRtt, winAI,
-                                                                 utilFac, maxStage);
+                                                                 maxTimeoutCnt, baseRtt.GetSeconds (), 
+                                                                 winAI, utilFac, maxStage);
     
   /* Currently each nanopu is able to connect to a single application only.
    *
