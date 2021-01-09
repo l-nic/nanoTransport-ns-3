@@ -104,13 +104,13 @@ public:
   uint16_t GetPayloadSize (void) const;
   
   static const uint8_t PROT_NUMBER = 196; //!< Protocol number of INT
+  static const uint16_t MAX_INT_HOPS = 6; //!< Max number hops this INT header can store data of
   
 private:
 
-  static const uint16_t m_maxHop = 6; //!< Max number hops this INT header can store data of
   uint8_t m_protocol; //!< The protocol number of the next header after INT.
   uint16_t m_nHops;   //!< Number of hops that are currently allocated on the header
-  intHop_t m_intHops[m_maxHop]; //!< The set of all INT information from each hop
+  intHop_t m_intHops[MAX_INT_HOPS]; //!< The set of all INT information from each hop
   
   uint16_t m_payloadSize; //!< Payload size in bytes
   

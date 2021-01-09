@@ -83,7 +83,7 @@ IntHeader::GetSerializedSize (void) const
 uint32_t 
 IntHeader::GetMaxSerializedSize (void) const
 {
-  return m_maxHop * sizeof(intHop_t) + 5; 
+  return MAX_INT_HOPS * sizeof(intHop_t) + 5; 
 }
     
 void
@@ -143,7 +143,7 @@ IntHeader::PushHop (uint64_t time, uint32_t bytes, uint32_t qlen, uint64_t rate)
 {
   NS_LOG_FUNCTION(this);
     
-  if (m_nHops < m_maxHop)
+  if (m_nHops < MAX_INT_HOPS)
   {
     m_intHops[m_nHops].time = time;
     m_intHops[m_nHops].txBytes = bytes;

@@ -252,7 +252,13 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device, Ptr<const P
       // TODO: Erasing state values would be an expensive solution.
       //       Instead, a mechanism to determine whether the current
       //       state is valid or it belogs to an old (completed or 
-      //       expired) message.
+      //       expired) message would be prefferable.
+      //       Or, the dstIP, dstPort, and srcPort of the message can
+      //       be stored as the state of the message inside the 
+      //       pipeline. As long as these values match the ones inside
+      //       the headers, this is not a new message. Otherwise the 
+      //       current state is invalidated and new message state is
+      //       initiated.
     }
     else
     {
