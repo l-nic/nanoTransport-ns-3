@@ -71,7 +71,7 @@ main (int argc, char *argv[])
   pointToPoint.SetDeviceAttribute ("EnableInt", BooleanValue (true));
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("1us"));
-  pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
+  pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("50p"));
 
   /******** Create NetDevices ********/
   NetDeviceContainer switchDevices;
@@ -145,7 +145,7 @@ main (int argc, char *argv[])
     
   NanoPuTrafficGenerator senderApp = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   senderApp.SetLocalPort(111);
-  senderApp.SetMsgSize(1,1); // Deterministically set the message size
+  senderApp.SetMsgSize(12,12); // Deterministically set the message size
   senderApp.SetMaxMsg(1);
   senderApp.StartImmediately();
   senderApp.Start(Seconds (3.0));
