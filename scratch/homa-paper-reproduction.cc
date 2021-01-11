@@ -129,12 +129,18 @@ main (int argc, char *argv[])
   double networkLoad = 0.5;
   uint32_t simIdx = 0;
   bool traceQueues = false;
+  bool disableRtx = false;
+  uint64_t inboundRtxTimeout = 1000; // in microseconds
+  uint64_t outboundRtxTimeout = 10000; // in microseconds
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
   cmd.AddValue ("load", "The network load to simulate the network at, ie 0.5 for 50%.", networkLoad);
   cmd.AddValue ("simIdx", "The index of the simulation used to identify parallel runs.", simIdx);
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
+  cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
+  cmd.AddValue ("inboundRtxTimeout", "Number of microseconds before an inbound msg expires.", inboundRtxTimeout);
+  cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
   cmd.Parse (argc, argv);
     
   SeedManager::SetRun (simIdx);
@@ -205,10 +211,19 @@ main (int argc, char *argv[])
   /* Set default number of priority bands in the network */
   uint8_t numTotalPrioBands = 8;
   uint8_t numUnschedPrioBands = 2;
+  if (disableRtx)
+  {
+    inboundRtxTimeout *= 1e9;
+    outboundRtxTimeout *= 1e9;
+  }
   Config::SetDefault("ns3::HomaL4Protocol::NumTotalPrioBands", 
                      UintegerValue(numTotalPrioBands));
   Config::SetDefault("ns3::HomaL4Protocol::NumUnschedPrioBands", 
                      UintegerValue(numUnschedPrioBands));
+  Config::SetDefault("ns3::HomaL4Protocol::InbndRtxTimeout", 
+                     TimeValue (MicroSeconds (inboundRtxTimeout)));
+  Config::SetDefault("ns3::HomaL4Protocol::OutbndRtxTimeout", 
+                     TimeValue (MicroSeconds (outboundRtxTimeout)));
   
   InternetStackHelper stack;
   stack.Install (spineNodes);
