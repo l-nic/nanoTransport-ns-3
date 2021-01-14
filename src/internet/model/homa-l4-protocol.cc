@@ -158,6 +158,12 @@ HomaL4Protocol::GetInboundRtxTimeout(void) const
   return m_inboundRtxTimeout;
 }
     
+Time
+HomaL4Protocol::GetOutboundRtxTimeout(void) const
+{
+  return m_outboundRtxTimeout;
+}
+    
 uint16_t 
 HomaL4Protocol::GetMaxNumRtxPerMsg(void) const
 {
@@ -324,10 +330,10 @@ HomaL4Protocol::Send (Ptr<Packet> message,
 {
   NS_LOG_FUNCTION (this << message << saddr << daddr << sport << dport << route);
   
-  Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, sport, dport, 
-                                                               this->GetMtu(), m_bdp);
+  Ptr<HomaOutboundMsg> outMsg = CreateObject<HomaOutboundMsg> (message, saddr, daddr, 
+                                                               sport, dport, this);
   outMsg->SetRoute (route); // This is mostly unnecessary
-  outMsg->SetRtxTimeout (m_outboundRtxTimeout);
+    
   int txMsgId = m_sendScheduler->ScheduleNewMsg(outMsg);
     
   if (txMsgId >= 0)
@@ -546,7 +552,7 @@ TypeId HomaOutboundMsg::GetTypeId (void)
 HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message, 
                                   Ipv4Address saddr, Ipv4Address daddr, 
                                   uint16_t sport, uint16_t dport, 
-                                  uint32_t mtuBytes, uint16_t rttPackets)
+                                  Ptr<HomaL4Protocol> homa)
     : m_route(0),
       m_prio(0),
       m_prioSetByReceiver(false),
@@ -558,6 +564,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   m_daddr = daddr;
   m_sport = sport;
   m_dport = dport;
+  m_homa = homa;
     
   m_msgSizeBytes = message->GetSize ();
   // The remaining undelivered message size equals to the total message size in the beginning
@@ -565,7 +572,7 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     
   HomaHeader homah;
   Ipv4Header ipv4h;
-  m_maxPayloadSize = mtuBytes - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
+  m_maxPayloadSize = m_homa->GetMtu () - homah.GetSerializedSize () - ipv4h.GetSerializedSize ();
     
   // Packetize the message into MTU sized packets and store the corresponding state
   uint32_t unpacketizedBytes = m_msgSizeBytes;
@@ -584,9 +591,12 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
     numPkts++;
   } 
   NS_ASSERT(numPkts == m_msgSizeBytes / m_maxPayloadSize + (m_msgSizeBytes % m_maxPayloadSize != 0));
+  
+  m_maxGrantedIdx = std::min((uint16_t)(m_homa->GetBdp () -1), numPkts);
           
-  m_rttPackets = rttPackets;
-  m_maxGrantedIdx = std::min((uint16_t)(m_rttPackets-1), numPkts);
+  m_rtxEvent = Simulator::Schedule (m_homa->GetOutboundRtxTimeout (), 
+                                    &HomaOutboundMsg::ExpireRtxTimeout, 
+                                    this, m_maxGrantedIdx);
 }
 
 HomaOutboundMsg::~HomaOutboundMsg ()
@@ -602,15 +612,6 @@ void HomaOutboundMsg::SetRoute(Ptr<Ipv4Route> route)
 Ptr<Ipv4Route> HomaOutboundMsg::GetRoute ()
 {
   return m_route;
-}
-    
-void HomaOutboundMsg::SetRtxTimeout (Time rtxTimeout)
-{
-  NS_LOG_FUNCTION(this << rtxTimeout);
-    
-  m_rtxTimeout = rtxTimeout;
-  m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
-                                    this, m_maxGrantedIdx);
 }
     
 uint32_t HomaOutboundMsg::GetRemainingBytes()
@@ -748,7 +749,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
      * Homa grants messages in a way that there is always exactly 1 BDP worth of 
      * packets on flight. Then we can calculate the remaining bytes as the following.
      */
-    m_remainingBytes = m_msgSizeBytes - (m_maxGrantedIdx - m_rttPackets) * m_maxPayloadSize;
+    m_remainingBytes = m_msgSizeBytes - (m_maxGrantedIdx - m_homa->GetBdp ()) * m_maxPayloadSize;
   }
   else
   {
@@ -819,7 +820,8 @@ void HomaOutboundMsg::ExpireRtxTimeout(uint16_t lastRtxGrntIdx)
   
   if (lastRtxGrntIdx < m_maxGrantedIdx)
   {
-    m_rtxEvent = Simulator::Schedule (m_rtxTimeout, &HomaOutboundMsg::ExpireRtxTimeout, 
+    m_rtxEvent = Simulator::Schedule (m_homa->GetOutboundRtxTimeout (), 
+                                      &HomaOutboundMsg::ExpireRtxTimeout, 
                                       this, m_maxGrantedIdx);
   }
   else

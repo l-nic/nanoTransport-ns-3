@@ -122,6 +122,12 @@ public:
   Time GetInboundRtxTimeout(void) const;
     
   /**
+   * \brief Get rtx timeout duration for outbound messages
+   * \return Time value to determine the retransmission timeout of OutboundMsgs
+   */
+  Time GetOutboundRtxTimeout(void) const;
+    
+  /**
    * \brief Get the maximum number of rtx timeouts allowed per message
    * \return Maximum allowed rtx timeout count per message
    */
@@ -341,7 +347,7 @@ public:
   HomaOutboundMsg (Ptr<Packet> message, 
                    Ipv4Address saddr, Ipv4Address daddr, 
                    uint16_t sport, uint16_t dport, 
-                   uint32_t mtuBytes, uint16_t rttPackets);
+                   Ptr<HomaL4Protocol> homa);
   ~HomaOutboundMsg (void);
   
   /**
@@ -354,12 +360,6 @@ public:
    * \return The corresponding route.
    */
   Ptr<Ipv4Route> GetRoute (void);
-  
-  /**
-   * \brief Set the retransmission timeout interval for this message
-   * \param rtxTimeout The time interval between each timeout
-   */
-  void SetRtxTimeout (Time rtxTimeout);
   
   /**
    * \brief Get the remaining undelivered bytes of this message.
@@ -466,22 +466,19 @@ private:
   uint16_t m_sport;          //!< Source port of this message
   uint16_t m_dport;          //!< Destination port of this message
   Ptr<Ipv4Route> m_route;    //!< Route of the message determined by the sender socket 
+  Ptr<HomaL4Protocol> m_homa;//!< the protocol instance itself that creates/sends/receives messages
   
   std::vector<Ptr<Packet>> m_packets;   //!< Packet buffer for the message
+  std::priority_queue<uint16_t, std::vector<uint16_t>, std::greater<uint16_t> > m_pktTxQ; //!< The sorted queue of pkt offsets for tx
   
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
   uint32_t m_maxPayloadSize; //!< Number of bytes that can be stored in packet excluding headers
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not delivered yet
-  
-  std::priority_queue<uint16_t, std::vector<uint16_t>, std::greater<uint16_t> > m_pktTxQ; //!< The sorted queue of pkt offsets for tx
-  
-  uint16_t m_rttPackets;     //!< Number of packets that is assumed to fit exactly in 1 BDP
-  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: m_rttPackets)
+  uint16_t m_maxGrantedIdx;  //!< Highest Grant Offset received so far (default: BDP)
   
   uint8_t m_prio;            //!< The most recent priority of the message
   bool m_prioSetByReceiver;  //!< Whether the receiver has specified a priority yet
   
-  Time m_rtxTimeout;         //!< Time to expire the retransmission events.
   EventId m_rtxEvent;        //!< The EventID for the retransmission timeout
   bool m_isExpired;          //!< Whether this message has expired and to be cleared upon rtx timeouts
 };
