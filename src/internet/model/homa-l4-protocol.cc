@@ -657,11 +657,12 @@ uint8_t HomaOutboundMsg::GetPrio (uint16_t pktOffset)
 {
   if (!m_prioSetByReceiver)
   {
-    // Determine the priority of the unscheduled packet
-    
+    if (this->GetMsgSizePkts () < m_homa->GetBdp ())
+        return 0;
+    else
+      return m_homa->GetNumUnschedPrioBands () - 1;
     // TODO: Determine priority of unscheduled packet (index = pktOffset)
     //       according to the distribution of message sizes.
-    return 0;
   }
   return m_prio;
 }
