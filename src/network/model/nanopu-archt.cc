@@ -823,6 +823,8 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
     
   m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, timeoutInterval*2);
   m_reassemble->SetTimerModule (m_ingressTimer);
+    
+  m_node->AggregateObject (this);
 }
 
 /*
