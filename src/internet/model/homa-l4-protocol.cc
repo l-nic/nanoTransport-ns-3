@@ -1336,20 +1336,18 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
     m_remainingBytes -= p->GetSize ();
     /*
      * Since a packet has arrived, we can allow a new packet to be on flight
-     * for this message. However it is upto the HomaRecvScheduler to decide 
-     * whether to send a Grant packet to the sender of this message or not.
+     * for this message, so that bytes in flight stay the same. However it 
+     * is upto the HomaRecvScheduler to decide whether to send a Grant packet 
+     * to the sender of this message or not.
      */
     m_maxGrantableIdx++;
-    // TODO: How do we make sure the bytes in flight is always equal to RttBytes?
-    //       For example if a data packet gets dropped, the effective bytes in flight
-    //       remains low until the lost packet is retransmitted.
   }
   else
   {
     NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
                 " HomaInboundMsg (" << this << ") has received a packet for offset "
                 << pktOffset << " which was already received.");
-    // TODO: How do we manage the GrantOffset if this was a spurious retransmission?
+    // TODO: Insert a trace source to keep track of spurious retransmissions.
   }
 }
     
@@ -1648,8 +1646,8 @@ void HomaRecvScheduler::ClearStateForMsg(Ptr<HomaInboundMsg> inboundMsg, int msg
 
 /*
  * This method is called everytime a packet (DATA or BUSY) is received because
- * both types of incoming packets may cause the ordering of active messages list
- * which implies that we might need to send out a Grant.
+ * both types of incoming packets may cause the reordering of active messages 
+ * list which implies that we might need to send out a Grant.
  * The method loops over all the pending messages in the list of active messages
  * and checks whether they are grantable. If yes, an appropriate grant packet is 
  * generated and send down the networking stack. Although the method loops over
@@ -1660,7 +1658,7 @@ void HomaRecvScheduler::SendAppropriateGrants()
 {
   NS_LOG_FUNCTION (this);
     
-  std::unordered_set<uint32_t> grantedSenders; // Same sender can't be granted for multiple msgs at oonce
+  std::unordered_set<uint32_t> grantedSenders; // Same sender can't be granted for multiple msgs at once
   uint8_t grantingPrio = m_homa->GetNumUnschedPrioBands (); // Scheduled priorities start here
   uint8_t overcommitDue = m_homa->GetOvercommitLevel ();
     
