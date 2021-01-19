@@ -535,9 +535,13 @@ TypeId NanoPuArchtReassemble::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtReassemble::NanoPuArchtReassemble (uint16_t maxMessages)
+NanoPuArchtReassemble::NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht,
+                                              uint16_t maxMessages)
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () 
+                   << this << nanoPuArcht);
+    
+  m_nanoPuArcht = nanoPuArcht;
     
   m_rxMsgIdFreeList.resize(maxMessages);
   std::iota(m_rxMsgIdFreeList.begin(), m_rxMsgIdFreeList.end(), 0);
@@ -553,31 +557,6 @@ void NanoPuArchtReassemble::SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_timer = timer;
-}
-    
-void 
-NanoPuArchtReassemble::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << &reassembledMsgCb);
-  NS_ASSERT_MSG(m_reassembledMsgCb.IsNull (),
-                "An application has already been installed on this NanoPU!");
-  m_reassembledMsgCb = reassembledMsgCb;
-}
-    
-void NanoPuArchtReassemble::NotifyApplications (Ptr<Packet> msg)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
-  if (!m_reassembledMsgCb.IsNull ())
-    {
-      m_reassembledMsgCb (msg);
-    }
-  else
-    {
-      NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () << 
-                    " Error: NanoPU received a message but"
-                    " no application is looking for it. " << 
-                    this << " " << msg);
-    }
 }
 
 rxMsgInfoMeta_t 
@@ -678,10 +657,10 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     apphdr.SetPayloadSize (msg->GetSize ());
     msg->AddHeader (apphdr);
     
-//     NotifyApplications (msg);
+//     m_nanoPuArcht->NotifyApplications (msg);
     Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
-                         &NanoPuArchtReassemble::NotifyApplications, 
-                         this, msg);
+                         &NanoPuArcht::NotifyApplications, 
+                         m_nanoPuArcht, msg);
       
     /* Free the rxMsgId*/
     rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
@@ -818,7 +797,8 @@ NanoPuArcht::NanoPuArcht (Ptr<Node> node,
     
   m_payloadSize = payloadSize;
     
-  m_reassemble = CreateObject<NanoPuArchtReassemble> (maxMessages);
+  m_reassemble = CreateObject<NanoPuArchtReassemble> (this,
+                                                      maxMessages);
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
   m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
                                                     maxMessages,
@@ -903,6 +883,15 @@ Ptr<NanoPuArchtArbiter> NanoPuArcht::GetArbiter (void)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   return m_arbiter;
 }
+    
+void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << 
+                   this << &reassembledMsgCb);
+  NS_ASSERT_MSG(m_reassembledMsgCb.IsNull (),
+                "An application has already been installed on this NanoPU!");
+  m_reassembledMsgCb = reassembledMsgCb;
+}
 
 /*
  * NanoPu Architecture requires a transport module. The function below
@@ -920,8 +909,7 @@ bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
   return false;
 }
     
-bool
-NanoPuArcht::SendToNetwork (Ptr<Packet> p)
+bool NanoPuArcht::SendToNetwork (Ptr<Packet> p)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
   NS_ASSERT_MSG (m_boundnetdevice != 0, 
@@ -930,12 +918,27 @@ NanoPuArcht::SendToNetwork (Ptr<Packet> p)
   return m_boundnetdevice->Send (p, m_boundnetdevice->GetBroadcast (), 0x0800);
 }
 
-bool
-NanoPuArcht::Send (Ptr<Packet> msg)
+bool NanoPuArcht::Send (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
     
   return m_packetize->ProcessNewMessage (msg->Copy ());
+}
+    
+void NanoPuArcht::NotifyApplications (Ptr<Packet> msg)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
+  if (!m_reassembledMsgCb.IsNull ())
+    {
+      m_reassembledMsgCb (msg);
+    }
+  else
+    {
+      NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () << 
+                    " Error: NanoPU received a message but"
+                    " no application is looking for it. " << 
+                    this << " " << msg);
+    }
 }
     
 } // namespace ns3

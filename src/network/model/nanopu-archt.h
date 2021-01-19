@@ -41,9 +41,10 @@
 
 namespace ns3 {
     
-typedef std::bitset<1024> bitmap_t ;
-// typedef uint64_t bitmap_t ;
+typedef std::bitset<10000> bitmap_t ;
 #define BITMAP_SIZE sizeof(bitmap_t)*8
+// TODO: When most messages are small, a bitmap of 
+//       this size consumes a lot of memory.
     
 uint16_t getFirstSetBitPos(bitmap_t n);
     
@@ -305,7 +306,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtReassemble (uint16_t maxMessages);
+  NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht,
+                         uint16_t maxMessages);
   ~NanoPuArchtReassemble (void);
   
   void SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer);
@@ -315,11 +317,6 @@ public:
    * \param reassembledMsgCb Callback provided by application
    */
   void SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb);
-  /**
-   * \brief Notifies the application every time a message is reassembled
-   * \param msg The message that is reassembled with application header and should be given to the application
-   */
-  void NotifyApplications (Ptr<Packet> msg);
   
   rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
                                 uint16_t msgLen, uint16_t pktOffset);
@@ -335,6 +332,7 @@ public:
   
 protected:
 
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtIngressTimer> m_timer;
   std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
   std::unordered_map<const rxMsgIdTableKey_t, 
@@ -346,8 +344,6 @@ protected:
                               Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
-    
-  Callback<void, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
 };
     
 /******************************************************************************/
@@ -487,19 +483,27 @@ public:
    */
   virtual bool Send (Ptr<Packet> msg);
   
+  /**
+   * \brief Notifies the application every time a message is reassembled
+   * \param msg The reassembled msg that should be given to the application with the app header
+   */
+  void NotifyApplications (Ptr<Packet> msg);
+  
 protected:
 
-    Ptr<Node>      m_node; //!< the node this architecture is located at.
-    Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
+  Ptr<Node>      m_node; //!< the node this architecture is located at.
+  Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
     
-    uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
-    uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
+  uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
+  uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
     
-    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-    Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
-    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization block of the architecture
-    Ptr<NanoPuArchtEgressTimer> m_egressTimer; //!< the egress timer module of the architecture
-    Ptr<NanoPuArchtIngressTimer> m_ingressTimer; //!< the ingress timer module of the architecture
+  Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
+  Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
+  Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization block of the architecture
+  Ptr<NanoPuArchtEgressTimer> m_egressTimer; //!< the egress timer module of the architecture
+  Ptr<NanoPuArchtIngressTimer> m_ingressTimer; //!< the ingress timer module of the architecture
+    
+  Callback<void, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
 };
     
 } // namespace ns3
