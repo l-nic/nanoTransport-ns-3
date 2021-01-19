@@ -1686,9 +1686,9 @@ void HomaRecvScheduler::SendAppropriateGrants()
         }
         
         grantedSenders.insert(senderAddress.Get ());
-        overcommitDue--;
-      }
         
+      }
+      overcommitDue--;
       grantingPrio++;
     }
   }
