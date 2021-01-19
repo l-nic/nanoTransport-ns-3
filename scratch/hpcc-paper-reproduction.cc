@@ -108,7 +108,7 @@ main (int argc, char *argv[])
   uint32_t simIdx = 0;
   bool traceQueues = false;
   std::string workloadName ("FbHdp");
-  uint16_t mtuBytes = 1016;
+  uint16_t mtuBytes = 1024;
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
@@ -121,8 +121,7 @@ main (int argc, char *argv[])
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
 //   LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
-//   LogComponentEnable ("TraceRunnerApp", LOG_LEVEL_ALL);  
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
 //   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
     
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");

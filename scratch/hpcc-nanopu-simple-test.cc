@@ -48,7 +48,7 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);

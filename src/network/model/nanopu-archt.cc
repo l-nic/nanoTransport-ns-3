@@ -178,8 +178,9 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
-               " NanoPU DeliveredEvent for msg " << txMsgId <<
-               " packets (bitmap) " << std::bitset<BITMAP_SIZE>(ackPkts) );
+               " NanoPU DeliveredEvent for msg " << txMsgId);
+  NS_LOG_LOGIC("\tDelivered packets (bitmap): " << 
+               std::bitset<BITMAP_SIZE>(ackPkts) );
     
   if (m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end() \
       && std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
@@ -189,7 +190,7 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
 //     if (m_deliveredBitmap[txMsgId] == (((bitmap_t)1)<<msgLen)-1)
     if (m_deliveredBitmap[txMsgId] == setBitMapUntil(msgLen))
     {
-      NS_LOG_LOGIC("The whole message is delivered.");
+      NS_LOG_INFO("The whole message is delivered.");
         
       m_timer->CancelTimerEvent (txMsgId);
         
@@ -219,7 +220,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
   {
     if (rtxPkt != -1 && m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
     {
-      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
+      NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                    " Marking msg " << txMsgId << ", pkt " << rtxPkt <<
                    " for retransmission.");
       m_toBeTxBitmap[txMsgId] |= (((bitmap_t)1)<<rtxPkt);
@@ -243,9 +244,9 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
           m_credits[txMsgId] >>= newCredit;
         }
           
-        NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
-                     " Changed credit for msg " << txMsgId <<
-                     " from " << curCredit << " to " << m_credits[txMsgId]);
+        NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
+                    " Changed credit for msg " << txMsgId <<
+                    " from " << curCredit << " to " << m_credits[txMsgId]);
       }
     }
       
@@ -276,14 +277,15 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () << 
-               " NanoPU Timeout for msg " << txMsgId << " in Packetization Buffer");
+               " NanoPU Timeout for msg " << txMsgId << 
+               " in Packetization Buffer");
     
   if (std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
     if (m_timeoutCnt[txMsgId] >= m_maxTimeoutCnt)
     {
-      NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
-                   " Msg " << txMsgId << " expired.");
+      NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
+                  " Msg " << txMsgId << " expired.");
         
       /* Free the txMsgId*/
       m_txMsgIdFreeList.push_back (txMsgId);
@@ -310,9 +312,9 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
   }
   else
   {
-    NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
-                 " TimeoutEvent was triggered for unknown tx_msg_id: "
-                 << txMsgId);
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                " TimeoutEvent was triggered for unknown tx_msg_id: "
+                << txMsgId);
   }
 }
     
@@ -334,7 +336,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   if (m_txMsgIdFreeList.size() > 0)
   {
     txMsgId = m_txMsgIdFreeList.front ();
-    NS_LOG_LOGIC("NanoPU Packetization Buffer allocating txMsgId: " << txMsgId);
+    NS_LOG_INFO("NanoPU Packetization Buffer allocating txMsgId: " << txMsgId);
     m_txMsgIdFreeList.pop_front ();
     
     NS_ASSERT_MSG (apphdr.GetPayloadSize() == (uint16_t) cmsg->GetSize (),
@@ -349,7 +351,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     Ptr<Packet> nextPkt;
     while (remainingBytes > 0)
     {
-//       NS_LOG_DEBUG("Remaining bytes to be packetized: "<<remainingBytes<<
+//       NS_LOG_LOGIC("Remaining bytes to be packetized: "<<remainingBytes<<
 //                    " Max payload size: "<<m_payloadSize<<
 //                    " Org. Msg Size: "<<cmsg->GetSize ());
       nextPktSize = std::min(remainingBytes, (uint32_t) m_payloadSize);
@@ -360,7 +362,8 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     }
     m_buffers[txMsgId] = buffer;
     NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
-                   "The message length in the NanoPU App header doesn't match number of packets for this message.");
+                   "The message length in the NanoPU App header "
+                   "doesn't match number of packets for this message.");
       
     uint16_t requestedCredit = apphdr.GetInitWinSize ();  
     m_credits[txMsgId] = (requestedCredit < m_initialCredit) ? requestedCredit : m_initialCredit;
@@ -391,7 +394,8 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   else
   {
     NS_LOG_ERROR(Simulator::Now ().GetNanoSeconds () << 
-                 " Error: NanoPU could not allocate a new txMsgId for the new message. " << 
+                 " Error: NanoPU could not allocate a new"
+                 " txMsgId for the new message. " << 
                  this << " " << msg);
     return false;
   }
@@ -408,9 +412,9 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
   uint16_t pktOffset = getFirstSetBitPos(txPkts);
   while (pktOffset != BITMAP_SIZE)
   {
-    NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
-                 " NanoPU Packetization Buffer transmitting pkt " <<
-                 pktOffset << " from msg " << txMsgId);
+    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
+                " NanoPU Packetization Buffer transmitting pkt " <<
+                pktOffset << " from msg " << txMsgId);
     
     Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
     
@@ -570,7 +574,8 @@ void NanoPuArchtReassemble::NotifyApplications (Ptr<Packet> msg)
   else
     {
       NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () << 
-                    " Error: NanoPU received a message but no application is looking for it. " << 
+                    " Error: NanoPU received a message but"
+                    " no application is looking for it. " << 
                     this << " " << msg);
     }
 }
@@ -590,20 +595,21 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     
   rxMsgIdTableKey_t key (srcIp.Get (), srcPort, txMsgId);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-                " NanoPU Reassembly Buffer processing GetRxMsgInfo extern call for: " << srcIp.Get () 
-                                                                                     << "-" << srcPort
-                                                                                     << "-" << txMsgId); 
+                " NanoPU Reassembly Buffer processing GetRxMsgInfo"
+                " extern call for: " << srcIp.Get () << "-" << 
+                srcPort << "-" << txMsgId); 
+    
   auto entry = m_rxMsgIdTable.find(key);
   if (entry != m_rxMsgIdTable.end())
   {
     rxMsgInfo.rxMsgId = entry->second;
-    NS_LOG_LOGIC("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second);
+    NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second);
       
     // compute the beginning of the inflight window
     rxMsgInfo.ackNo = getFirstSetBitPos(~m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second);
     if (rxMsgInfo.ackNo == BITMAP_SIZE)
     {
-      NS_LOG_LOGIC("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");
+      NS_LOG_INFO("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");
       rxMsgInfo.ackNo = msgLen;
     }
       
@@ -616,7 +622,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   else if (m_rxMsgIdFreeList.size() > 0)
   {
     rxMsgInfo.rxMsgId = m_rxMsgIdFreeList.front ();
-    NS_LOG_LOGIC("NanoPU Reassembly Buffer allocating rxMsgId: " << rxMsgInfo.rxMsgId);
+    NS_LOG_INFO("NanoPU Reassembly Buffer allocating rxMsgId: " 
+                << rxMsgInfo.rxMsgId);
     m_rxMsgIdFreeList.pop_front ();
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
@@ -655,7 +662,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
 //   if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
   if (m_receivedBitmap [meta.rxMsgId] == setBitMapUntil(meta.msgLen))
   {
-    NS_LOG_LOGIC ("All packets have been received for msg " << meta.rxMsgId);
+    NS_LOG_INFO ("All packets have been received for msg " << meta.rxMsgId);
       
     /* Push the reassembled msg to the applications*/
     Ptr<Packet> msg = Create<Packet> ();
@@ -700,7 +707,7 @@ void NanoPuArchtReassemble::TimeoutEvent (uint16_t rxMsgId)
     
   if (std::find(m_rxMsgIdFreeList.begin(),m_rxMsgIdFreeList.end(),rxMsgId) == m_rxMsgIdFreeList.end())
   {
-    NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                  " Msg " << rxMsgId << " expired.");
         
     /* Free the rxMsgId*/
@@ -708,7 +715,7 @@ void NanoPuArchtReassemble::TimeoutEvent (uint16_t rxMsgId)
   }
   else
   {
-    NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
                  " TimeoutEvent was triggered for unknown rx_msg_id: "
                  << rxMsgId);
   }
@@ -906,9 +913,9 @@ bool NanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p,
                                     uint16_t protocol, const Address &from)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
-  NS_LOG_DEBUG ("At time " <<  Simulator::Now ().GetNanoSeconds () << 
-               " NanoPU received a packet of size " << p->GetSize () <<
-               ", but no transport protocol has been programmed.");
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU received a packet of size " << p->GetSize () <<
+                ", but no transport protocol has been programmed.");
     
   return false;
 }
@@ -917,7 +924,8 @@ bool
 NanoPuArcht::SendToNetwork (Ptr<Packet> p)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
-  NS_ASSERT_MSG (m_boundnetdevice != 0, "NanoPU doesn't have a NetDevice to send the packet to!"); 
+  NS_ASSERT_MSG (m_boundnetdevice != 0, 
+                 "NanoPU doesn't have a NetDevice to send the packet to!"); 
 
   return m_boundnetdevice->Send (p, m_boundnetdevice->GetBroadcast (), 0x0800);
 }
