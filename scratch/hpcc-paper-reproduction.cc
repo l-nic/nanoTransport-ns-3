@@ -103,7 +103,7 @@ int
 main (int argc, char *argv[])
 {
   AsciiTraceHelper asciiTraceHelper;
-  double duration = 1.0;
+  double duration = 0.25;
   double networkLoad = 0.5;
   uint32_t simIdx = 0;
   bool traceQueues = false;
@@ -127,11 +127,11 @@ main (int argc, char *argv[])
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");
   inputTraceFileName += workloadName + "Trace";
   inputTraceFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
-  inputTraceFileName += "T" + std::to_string((int)duration) + "s.tr";
+  inputTraceFileName += "T" + std::to_string((int)(duration*1000)) + "ms.tr";
   std::string outputTracesFileName ("outputs/homa-paper-reproduction/FlowTraces");
   outputTracesFileName += workloadName;
   outputTracesFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
-  outputTracesFileName += "T" + std::to_string((int)duration) + "s.tr";
+  outputTracesFileName += "T" + std::to_string((int)(duration*1000)) + "ms.tr";
     
   int nHosts = 320;
   int nTors = 20;
@@ -316,8 +316,6 @@ main (int argc, char *argv[])
                                 MakeBoundCallback(&TraceMsgBegin, msgStream));
   Config::ConnectWithoutContext("/NodeList/*/$ns3::NanoPuArcht/MsgFinish", 
                                 MakeBoundCallback(&TraceMsgFinish, msgStream));
-  
-//   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/pcaps/tor-spine", false);
 
   /******** Run the Actual Simulation ********/
   Simulator::Run ();
