@@ -196,6 +196,16 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
         
       /* Free the txMsgId*/
       m_txMsgIdFreeList.push_back (txMsgId);
+        
+      /* Clear the stored state for simulation performance */
+      m_appHeaders.erase(txMsgId);
+      m_buffers[txMsgId].clear();
+      m_buffers.erase(txMsgId);
+      m_deliveredBitmap.erase(txMsgId);
+      m_credits.erase(txMsgId);
+      m_toBeTxBitmap.erase(txMsgId);
+      m_maxTxPktOffset.erase(txMsgId);
+      m_timeoutCnt.erase(txMsgId);
     }
   }
   else
@@ -289,6 +299,16 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
         
       /* Free the txMsgId*/
       m_txMsgIdFreeList.push_back (txMsgId);
+        
+      /* Clear the stored state for simulation performance */
+      m_appHeaders.erase(txMsgId);
+      m_buffers[txMsgId].clear();
+      m_buffers.erase(txMsgId);
+      m_deliveredBitmap.erase(txMsgId);
+      m_credits.erase(txMsgId);
+      m_toBeTxBitmap.erase(txMsgId);
+      m_maxTxPktOffset.erase(txMsgId);
+      m_timeoutCnt.erase(txMsgId);
     }
     else
     {
@@ -670,6 +690,11 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     m_rxMsgIdFreeList.push_back (meta.rxMsgId);
       
     m_timer->CancelTimerEvent (meta.rxMsgId);
+      
+    /* Clear the stored state for simulation performance */
+    m_receivedBitmap.erase(meta.rxMsgId);
+    m_buffers [meta.rxMsgId].clear();
+    m_buffers.erase(meta.rxMsgId);
   }
   else
   {
