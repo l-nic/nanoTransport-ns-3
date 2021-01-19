@@ -128,7 +128,7 @@ main (int argc, char *argv[])
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");
   inputTraceFileName += workloadName + "Trace";
   inputTraceFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
-  inputTraceFileName += "T" + std::to_string((int)duration) + "s.txt";
+  inputTraceFileName += "T" + std::to_string((int)duration) + "s.tr";
   std::string outputTracesFileName ("outputs/homa-paper-reproduction/FlowTraces");
   outputTracesFileName += workloadName;
   outputTracesFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
