@@ -28,7 +28,7 @@
 #include <bitset>
 
 #include "ns3/object.h"
-#include "ns3/callback.h"
+#include "ns3/traced-callback.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/nanopu-app-header.h"
@@ -197,7 +197,7 @@ public:
    */
   void TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset);
                          
-  bool ProcessNewMessage (Ptr<Packet> msg);
+  int ProcessNewMessage (Ptr<Packet> msg);
  
 private:
 
@@ -312,12 +312,6 @@ public:
   
   void SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer);
   
-  /**
-   * \brief Allows applications to set a callback for every reassembled msg on RX
-   * \param reassembledMsgCb Callback provided by application
-   */
-  void SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb);
-  
   rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
                                 uint16_t msgLen, uint16_t pktOffset);
                                 
@@ -424,26 +418,6 @@ public:
   uint16_t GetPayloadSize (void);
   
   /**
-   * \brief Bind the architecture to the device.
-   *
-   * This method corresponds to using setsockopt() SO_BINDTODEVICE
-   * of real network or BSD sockets.   If set, this option will
-   * force packets to leave the bound device regardless of the device that
-   * IP routing would naturally choose.  In the receive direction, only
-   * packets received from the bound interface will be delivered.
-   *
-   * This option has no particular relationship to binding sockets to
-   * an address via Socket::Bind ().  It is possible to bind sockets to a 
-   * specific IP address on the bound interface by calling both 
-   * Socket::Bind (address) and Socket::BindToNetDevice (device), but it
-   * is also possible to bind to mismatching device and address, even if
-   * the socket can not receive any packets as a result.
-   *
-   * \returns nothing
-   */
-  virtual void BindToNetDevice ();
-
-  /**
    * \brief Returns architecture's bound NetDevice, if any.
    *
    * This method corresponds to using getsockopt() SO_BINDTODEVICE
@@ -470,6 +444,39 @@ public:
    * \returns Pointer to the arbiter.
    */
   Ptr<NanoPuArchtArbiter> GetArbiter (void);
+  
+  /**
+   * \brief Returns architecture's local IPv4 address.
+   * 
+   * \returns the local IPv4 Address.
+   */
+  Ipv4Address GetLocalIp (void);
+  
+  /**
+   * \brief Bind the architecture to the device.
+   *
+   * This method corresponds to using setsockopt() SO_BINDTODEVICE
+   * of real network or BSD sockets.   If set, this option will
+   * force packets to leave the bound device regardless of the device that
+   * IP routing would naturally choose.  In the receive direction, only
+   * packets received from the bound interface will be delivered.
+   *
+   * This option has no particular relationship to binding sockets to
+   * an address via Socket::Bind ().  It is possible to bind sockets to a 
+   * specific IP address on the bound interface by calling both 
+   * Socket::Bind (address) and Socket::BindToNetDevice (device), but it
+   * is also possible to bind to mismatching device and address, even if
+   * the socket can not receive any packets as a result.
+   *
+   * \returns nothing
+   */
+  virtual void BindToNetDevice ();
+
+  /**
+   * \brief Allows applications to set a callback for every reassembled msg on RX
+   * \param reassembledMsgCb Callback provided by application
+   */
+  void SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb);
 
   virtual bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                             uint16_t protocol, const Address &from);
@@ -486,13 +493,15 @@ public:
   /**
    * \brief Notifies the application every time a message is reassembled
    * \param msg The reassembled msg that should be given to the application with the app header
+   * \param txMsgId The id of the message that was assigned by the sender
    */
-  void NotifyApplications (Ptr<Packet> msg);
+  void NotifyApplications (Ptr<Packet> msg, int txMsgId);
   
 protected:
 
   Ptr<Node>      m_node; //!< the node this architecture is located at.
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
+  Ipv4Address    m_localIp; //!< the local IPv4 Address
     
   uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
   uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
@@ -504,6 +513,9 @@ protected:
   Ptr<NanoPuArchtIngressTimer> m_ingressTimer; //!< the ingress timer module of the architecture
     
   Callback<void, Ptr<Packet> > m_reassembledMsgCb; //!< callback to be invoked when a msg is ready to be handed to the application
+  
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
 };
     
 } // namespace ns3

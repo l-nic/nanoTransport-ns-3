@@ -338,7 +338,7 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
   }
 }
     
-bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
+int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
 {
   Ptr<Packet> cmsg = msg->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cmsg);
@@ -410,6 +410,7 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       
     m_toBeTxBitmap[txMsgId] &= ~txPkts;
     
+    return txMsgId;
   }
   else
   {
@@ -417,10 +418,8 @@ bool NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
                  " Error: NanoPU could not allocate a new"
                  " txMsgId for the new message. " << 
                  this << " " << msg);
-    return false;
+    return -1;
   }
-    
-  return true;
 }
     
 void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, 
@@ -677,10 +676,10 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     apphdr.SetPayloadSize (msg->GetSize ());
     msg->AddHeader (apphdr);
     
-//     m_nanoPuArcht->NotifyApplications (msg);
+//     m_nanoPuArcht->NotifyApplications (msg, (int)meta.txMsgId);
     Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
                          &NanoPuArcht::NotifyApplications, 
-                         m_nanoPuArcht, msg);
+                         m_nanoPuArcht, msg, (int)meta.txMsgId);
       
     /* Free the rxMsgId*/
     rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
@@ -798,6 +797,16 @@ TypeId NanoPuArcht::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::NanoPuArcht")
     .SetParent<Object> ()
     .SetGroupName("Network")
+    .AddTraceSource ("MsgBegin",
+                     "Trace source indicating a message has been delivered to "
+                     "the HomaL4Protocol by the sender application layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgBeginTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("MsgFinish",
+                     "Trace source indicating a message has been delivered to "
+                     "the receiver application by the HomaL4Protocol layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgFinishTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -860,6 +869,30 @@ uint16_t NanoPuArcht::GetPayloadSize (void)
   return m_payloadSize;
 }
 
+Ptr<NetDevice>
+NanoPuArcht::GetBoundNetDevice ()
+{
+  return m_boundnetdevice;
+}
+    
+Ptr<NanoPuArchtReassemble> 
+NanoPuArcht::GetReassemblyBuffer (void)
+{
+  return m_reassemble;
+}
+    
+Ptr<NanoPuArchtArbiter> 
+NanoPuArcht::GetArbiter (void)
+{
+  return m_arbiter;
+}
+    
+Ipv4Address
+NanoPuArcht::GetLocalIp (void)
+{
+  return m_localIp;
+}
+
 /*
  * NanoPu Architecture requires a transport module. The function below
  * is a reference implementation for future transport modules.
@@ -885,30 +918,15 @@ NanoPuArcht::BindToNetDevice ()
     }
 
   m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
+    
+  Ptr<Ipv4> ipv4proto = m_node->GetObject<Ipv4> ();
+  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (m_boundnetdevice);
+  m_localIp = ipv4proto->SourceAddressSelection (ifIndex, 0);
+    
   m_mtu = m_boundnetdevice->GetMtu ();
   return;
 }
-
-Ptr<NetDevice>
-NanoPuArcht::GetBoundNetDevice ()
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  return m_boundnetdevice;
-}
-    
-Ptr<NanoPuArchtReassemble> 
-NanoPuArcht::GetReassemblyBuffer (void)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  return m_reassemble;
-}
-    
-Ptr<NanoPuArchtArbiter> NanoPuArcht::GetArbiter (void)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  return m_arbiter;
-}
-    
+   
 void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << 
@@ -947,15 +965,34 @@ bool NanoPuArcht::Send (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
     
-  return m_packetize->ProcessNewMessage (msg->Copy ());
+  NanoPuAppHeader apphdr;
+  msg->PeekHeader(apphdr);
+    
+  int txMsgId = m_packetize->ProcessNewMessage (msg->Copy ());
+  if (txMsgId >= 0 )
+  {
+    m_msgBeginTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
+                    apphdr.GetLocalPort(), apphdr.GetRemotePort(), 
+                    txMsgId);
+    return true;
+  }
+    
+  return false;
 }
     
-void NanoPuArcht::NotifyApplications (Ptr<Packet> msg)
+void NanoPuArcht::NotifyApplications (Ptr<Packet> msg, int txMsgId)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
   if (!m_reassembledMsgCb.IsNull ())
     {
       m_reassembledMsgCb (msg);
+      
+      NanoPuAppHeader apphdr;
+      msg->PeekHeader(apphdr);
+      
+      m_msgFinishTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
+                       apphdr.GetLocalPort(), apphdr.GetRemotePort(), 
+                       txMsgId);
     }
   else
     {
