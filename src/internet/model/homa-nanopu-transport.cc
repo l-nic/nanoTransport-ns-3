@@ -50,21 +50,11 @@ TypeId HomaNanoPuArchtPktGen::GetTypeId (void)
   return tid;
 }
 
-HomaNanoPuArchtPktGen::HomaNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht)
+HomaNanoPuArchtPktGen::HomaNanoPuArchtPktGen (Ptr<HomaNanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
-    
-  Ptr<NetDevice> netDevice = m_nanoPuArcht->GetBoundNetDevice ();
-  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
-  
-  DataRate dataRate = p2pNetDevice->GetDataRate ();
-  uint16_t mtuBytes = m_nanoPuArcht->GetBoundNetDevice ()->GetMtu ();
-  m_packetTxTime = dataRate.CalculateBytesTxTime ((uint32_t) mtuBytes);
-    
-  // Set an initial value for the last Tx time.
-  m_pacerLastTxTime = Simulator::Now () - m_packetTxTime;
 }
 
 HomaNanoPuArchtPktGen::~HomaNanoPuArchtPktGen ()
@@ -115,17 +105,11 @@ TypeId HomaNanoPuArchtIngressPipe::GetTypeId (void)
   return tid;
 }
 
-HomaNanoPuArchtIngressPipe::HomaNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
-                                                      Ptr<NanoPuArchtPacketize> packetize,
-                                                      Ptr<HomaNanoPuArchtPktGen> pktgen,
-                                                      uint16_t rttPkts)
+HomaNanoPuArchtIngressPipe::HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
-  m_reassemble = reassemble;
-  m_packetize = packetize;
-  m_pktgen = pktgen;
-  m_rttPkts = rttPkts;
+  m_nanoPuArcht = nanoPuArcht;
 }
 
 HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
@@ -182,11 +166,12 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     uint16_t srcPort = homah.GetSrcPort ();
     uint16_t dstPort = homah.GetDstPort ();
       
-    rxMsgInfoMeta_t rxMsgInfo = m_reassemble->GetRxMsgInfo (srcIp, 
-                                                            srcPort, 
-                                                            txMsgId,
-                                                            msgLen, 
-                                                            pktOffset);
+    rxMsgInfoMeta_t rxMsgInfo = m_nanoPuArcht->GetReassemblyBuffer ()
+                                             ->GetRxMsgInfo (srcIp, 
+                                                             srcPort, 
+                                                             txMsgId,
+                                                             msgLen, 
+                                                             pktOffset);
       
     // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
     //       before processing this incoming data packet because this
@@ -214,7 +199,8 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     uint16_t grantOffset = 0;
     if (rxMsgInfo.isNewMsg)
     {
-      m_credits[rxMsgInfo.rxMsgId] = m_rttPkts + grantOffsetDiff;
+      m_credits[rxMsgInfo.rxMsgId] = m_nanoPuArcht->GetInitialCredit ()
+                                     + grantOffsetDiff;
     }
     else
     {
@@ -234,8 +220,10 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       // Msg of the received pkt is the active one for this prio
       responseFlag |= HomaHeader::Flags_t::GRANT;
        
-      m_pktgen->CtrlPktEvent(responseFlag, srcIp, srcPort, dstPort, txMsgId,
-                             msgLen, pktOffset, grantOffset, priority);
+      m_nanoPuArcht->GetPktGen ()
+                   ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
+                                  dstPort, txMsgId, msgLen, 
+                                  pktOffset, grantOffset, priority);
         
       if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
         // The active msg is fully granted, so unschedule it. 
@@ -255,8 +243,10 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       // This packet doesn't belong to an active msg
       responseFlag |= HomaHeader::Flags_t::BUSY;
         
-      m_pktgen->CtrlPktEvent(responseFlag, srcIp, srcPort, dstPort, txMsgId,
-                             msgLen, pktOffset, grantOffset, priority);
+      m_nanoPuArcht->GetPktGen ()
+                   ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
+                                  dstPort, txMsgId, msgLen, 
+                                  pktOffset, grantOffset, priority);
     }
       
     if ((scheduledMsgsIsEmpty ||  rxMsgInfo.isNewMsg) && grantOffset < msgLen)
@@ -276,10 +266,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       metaData.msgLen = msgLen;
       metaData.pktOffset = pktOffset;
             
-//       m_reassemble->ProcessNewPacket (cp, metaData);
+//       m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
                            &NanoPuArchtReassemble::ProcessNewPacket, 
-                           m_reassemble, cp, metaData);
+                           m_nanoPuArcht->GetReassemblyBuffer (),
+                           cp, metaData);
     }
  
   }  
@@ -294,15 +285,19 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     if (rxFlag & HomaHeader::Flags_t::RSNDRSPNS)
     {
       rtxPkt = (int) pktOffset;
-      m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
-                                     NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-                                     std::greater<int>());
+      m_nanoPuArcht->GetPacketizationBuffer ()
+                   ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
+                                       NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+                                       std::greater<int>());
     }
     else
     {
-      m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
+      m_nanoPuArcht->GetPacketizationBuffer ()
+                   ->DeliveredEvent (txMsgId, msgLen, 
+                                     (((bitmap_t)1)<<pktOffset));
 //       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-//                          &NanoPuArchtPacketize::DeliveredEvent, m_packetize, 
+//                          &NanoPuArchtPacketize::DeliveredEvent, 
+//                          m_nanoPuArcht->GetPacketizationBuffer (), 
 //                          txMsgId, msgLen, (1<<pktOffset));
       rtxPkt = -1;
       
@@ -319,11 +314,13 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       }
     }
       
-    m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
-                                   NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-                                   std::greater<int>());
+    m_nanoPuArcht->GetPacketizationBuffer ()
+                 ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
+                                     NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+                                     std::greater<int>());
 //     Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-//                          &NanoPuArchtPacketize::CreditToBtxEvent, m_packetize, 
+//                          &NanoPuArchtPacketize::CreditToBtxEvent, 
+//                          m_nanoPuArcht->GetPacketizationBuffer ()
 //                          txMsgId, rtxPkt, credit, credit,
 //                          NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
 //                          std::greater<int>());
@@ -344,7 +341,7 @@ TypeId HomaNanoPuArchtEgressPipe::GetTypeId (void)
   return tid;
 }
 
-HomaNanoPuArchtEgressPipe::HomaNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht)
+HomaNanoPuArchtEgressPipe::HomaNanoPuArchtEgressPipe (Ptr<HomaNanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << nanoPuArcht);
     
@@ -527,10 +524,13 @@ void HomaNanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
     
   m_arbiter->SetEgressPipe (m_egresspipe);
     
-  m_ingresspipe = CreateObject<HomaNanoPuArchtIngressPipe> (m_reassemble,
-                                                            m_packetize,
-                                                            m_pktgen,
-                                                            m_initialCredit);
+  m_ingresspipe = CreateObject<HomaNanoPuArchtIngressPipe> (this);
+}
+    
+Ptr<HpccNanoPuArchtPktGen> 
+HomaNanoPuArcht::GetPktGen (void)
+{
+  return m_pktgen;
 }
     
 bool HomaNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
