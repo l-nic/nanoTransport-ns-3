@@ -131,9 +131,9 @@ main (int argc, char *argv[])
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
-  LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-//   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
+//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
+//   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_WARN);
     
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");
   inputTraceFileName += workloadName + "Trace";
@@ -150,6 +150,7 @@ main (int argc, char *argv[])
   int nCoreSw = 16;
   
   /******** Create Nodes ********/
+  NS_LOG_UNCOND("Creating Nodes...");
   NodeContainer hostNodes;
   hostNodes.Create (nHosts);
     
@@ -163,6 +164,7 @@ main (int argc, char *argv[])
   coreNodes.Create (nCoreSw);
     
   /******** Create Channels ********/
+  NS_LOG_UNCOND("Configuring Channels...");
   PointToPointHelper hostLinks;
   hostLinks.SetDeviceAttribute ("EnableInt", BooleanValue (true));
   hostLinks.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
@@ -176,6 +178,7 @@ main (int argc, char *argv[])
   aggregationLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
     
   /******** Create NetDevices ********/
+  NS_LOG_UNCOND("Creating NetDevices...");
   NetDeviceContainer hostTorDevices[nHosts];
   for (int i = 0; i < nHosts; i++)
   {
@@ -210,6 +213,7 @@ main (int argc, char *argv[])
   }
     
   /******** Install Internet Stack ********/
+  NS_LOG_UNCOND("Installing Internet Stack...");
   /* Enable multi-path routing */
   Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
                      EnumValue(Ipv4GlobalRouting::ECMP_PER_FLOW));
@@ -265,6 +269,8 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
   /* Define an optional/default parameters for nanoPU modules*/
+  NS_LOG_UNCOND("Deploying NanoPU Architectures...");
+    
   uint16_t payloadSize = hostTorDevices[0].Get (0)->GetMtu () 
                          - ipv4h.GetSerializedSize () 
                          - inth.GetMaxSerializedSize () 
@@ -307,6 +313,7 @@ main (int argc, char *argv[])
 //   LogComponentEnable ("Config", LOG_LEVEL_ERROR);
   
   /******** Read the Msg Generation Trace From File ********/
+  NS_LOG_UNCOND("Reading Input Trace...");
   int nFlows;
   std::ifstream inputTraceFile;
   inputTraceFile.open (inputTraceFileName);
