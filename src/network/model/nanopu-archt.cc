@@ -26,6 +26,7 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "ns3/uinteger.h"
 #include "node.h"
 #include "ns3/ipv4.h"
 #include "nanopu-archt.h"
@@ -349,8 +350,9 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   NS_ASSERT_MSG (apphdr.GetHeaderType() == NANOPU_APP_HEADER_TYPE, 
                  "NanoPU expects packets to have NanoPU App Header!");
     
-  NS_ASSERT_MSG (apphdr.GetPayloadSize()/ m_payloadSize < BITMAP_SIZE,
-                 "NanoPU can not handle messages larger than "<<BITMAP_SIZE<<" packets!");
+  NS_ASSERT_MSG (apphdr.GetPayloadSize() / m_payloadSize < BITMAP_SIZE,
+                 "NanoPU can not handle messages larger than "
+                 << BITMAP_SIZE << " packets!");
   
   uint16_t txMsgId;
   if (m_txMsgIdFreeList.size() > 0)
@@ -797,15 +799,39 @@ TypeId NanoPuArcht::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::NanoPuArcht")
     .SetParent<Object> ()
     .SetGroupName("Network")
+    .AddConstructor<NanoPuArcht> ()
+    .AddAttribute ("PayloadSize", 
+                   "MTU for the network interface excluding the header sizes",
+                   UintegerValue (1400),
+                   MakeUintegerAccessor (&NanoPuArcht::m_payloadSize),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNMessages", 
+                   "Maximum number of messages NanoPU can handle at a time",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&NanoPuArcht::m_maxNMessages),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("TimeoutInterval", "Time value to expire the timers",
+                   TimeValue (MilliSeconds (10)),
+                   MakeTimeAccessor (&NanoPuArcht::m_timeoutInterval),
+                   MakeTimeChecker (MicroSeconds (0)))
+    .AddAttribute ("InitialCredit", "Initial window of packets to be sent",
+                   UintegerValue (10),
+                   MakeUintegerAccessor (&NanoPuArcht::m_initialCredit),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNTimeouts", 
+                   "Max allowed number of retransmissions before discarding a msg",
+                   UintegerValue (5),
+                   MakeUintegerAccessor (&NanoPuArcht::m_maxTimeoutCnt),
+                   MakeUintegerChecker<uint16_t> ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
-                     "the HomaL4Protocol by the sender application layer.",
-                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgBeginTrace),
+                     "the the NanoPuArcht by the sender application layer.",
+                     MakeTraceSourceAccessor (&NanoPuArcht::m_msgBeginTrace),
                      "ns3::Packet::TracedCallback")
     .AddTraceSource ("MsgFinish",
                      "Trace source indicating a message has been delivered to "
-                     "the receiver application by the HomaL4Protocol layer.",
-                     MakeTraceSourceAccessor (&HomaL4Protocol::m_msgFinishTrace),
+                     "the receiver application by the NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&NanoPuArcht::m_msgFinishTrace),
                      "ns3::Packet::TracedCallback")
   ;
   return tid;
@@ -815,37 +841,9 @@ TypeId NanoPuArcht::GetTypeId (void)
  * NanoPu Architecture requires a transport module.
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
  */
-NanoPuArcht::NanoPuArcht (Ptr<Node> node,
-                          Ptr<NetDevice> device,
-                          Time timeoutInterval,
-                          uint16_t maxMessages,
-                          uint16_t payloadSize, 
-                          uint16_t initialCredit,
-                          uint16_t maxTimeoutCnt)
+NanoPuArcht::NanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-    
-  m_node = node;
-  m_boundnetdevice = device;
-  BindToNetDevice ();
-    
-  m_payloadSize = payloadSize;
-    
-  m_reassemble = CreateObject<NanoPuArchtReassemble> (this,
-                                                      maxMessages);
-  m_arbiter = CreateObject<NanoPuArchtArbiter> ();
-  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
-                                                    maxMessages,
-                                                    initialCredit,
-                                                    m_payloadSize,
-                                                    maxTimeoutCnt);
-  m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, timeoutInterval);
-  m_packetize->SetTimerModule (m_egressTimer);
-    
-  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, timeoutInterval*2);
-  m_reassemble->SetTimerModule (m_ingressTimer);
-    
-  m_node->AggregateObject (this);
 }
 
 /*
@@ -857,11 +855,71 @@ NanoPuArcht::~NanoPuArcht ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
+void NanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << device);
+    
+  m_boundnetdevice = device;
+  
+  BindToNetDevice ();
+  AggregateObject(m_boundnetdevice);
+    
+  m_arbiter = CreateObject<NanoPuArchtArbiter> ();
+    
+  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
+                                                    m_maxNMessages,
+                                                    m_initialCredit,
+                                                    m_payloadSize,
+                                                    m_maxTimeoutCnt);
+    
+  m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, 
+                                                        m_timeoutInterval);
+    
+  m_packetize->SetTimerModule (m_egressTimer); 
+    
+  m_reassemble = CreateObject<NanoPuArchtReassemble> (this,
+                                                      m_maxNMessages);
+  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, 
+                                                          m_timeoutInterval*2);  
+  m_reassemble->SetTimerModule (m_ingressTimer);
+}
+    
+/*
+ * NanoPu Architecture requires a transport module. The function below
+ * is a reference implementation for future transport modules.
+ * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
+ */
+void NanoPuArcht::BindToNetDevice ()
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << m_boundnetdevice);
+    
+  if (m_boundnetdevice != 0)
+    {
+      bool found = false;
+      for (uint32_t i = 0; i < GetNode ()->GetNDevices (); i++)
+        {
+          if (GetNode ()->GetDevice (i) == m_boundnetdevice)
+            {
+              found = true;
+              break;
+            }
+        }
+      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
+    }
+
+  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
+    
+  Ptr<Ipv4> ipv4proto = m_boundnetdevice->GetNode ()->GetObject<Ipv4> ();
+  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (m_boundnetdevice);
+  Ipv4Address dummyAddr ((uint32_t)0);
+  m_localIp = ipv4proto->SourceAddressSelection (ifIndex, dummyAddr);
+}
+    
 /* Returns associated node */
 Ptr<Node>
 NanoPuArcht::GetNode (void)
 {
-  return m_node;
+  return m_boundnetdevice->GetNode ();;
 }
     
 uint16_t NanoPuArcht::GetPayloadSize (void)
@@ -891,40 +949,6 @@ Ipv4Address
 NanoPuArcht::GetLocalIp (void)
 {
   return m_localIp;
-}
-
-/*
- * NanoPu Architecture requires a transport module. The function below
- * is a reference implementation for future transport modules.
- * see ../../internet/model/.*-nanopu-transport.{h/cc) for the real implementation.
- */
-void
-NanoPuArcht::BindToNetDevice ()
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << m_boundnetdevice);
-    
-  if (m_boundnetdevice != 0)
-    {
-      bool found = false;
-      for (uint32_t i = 0; i < GetNode ()->GetNDevices (); i++)
-        {
-          if (GetNode ()->GetDevice (i) == m_boundnetdevice)
-            {
-              found = true;
-              break;
-            }
-        }
-      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
-    }
-
-  m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
-    
-  Ptr<Ipv4> ipv4proto = m_node->GetObject<Ipv4> ();
-  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (m_boundnetdevice);
-  m_localIp = ipv4proto->SourceAddressSelection (ifIndex, 0);
-    
-  m_mtu = m_boundnetdevice->GetMtu ();
-  return;
 }
    
 void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
@@ -965,10 +989,11 @@ bool NanoPuArcht::Send (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
     
-  NanoPuAppHeader apphdr;
-  msg->PeekHeader(apphdr);
-    
   int txMsgId = m_packetize->ProcessNewMessage (msg->Copy ());
+    
+  NanoPuAppHeader apphdr;
+  msg->RemoveHeader(apphdr);
+    
   if (txMsgId >= 0 )
   {
     m_msgBeginTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
@@ -985,10 +1010,10 @@ void NanoPuArcht::NotifyApplications (Ptr<Packet> msg, int txMsgId)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
   if (!m_reassembledMsgCb.IsNull ())
     {
-      m_reassembledMsgCb (msg);
+      m_reassembledMsgCb (msg->Copy ());
       
       NanoPuAppHeader apphdr;
-      msg->PeekHeader(apphdr);
+      msg->RemoveHeader(apphdr);
       
       m_msgFinishTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
                        apphdr.GetLocalPort(), apphdr.GetRemotePort(), 

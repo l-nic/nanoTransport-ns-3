@@ -160,18 +160,10 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  HpccNanoPuArcht (Ptr<Node> node,
-                   Ptr<NetDevice> device,
-                   Time timeoutInterval=MicroSeconds(100),
-                   uint16_t maxMessages=100,
-                   uint16_t payloadSize=1445,
-                   uint16_t initialCredit=10,
-                   uint16_t maxTimeoutCnt=5,
-                   double baseRtt=MicroSeconds (13).GetSeconds (),
-                   uint32_t winAI=80,
-                   double utilFac=0.95,
-                   uint16_t maxStage=5);
+  HpccNanoPuArcht ();
   virtual ~HpccNanoPuArcht (void);
+  
+  void AggregateIntoDevice (Ptr<NetDevice> device);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.
@@ -190,6 +182,11 @@ protected:
   Ptr<HpccNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<HpccNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
   Ptr<HpccNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator for the archt
+  
+  double m_baseRtt;      //!< The base propagation RTT in seconds.
+  uint32_t m_winAi;      //!< Additive increase factor in Bytes
+  double m_utilFac;      //!< Utilization Factor (defined as \eta in HPCC paper)
+  uint16_t m_maxStage;   //!< Maximum number of stages before window is updated wrt. utilization
 };   
 
 } // namespace ns3

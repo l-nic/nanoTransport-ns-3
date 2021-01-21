@@ -165,14 +165,10 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  HomaNanoPuArcht (Ptr<Node> node,
-                  Ptr<NetDevice> device,
-                  Time timeoutInterval,
-                  uint16_t maxMessages=100,
-                  uint16_t payloadSize=1445,
-                  uint16_t initialCredit=10,
-                  uint16_t maxTimeoutCnt=5);
+  HomaNanoPuArcht ();
   virtual ~HomaNanoPuArcht (void);
+  
+  void AggregateIntoDevice (Ptr<NetDevice> device);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.

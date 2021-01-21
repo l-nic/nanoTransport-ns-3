@@ -23,12 +23,13 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
-#include "ns3/data-rate.h"
-
-#include "ndp-nanopu-transport.h"
-#include "ns3/nanopu-archt.h"
-#include "ns3/point-to-point-net-device.h"
+#include "ns3/uinteger.h"
+#include "ns3/node.h"
 #include "ns3/ipv4.h"
+#include "ns3/data-rate.h"
+#include "ns3/point-to-point-net-device.h"
+#include "ns3/nanopu-archt.h"
+#include "ndp-nanopu-transport.h"
 #include "ns3/ipv4-header.h"
 #include "ns3/ndp-header.h"
 
@@ -278,7 +279,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     m_pktgen->CtrlPktEvent (genACK, genNACK, genPULL, 
                             srcIp, srcPort, dstPort, txMsgId,
                             msgLen, pktOffset, pullOffset);
-//     Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
+//     Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                          &NdpNanoPuArchtPktGen::CtrlPktEvent, 
 //                          m_pktgen, genACK, genNACK, genPULL, 
 //                          srcIp, srcPort, dstPort, txMsgId,
@@ -293,7 +294,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     if (ndph.GetFlags () & NdpHeader::Flags_t::ACK)
     {
       m_packetize->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
-//       Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
+//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                            &NanoPuArchtPacketize::DeliveredEvent, 
 //                            m_packetize, txMsgId, msgLen, (1<<pktOffset));
     }
@@ -305,7 +306,7 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       m_packetize->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                      NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                      std::greater<int>());
-//       Simulator::Schedule (NanoSeconds(NDP_INGRESS_PIPE_DELAY), 
+//       Simulator::Schedule (NanoSeconds(INGRESS_PIPE_DELAY), 
 //                            &NanoPuArchtPacketize::CreditToBtxEvent, 
 //                            m_packetize, txMsgId, rtxPkt, credit, credit,
 //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
@@ -398,39 +399,70 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::NdpNanoPuArcht")
     .SetParent<Object> ()
     .SetGroupName("Network")
+    .AddConstructor<NdpNanoPuArcht> ()
+    .AddAttribute ("PayloadSize", 
+                   "MTU for the network interface excluding the header sizes",
+                   UintegerValue (1400),
+                   MakeUintegerAccessor (&NdpNanoPuArcht::m_payloadSize),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNMessages", 
+                   "Maximum number of messages NanoPU can handle at a time",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&NdpNanoPuArcht::m_maxNMessages),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("TimeoutInterval", "Time value to expire the timers",
+                   TimeValue (MilliSeconds (10)),
+                   MakeTimeAccessor (&NdpNanoPuArcht::m_timeoutInterval),
+                   MakeTimeChecker (MicroSeconds (0)))
+    .AddAttribute ("InitialCredit", "Initial window of packets to be sent",
+                   UintegerValue (10),
+                   MakeUintegerAccessor (&NdpNanoPuArcht::m_initialCredit),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNTimeouts", 
+                   "Max allowed number of retransmissions before discarding a msg",
+                   UintegerValue (5),
+                   MakeUintegerAccessor (&NdpNanoPuArcht::m_maxTimeoutCnt),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddTraceSource ("MsgBegin",
+                     "Trace source indicating a message has been delivered to "
+                     "the the NanoPuArcht by the sender application layer.",
+                     MakeTraceSourceAccessor (&NdpNanoPuArcht::m_msgBeginTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("MsgFinish",
+                     "Trace source indicating a message has been delivered to "
+                     "the receiver application by the NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&NdpNanoPuArcht::m_msgFinishTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
 
-NdpNanoPuArcht::NdpNanoPuArcht (Ptr<Node> node,
-                                Ptr<NetDevice> device,
-                                Time timeoutInterval,
-                                uint16_t maxMessages,
-                                uint16_t payloadSize,
-                                uint16_t initialCredit,
-                                uint16_t maxTimeoutCnt) : NanoPuArcht (node,
-                                                                       device,
-                                                                       timeoutInterval,
-                                                                       maxMessages,
-                                                                       payloadSize,
-                                                                       initialCredit,
-                                                                       maxTimeoutCnt)
+NdpNanoPuArcht::NdpNanoPuArcht () : NanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  
-  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (this);
-  m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble,
-                                                           m_packetize,
-                                                           m_pktgen,
-                                                           initialCredit);
-  m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
-    
-  m_arbiter->SetEgressPipe(m_egresspipe);
 }
 
 NdpNanoPuArcht::~NdpNanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+}
+    
+void NdpNanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << device); 
+    
+  NanoPuArcht::AggregateIntoDevice (device);
+    
+  m_pktgen = CreateObject<NdpNanoPuArchtPktGen> (this);
+    
+  m_egresspipe = CreateObject<NdpNanoPuArchtEgressPipe> (this);
+    
+  m_arbiter->SetEgressPipe (m_egresspipe);
+    
+  m_ingresspipe = CreateObject<NdpNanoPuArchtIngressPipe> (m_reassemble,
+                                                           m_packetize,
+                                                           m_pktgen,
+                                                           m_initialCredit);
 }
     
 bool NdpNanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 

@@ -23,6 +23,7 @@
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "ns3/uinteger.h"
 #include "ns3/node.h"
 #include "ns3/ipv4.h"
 #include "ns3/data-rate.h"
@@ -466,39 +467,70 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::HomaNanoPuArcht")
     .SetParent<Object> ()
     .SetGroupName("Network")
+    .AddConstructor<HomaNanoPuArcht> ()
+    .AddAttribute ("PayloadSize", 
+                   "MTU for the network interface excluding the header sizes",
+                   UintegerValue (1400),
+                   MakeUintegerAccessor (&HomaNanoPuArcht::m_payloadSize),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNMessages", 
+                   "Maximum number of messages NanoPU can handle at a time",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&HomaNanoPuArcht::m_maxNMessages),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("TimeoutInterval", "Time value to expire the timers",
+                   TimeValue (MilliSeconds (10)),
+                   MakeTimeAccessor (&HomaNanoPuArcht::m_timeoutInterval),
+                   MakeTimeChecker (MicroSeconds (0)))
+    .AddAttribute ("InitialCredit", "Initial window of packets to be sent",
+                   UintegerValue (10),
+                   MakeUintegerAccessor (&HomaNanoPuArcht::m_initialCredit),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNTimeouts", 
+                   "Max allowed number of retransmissions before discarding a msg",
+                   UintegerValue (5),
+                   MakeUintegerAccessor (&HomaNanoPuArcht::m_maxTimeoutCnt),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddTraceSource ("MsgBegin",
+                     "Trace source indicating a message has been delivered to "
+                     "the the NanoPuArcht by the sender application layer.",
+                     MakeTraceSourceAccessor (&HomaNanoPuArcht::m_msgBeginTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("MsgFinish",
+                     "Trace source indicating a message has been delivered to "
+                     "the receiver application by the NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&HomaNanoPuArcht::m_msgFinishTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
 
-HomaNanoPuArcht::HomaNanoPuArcht (Ptr<Node> node,
-                                Ptr<NetDevice> device,
-                                Time timeoutInterval,
-                                uint16_t maxMessages,
-                                uint16_t payloadSize,
-                                uint16_t initialCredit,
-                                uint16_t maxTimeoutCnt) : NanoPuArcht (node,
-                                                                       device,
-                                                                       timeoutInterval,
-                                                                       maxMessages,
-                                                                       payloadSize,
-                                                                       initialCredit,
-                                                                       maxTimeoutCnt)
+HomaNanoPuArcht::HomaNanoPuArcht () : NanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  
-  m_pktgen = CreateObject<HomaNanoPuArchtPktGen> (this);
-  m_ingresspipe = CreateObject<HomaNanoPuArchtIngressPipe> (m_reassemble,
-                                                            m_packetize,
-                                                            m_pktgen,
-                                                            initialCredit);
-  m_egresspipe = CreateObject<HomaNanoPuArchtEgressPipe> (this);
-    
-  m_arbiter->SetEgressPipe(m_egresspipe);
 }
 
 HomaNanoPuArcht::~HomaNanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+}
+    
+void HomaNanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << device); 
+    
+  NanoPuArcht::AggregateIntoDevice (device);
+    
+  m_pktgen = CreateObject<HomaNanoPuArchtPktGen> (this);
+    
+  m_egresspipe = CreateObject<HomsNanoPuArchtEgressPipe> (this);
+    
+  m_arbiter->SetEgressPipe (m_egresspipe);
+    
+  m_ingresspipe = CreateObject<HomaNanoPuArchtIngressPipe> (m_reassemble,
+                                                            m_packetize,
+                                                            m_pktgen,
+                                                            m_initialCredit);
 }
     
 bool HomaNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 

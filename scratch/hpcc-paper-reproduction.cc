@@ -35,6 +35,7 @@
 #include <fstream>
 #include <string>
 
+#include "ns3/config-store.h"
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/network-module.h"
@@ -80,20 +81,24 @@ void TraceMsgFinish (Ptr<OutputStreamWrapper> stream,
 }
 
 void SendMsg (Ptr<HpccNanoPuArcht> hpccNanoPu, Ipv4Address dstIp, 
-              uint16_t dstPort, uint16_t numPkts, uint16_t payloadSize)
+              uint16_t dstPort, uint32_t msgSize, uint16_t payloadSize)
 {
-  NS_LOG_UNCOND("Sending a message through NDP NanoPU Archt");
+  NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+               " Sending a message of "<< msgSize << 
+               " Bytes through HPCC NanoPU Archt (" <<
+               hpccNanoPu << ") to " << dstIp <<
+               ". (Payload size: " << payloadSize << ")");
    
   Ptr<Packet> msg;
-  msg = Create<Packet> (numPkts*payloadSize);
+  msg = Create<Packet> (msgSize);
     
   NanoPuAppHeader appHdr;
   appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
   appHdr.SetRemoteIp(dstIp);
   appHdr.SetRemotePort(dstPort);
   appHdr.SetLocalPort(100);
-  appHdr.SetMsgLen(numPkts);
-  appHdr.SetPayloadSize(numPkts*payloadSize);
+  appHdr.SetMsgLen(msgSize / payloadSize + (msgSize % payloadSize != 0));
+  appHdr.SetPayloadSize(msgSize);
   msg-> AddHeader (appHdr);
     
   hpccNanoPu->Send (msg);
@@ -108,7 +113,13 @@ main (int argc, char *argv[])
   uint32_t simIdx = 0;
   bool traceQueues = false;
   std::string workloadName ("FbHdp");
-  uint16_t mtuBytes = 1024;
+    
+  
+  HpccHeader hpcch;
+  IntHeader inth;
+  Ipv4Header ipv4h;
+  uint16_t mtuBytes = 1000 + ipv4h.GetSerializedSize () 
+                      + inth.GetMaxSerializedSize () + hpcch.GetSerializedSize ();
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
@@ -120,7 +131,7 @@ main (int argc, char *argv[])
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
-//   LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
+  LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
 //   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
     
@@ -128,7 +139,7 @@ main (int argc, char *argv[])
   inputTraceFileName += workloadName + "Trace";
   inputTraceFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
   inputTraceFileName += "T" + std::to_string((int)(duration*1000)) + "ms.tr";
-  std::string outputTracesFileName ("outputs/homa-paper-reproduction/FlowTraces");
+  std::string outputTracesFileName ("outputs/hpcc-paper-reproduction/FlowTraces");
   outputTracesFileName += workloadName;
   outputTracesFileName += "L" + std::to_string((int)(networkLoad*100)) + "p";
   outputTracesFileName += "T" + std::to_string((int)(duration*1000)) + "ms.tr";
@@ -164,20 +175,14 @@ main (int argc, char *argv[])
   aggregationLinks.SetChannelAttribute ("Delay", StringValue ("1us"));
   aggregationLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
     
-  TrafficControlHelper tchPfifoFast;
-  tchPfifoFast.SetRootQueueDisc ("ns3::PfifoFastQueueDisc", 
-                                 "MaxSize", StringValue("32000p"));
-    
   /******** Create NetDevices ********/
   NetDeviceContainer hostTorDevices[nHosts];
   for (int i = 0; i < nHosts; i++)
   {
     hostTorDevices[i] = hostLinks.Install (hostNodes.Get(i), 
                                            torNodes.Get(i/(nHosts/nTors)));
-    hostTorDevices[i].Get(0).SetMtu (mtuBytes);
-    hostTorDevices[i].Get(1).SetMtu (mtuBytes);
-      
-    tchPfifoHoma.Install (hostTorDevices[i]);
+    hostTorDevices[i].Get(0)->SetMtu (mtuBytes);
+    hostTorDevices[i].Get(1)->SetMtu (mtuBytes);
   }
    
   NetDeviceContainer torAggDevices[nTors*4];
@@ -187,10 +192,8 @@ main (int argc, char *argv[])
     {
       torAggDevices[i*4+j] = aggregationLinks.Install (torNodes.Get(i), 
                                                        aggNodes.Get((i/4)*4+j));
-      torAggDevices[i*4+j].Get(0).SetMtu (mtuBytes);
-      torAggDevices[i*4+j].Get(1).SetMtu (mtuBytes);
-        
-      tchPfifoHoma.Install (torAggDevices[i*4+j]);
+      torAggDevices[i*4+j].Get(0)->SetMtu (mtuBytes);
+      torAggDevices[i*4+j].Get(1)->SetMtu (mtuBytes);
     }
   }
   
@@ -201,10 +204,8 @@ main (int argc, char *argv[])
     {
       aggCoreDevices[i*4+j] = aggregationLinks.Install (aggNodes.Get(i), 
                                                         coreNodes.Get((i%4)*4+j));
-      aggCoreDevices[i*4+j].Get(0).SetMtu (mtuBytes);
-      aggCoreDevices[i*4+j].Get(1).SetMtu (mtuBytes);
-        
-      tchPfifoHoma.Install (aggCoreDevices[i*4+j]);
+      aggCoreDevices[i*4+j].Get(0)->SetMtu (mtuBytes);
+      aggCoreDevices[i*4+j].Get(1)->SetMtu (mtuBytes);
     }
   }
     
@@ -215,6 +216,24 @@ main (int argc, char *argv[])
     
   InternetStackHelper stack;
   stack.InstallAll ();
+    
+  /* Enable and configure traffic control layers */
+  TrafficControlHelper tchPfifoFast;
+  tchPfifoFast.SetRootQueueDisc ("ns3::PfifoFastQueueDisc", 
+                                 "MaxSize", StringValue("32000p"));
+    
+  for (int i = 0; i < nHosts; i++)
+  {   
+    tchPfifoFast.Install (hostTorDevices[i]);
+  }
+  for (int i = 0; i < nTors*4; i++)
+  {
+    tchPfifoFast.Install (torAggDevices[i]);
+  }
+  for (int i = 0; i < nAggSw*4; i++)
+  {
+    tchPfifoFast.Install (aggCoreDevices[i]);
+  }
    
   /* Set IP addresses of the nodes in the network */
   Ipv4AddressHelper address;
@@ -246,30 +265,46 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
   /* Define an optional/default parameters for nanoPU modules*/
-  Time timeoutInterval = MilliSeconds(10);
-  uint16_t maxMessages = nHosts;
-  HpccHeader hpcch;
-  IntHeader inth;
-  Ipv4Header ipv4h;
-  uint16_t payloadSize = hostTorDevices[0].Get (0)->GetMtu () - ipv4h.GetSerializedSize () 
-                         - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
-  uint16_t initialCredit = 160; // in packets
-  uint16_t maxTimeoutCnt = 5;
-  Time baseRtt = MicroSeconds (13);
-  uint32_t winAI = 80; // in Bytes    
-  double utilFac = 0.95;
-  uint16_t maxStage = 5;
+  uint16_t payloadSize = hostTorDevices[0].Get (0)->GetMtu () 
+                         - ipv4h.GetSerializedSize () 
+                         - inth.GetMaxSerializedSize () 
+                         - hpcch.GetSerializedSize ();
+  Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
+                     UintegerValue(payloadSize));
+  Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
+                     TimeValue(MilliSeconds(10)));
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
+                     UintegerValue(5));
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
+                     UintegerValue(nHosts));
+  Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
+                     UintegerValue(160));
+  Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
+                     DoubleValue(MicroSeconds (13).GetSeconds ()));
+  Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
+                     UintegerValue(80));
+  Config::SetDefault("ns3::HpccNanoPuArcht::UtilFactor", 
+                     DoubleValue(0.95));
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
+                     UintegerValue(5));
    
+//   LogComponentEnable ("Config", LOG_LEVEL_ALL);
   std::vector<Ptr<HpccNanoPuArcht>> nanoPuArchts;
-  for(int i = 0 ; i < nHosts ; i++){
-    nanoPuArchts.push_back(CreateObject<HpccNanoPuArcht>(hostNodes.Get (i), 
-                                                         hostTorDevices[i].Get (0),
-                                                         timeoutInterval, maxMessages, 
-                                                         payloadSize, initialCredit,
-                                                         maxTimeoutCnt, baseRtt.GetSeconds (), 
-                                                         winAI, utilFac, maxStage));
+  for(int i = 0 ; i < nHosts ; i++)
+  {
+    nanoPuArchts.push_back(CreateObject<HpccNanoPuArcht>());
+    nanoPuArchts[i]->AggregateIntoDevice(hostTorDevices[i].Get (0));
     NS_LOG_INFO("**** NanoPU architecture "<< i <<" is created.");
-  } 
+  }
+    
+  /* Set the message traces for the Homa clients*/
+  Ptr<OutputStreamWrapper> msgStream;
+  msgStream = asciiTraceHelper.CreateFileStream (outputTracesFileName);
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::HpccNanoPuArcht/MsgBegin", 
+                                MakeBoundCallback(&TraceMsgBegin, msgStream));
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::HpccNanoPuArcht/MsgFinish", 
+                                MakeBoundCallback(&TraceMsgFinish, msgStream));
+//   LogComponentEnable ("Config", LOG_LEVEL_ERROR);
   
   /******** Read the Msg Generation Trace From File ********/
   int nFlows;
@@ -288,9 +323,9 @@ main (int argc, char *argv[])
   int dstHost;
   int unknown;
   int dstPort;
-  int flowSize;
+  uint32_t flowSize;
   double startTime;
-  while(getline (msgSizeDistFile, line)) 
+  while(getline (inputTraceFile, line)) 
   {
     lineBuffer.clear ();
     lineBuffer.str (line);
@@ -301,23 +336,14 @@ main (int argc, char *argv[])
     lineBuffer >> flowSize;
     lineBuffer >> startTime;
       
-    uint16_t numPkts = flowSize / payloadSize + (flowSize % payloadSize != 0);
-      
     Simulator::Schedule (Seconds (startTime), &SendMsg, 
                          nanoPuArchts[srcHost], hostAddresses[dstHost], 
-                         dstPort, numPkts, payloadSize);
+                         dstPort, flowSize, payloadSize);
   }
   inputTraceFile.close();
-      
-  /* Set the message traces for the Homa clients*/
-  Ptr<OutputStreamWrapper> msgStream;
-  msgStream = asciiTraceHelper.CreateFileStream (outputTracesFileName);
-  Config::ConnectWithoutContext("/NodeList/*/$ns3::NanoPuArcht/MsgBegin", 
-                                MakeBoundCallback(&TraceMsgBegin, msgStream));
-  Config::ConnectWithoutContext("/NodeList/*/$ns3::NanoPuArcht/MsgFinish", 
-                                MakeBoundCallback(&TraceMsgFinish, msgStream));
 
   /******** Run the Actual Simulation ********/
+  NS_LOG_UNCOND("Running the Simulation...");
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;

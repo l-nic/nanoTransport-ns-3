@@ -41,7 +41,7 @@
 
 namespace ns3 {
     
-typedef std::bitset<10000> bitmap_t ;
+typedef std::bitset<10240> bitmap_t ;
 #define BITMAP_SIZE sizeof(bitmap_t)*8
 // TODO: When most messages are small, a bitmap of 
 //       this size consumes a lot of memory.
@@ -265,6 +265,7 @@ protected:
     
 /******************************************************************************/
     
+class NanoPuArcht; // Forward declaration so reassemble can access timer
 class NanoPuArchtIngressTimer; // Forward declaration so reassemble can access timer
 
 /* The rxMsgIdTable in the Reassembly Buffer requires a lookup table with multiple
@@ -396,14 +397,30 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArcht (Ptr<Node> node,
-               Ptr<NetDevice> device,
-               Time timeoutInterval,
-               uint16_t maxMessages=100,
-               uint16_t payloadSize=1400,
-               uint16_t initialCredit=10,
-               uint16_t maxTimeoutCnt=5);
+  NanoPuArcht (void);
   ~NanoPuArcht (void);
+  
+  virtual void AggregateIntoDevice (Ptr<NetDevice> device);
+  
+  /**
+   * \brief Bind the architecture to the device.
+   *
+   * This method corresponds to using setsockopt() SO_BINDTODEVICE
+   * of real network or BSD sockets.   If set, this option will
+   * force packets to leave the bound device regardless of the device that
+   * IP routing would naturally choose.  In the receive direction, only
+   * packets received from the bound interface will be delivered.
+   *
+   * This option has no particular relationship to binding sockets to
+   * an address via Socket::Bind ().  It is possible to bind sockets to a 
+   * specific IP address on the bound interface by calling both 
+   * Socket::Bind (address) and Socket::BindToNetDevice (device), but it
+   * is also possible to bind to mismatching device and address, even if
+   * the socket can not receive any packets as a result.
+   *
+   * \returns nothing
+   */
+  virtual void BindToNetDevice ();
   
   /**
    * \brief Return the node this architecture is associated with.
@@ -451,26 +468,6 @@ public:
    * \returns the local IPv4 Address.
    */
   Ipv4Address GetLocalIp (void);
-  
-  /**
-   * \brief Bind the architecture to the device.
-   *
-   * This method corresponds to using setsockopt() SO_BINDTODEVICE
-   * of real network or BSD sockets.   If set, this option will
-   * force packets to leave the bound device regardless of the device that
-   * IP routing would naturally choose.  In the receive direction, only
-   * packets received from the bound interface will be delivered.
-   *
-   * This option has no particular relationship to binding sockets to
-   * an address via Socket::Bind ().  It is possible to bind sockets to a 
-   * specific IP address on the bound interface by calling both 
-   * Socket::Bind (address) and Socket::BindToNetDevice (device), but it
-   * is also possible to bind to mismatching device and address, even if
-   * the socket can not receive any packets as a result.
-   *
-   * \returns nothing
-   */
-  virtual void BindToNetDevice ();
 
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
@@ -499,12 +496,14 @@ public:
   
 protected:
 
-  Ptr<Node>      m_node; //!< the node this architecture is located at.
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
   Ipv4Address    m_localIp; //!< the local IPv4 Address
     
-  uint16_t m_mtu; //!< equal to the mtu set on the m_boundnetdevice
-  uint16_t m_payloadSize; //!< MTU for the network interface excluding the header sizes
+  uint16_t m_payloadSize;  //!< MTU for the network interface excluding the header sizes
+  uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
+  Time m_timeoutInterval;  //!< Time value to expire the timers
+  uint16_t m_initialCredit; //!< Initial window of packets to be sent
+  uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
     
   Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
   Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

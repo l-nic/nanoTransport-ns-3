@@ -103,32 +103,34 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
   /* Define an optional/default parameters for modules*/
-  Time timeoutInterval = MilliSeconds(10);
-  uint16_t maxMessages = 100;
   HpccHeader hpcch;
   IntHeader inth;
   Ipv4Header ipv4h;
   uint16_t payloadSize = switchDevices.Get (1)->GetMtu () - ipv4h.GetSerializedSize () 
                          - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
-  uint16_t initialCredit = 10; // in packets
-  uint16_t maxTimeoutCnt = 5;
-  Time baseRtt = MicroSeconds (13);
-  uint32_t winAI = 80; // in Bytes    
-  double utilFac = 0.95;
-  uint16_t maxStage = 5;
+  Config::SetDefault("ns3::NanoPuArcht::PayloadSize", 
+                     UintegerValue(payloadSize));
+  Config::SetDefault("ns3::NanoPuArcht::TimeoutInterval", 
+                     TimeValue(MilliSeconds(10)));
+  Config::SetDefault("ns3::NanoPuArcht::MaxNTimeouts", 
+                     UintegerValue(5));
+  Config::SetDefault("ns3::NanoPuArcht::MaxNMessages", 
+                     UintegerValue(100));
+  Config::SetDefault("ns3::NanoPuArcht::InitialCredit", 
+                     UintegerValue(10));
+  Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
+                     DoubleValue(MicroSeconds (13).GetSeconds ()));
+  Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
+                     UintegerValue(80));
+  Config::SetDefault("ns3::HpccNanoPuArcht::UtilFactor", 
+                     DoubleValue(0.95));
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
+                     UintegerValue(5));
    
-  Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>(sender2switch.Get (1), 
-                                                                 senderDevices.Get (1),
-                                                                 timeoutInterval, maxMessages, 
-                                                                 payloadSize, initialCredit,
-                                                                 maxTimeoutCnt, baseRtt.GetSeconds (), 
-                                                                 winAI, utilFac, maxStage);
-  Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>(receiver2switch.Get (1), 
-                                                                 receiveDevices.Get (1),
-                                                                 timeoutInterval, maxMessages, 
-                                                                 payloadSize, initialCredit,
-                                                                 maxTimeoutCnt, baseRtt.GetSeconds (), 
-                                                                 winAI, utilFac, maxStage);
+  Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>();
+  srcArcht->AggregateIntoDevice(senderDevices.Get (1));
+  Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>();
+  dstArcht->AggregateIntoDevice(receiveDevices.Get (1));
     
   /* Currently each nanopu is able to connect to a single application only.
    *

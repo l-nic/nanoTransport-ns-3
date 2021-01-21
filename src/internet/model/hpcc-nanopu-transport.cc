@@ -581,45 +581,92 @@ TypeId HpccNanoPuArcht::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::HpccNanoPuArcht")
     .SetParent<Object> ()
     .SetGroupName("Network")
+    .AddConstructor<HpccNanoPuArcht> ()
+    .AddAttribute ("PayloadSize", 
+                   "MTU for the network interface excluding the header sizes",
+                   UintegerValue (1400),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_payloadSize),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNMessages", 
+                   "Maximum number of messages NanoPU can handle at a time",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_maxNMessages),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("TimeoutInterval", "Time value to expire the timers",
+                   TimeValue (MilliSeconds (10)),
+                   MakeTimeAccessor (&HpccNanoPuArcht::m_timeoutInterval),
+                   MakeTimeChecker (MicroSeconds (0)))
+    .AddAttribute ("InitialCredit", "Initial window of packets to be sent",
+                   UintegerValue (10),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_initialCredit),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("MaxNTimeouts", 
+                   "Max allowed number of retransmissions before discarding a msg",
+                   UintegerValue (5),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_maxTimeoutCnt),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("BaseRTT", "The base propagation RTT in seconds.",
+                   DoubleValue (MicroSeconds (13).GetSeconds ()),
+                   MakeDoubleAccessor (&HpccNanoPuArcht::m_baseRtt),
+                   MakeDoubleChecker<double> ())
+    .AddAttribute ("WinAI", "Additive increase factor in Bytes",
+                   UintegerValue (80),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_winAi),
+                   MakeUintegerChecker<uint32_t> ())
+    .AddAttribute ("UtilFactor", "Utilization Factor (defined as \eta in HPCC paper)",
+                   DoubleValue (0.95),
+                   MakeDoubleAccessor (&HpccNanoPuArcht::m_utilFac),
+                   MakeDoubleChecker<double> ())
+    .AddAttribute ("MaxStage", 
+                   "Maximum number of stages before window is updated wrt. utilization",
+                   UintegerValue (5),
+                   MakeUintegerAccessor (&HpccNanoPuArcht::m_maxStage),
+                   MakeUintegerChecker<uint16_t> ())
+    .AddTraceSource ("MsgBegin",
+                     "Trace source indicating a message has been delivered to "
+                     "the the NanoPuArcht by the sender application layer.",
+                     MakeTraceSourceAccessor (&HpccNanoPuArcht::m_msgBeginTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("MsgFinish",
+                     "Trace source indicating a message has been delivered to "
+                     "the receiver application by the NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&HpccNanoPuArcht::m_msgFinishTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
 
-HpccNanoPuArcht::HpccNanoPuArcht (Ptr<Node> node,
-                                  Ptr<NetDevice> device,
-                                  Time timeoutInterval,
-                                  uint16_t maxMessages,
-                                  uint16_t payloadSize,
-                                  uint16_t initialCredit,
-                                  uint16_t maxTimeoutCnt,
-                                  double baseRtt,
-                                  uint32_t winAI,
-                                  double utilFac,
-                                  uint16_t maxStage) : NanoPuArcht (node, device,
-                                                                    timeoutInterval,
-                                                                    maxMessages,
-                                                                    payloadSize,
-                                                                    initialCredit,
-                                                                    maxTimeoutCnt)
+HpccNanoPuArcht::HpccNanoPuArcht () : NanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  
-  m_pktgen = CreateObject<HpccNanoPuArchtPktGen> (this);
-    
-  m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble, m_packetize,
-                                                            m_pktgen, baseRtt, 
-                                                            device->GetMtu (),
-                                                            initialCredit, winAI,
-                                                            utilFac, maxStage);
-    
-  m_egresspipe = CreateObject<HpccNanoPuArchtEgressPipe> (this);
-    
-  m_arbiter->SetEgressPipe (m_egresspipe);
 }
 
 HpccNanoPuArcht::~HpccNanoPuArcht ()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+}
+    
+void HpccNanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << device); 
+    
+  NanoPuArcht::AggregateIntoDevice (device);
+    
+  m_pktgen = CreateObject<HpccNanoPuArchtPktGen> (this);
+    
+  m_egresspipe = CreateObject<HpccNanoPuArchtEgressPipe> (this);
+    
+  m_arbiter->SetEgressPipe (m_egresspipe);
+    
+  m_ingresspipe = CreateObject<HpccNanoPuArchtIngressPipe> (m_reassemble, 
+                                                            m_packetize,
+                                                            m_pktgen, 
+                                                            m_baseRtt, 
+                                                            device->GetMtu (),
+                                                            m_initialCredit, 
+                                                            m_winAi,
+                                                            m_utilFac, 
+                                                            m_maxStage);
 }
     
 bool HpccNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
