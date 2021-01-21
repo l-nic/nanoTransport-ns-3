@@ -244,7 +244,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtEgressTimer (Ptr<NanoPuArchtPacketize> packetize, Time timeoutInterval);
+  NanoPuArchtEgressTimer (Ptr<NanoPuArcht> nanoPuArcht, 
+                          Ptr<NanoPuArchtPacketize> packetize);
   ~NanoPuArchtEgressTimer (void);
   
   void ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxOffset);
@@ -257,8 +258,8 @@ public:
   
 protected:
   
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtPacketize> m_packetize;
-  Time m_timeoutInterval; //!< time interval for each timeout to take
   
   std::unordered_map<uint16_t,EventId> m_timers; //!< state to keep timer meta, {txMsgId => timerMeta}
 };
@@ -355,7 +356,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtIngressTimer (Ptr<NanoPuArchtReassemble> reassemble, Time timeoutInterval);
+  NanoPuArchtIngressTimer (Ptr<NanoPuArcht> nanoPuArcht,
+                           Ptr<NanoPuArchtReassemble> reassemble);
   ~NanoPuArchtIngressTimer (void);
   
   void ScheduleTimerEvent (uint16_t rxMsgId);
@@ -366,8 +368,8 @@ public:
   
 protected:
   
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtReassemble> m_reassemble;
-  Time m_timeoutInterval; //!< time interval for each timeout to take
   
   std::unordered_map<uint16_t,EventId> m_timers; //!< state to keep timer meta, {txMsgId => timerMeta}
 };

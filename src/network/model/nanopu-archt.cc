@@ -467,13 +467,13 @@ TypeId NanoPuArchtEgressTimer::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtEgressTimer::NanoPuArchtEgressTimer (Ptr<NanoPuArchtPacketize> packetize,
-                                    Time timeoutInterval)
+NanoPuArchtEgressTimer::NanoPuArchtEgressTimer (Ptr<NanoPuArcht> nanoPuArcht,
+                                                Ptr<NanoPuArchtPacketize> packetize)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
+  m_nanoPuArcht = nanoPuArcht;
   m_packetize = packetize;
-  m_timeoutInterval = timeoutInterval;
 }
 
 NanoPuArchtEgressTimer::~NanoPuArchtEgressTimer ()
@@ -489,7 +489,7 @@ void NanoPuArchtEgressTimer::ScheduleTimerEvent (uint16_t txMsgId, uint16_t rtxO
                 " NanoPU Egress ScheduleTimer Event for msg " << txMsgId <<
                 " rtxOffset " << rtxOffset);
   
-  m_timers[txMsgId] = Simulator::Schedule (m_timeoutInterval,
+  m_timers[txMsgId] = Simulator::Schedule (m_nanoPuArcht->GetTimeoutInterval (),
                                            &NanoPuArchtEgressTimer::InvokeTimeoutEvent, 
                                            this, txMsgId, rtxOffset);
 }
@@ -520,7 +520,7 @@ void NanoPuArchtEgressTimer::RescheduleTimerEvent (uint16_t txMsgId, uint16_t rt
                 " NanoPU Egress RescheduleTimer Event for msg " << txMsgId <<
                 " rtxOffset " << rtxOffset);
     
-  m_timers[txMsgId] = Simulator::Schedule (m_timeoutInterval,
+  m_timers[txMsgId] = Simulator::Schedule (m_nanoPuArcht->GetTimeoutInterval (),
                                            &NanoPuArchtEgressTimer::InvokeTimeoutEvent, 
                                            this, txMsgId, rtxOffset);
 }
@@ -728,13 +728,13 @@ TypeId NanoPuArchtIngressTimer::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtIngressTimer::NanoPuArchtIngressTimer (Ptr<NanoPuArchtReassemble> reassemble,
-                                                  Time timeoutInterval)
+NanoPuArchtIngressTimer::NanoPuArchtIngressTimer (Ptr<NanoPuArcht> nanoPuArcht,
+                                                  Ptr<NanoPuArchtReassemble> reassemble)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
+  m_nanoPuArcht = nanoPuArcht;
   m_reassemble = reassemble;
-  m_timeoutInterval = timeoutInterval;
 }
 
 NanoPuArchtIngressTimer::~NanoPuArchtIngressTimer ()
@@ -753,9 +753,9 @@ void NanoPuArchtIngressTimer::ScheduleTimerEvent (uint16_t rxMsgId)
   {
     Simulator::Cancel (m_timers[rxMsgId]);
   }
-  m_timers[rxMsgId] = Simulator::Schedule (m_timeoutInterval,
-                                             &NanoPuArchtIngressTimer::InvokeTimeoutEvent, 
-                                             this, rxMsgId);
+  m_timers[rxMsgId] = Simulator::Schedule (m_nanoPuArcht->GetTimeoutInterval () *2,
+                                           &NanoPuArchtIngressTimer::InvokeTimeoutEvent, 
+                                           this, rxMsgId);
 }
     
 void NanoPuArchtIngressTimer::CancelTimerEvent (uint16_t rxMsgId)
@@ -859,14 +859,14 @@ void NanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
     
   m_packetize = CreateObject<NanoPuArchtPacketize> (this, m_arbiter);
     
-  m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, 
-                                                        m_timeoutInterval);
+  m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (this, m_packetize);
+    
   m_packetize->SetTimerModule (m_egressTimer); 
     
   m_reassemble = CreateObject<NanoPuArchtReassemble> (this);
     
-  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, 
-                                                          m_timeoutInterval*2);  
+  m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (this, m_reassemble); 
+    
   m_reassemble->SetTimerModule (m_ingressTimer);
 }
     
