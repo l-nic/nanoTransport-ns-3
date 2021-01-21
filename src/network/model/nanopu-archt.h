@@ -81,6 +81,11 @@ typedef struct egressMeta_t {
 }egressMeta_t;
 
 /******************************************************************************/
+
+/* Forward declarations for setting the architecture up */
+class NanoPuArcht; 
+class NanoPuArchtIngressTimer;
+class NanoPuArchtEgressTimer; 
     
 /**
  * \ingroup nanopu-archt
@@ -136,8 +141,6 @@ protected:
 };
     
 /******************************************************************************/
-
-class NanoPuArchtEgressTimer; // Forward declaration so packetize can access timer
     
 /**
  * \ingroup nanopu-archt
@@ -154,9 +157,8 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter, uint16_t maxMessages,
-                        uint16_t initialCredit, uint16_t payloadSize, 
-                        uint16_t maxTimeoutCnt);
+  NanoPuArchtPacketize (Ptr<NanoPuArcht> nanoPuArcht,
+                        Ptr<NanoPuArchtArbiter> arbiter);
   ~NanoPuArchtPacketize (void);
   
   void SetTimerModule (Ptr<NanoPuArchtEgressTimer> timer);
@@ -206,11 +208,9 @@ private:
   
 protected:
   
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtArbiter> m_arbiter;
   Ptr<NanoPuArchtEgressTimer> m_timer;
-  uint16_t m_initialCredit; //!< Initial window of packets to be sent
-  uint16_t m_payloadSize; //!< Max size of packet payloads
-  uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
   
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
   std::unordered_map<uint16_t, 
@@ -264,9 +264,6 @@ protected:
 };
     
 /******************************************************************************/
-    
-class NanoPuArcht; // Forward declaration so reassemble can access timer
-class NanoPuArchtIngressTimer; // Forward declaration so reassemble can access timer
 
 /* The rxMsgIdTable in the Reassembly Buffer requires a lookup table with multiple
  * key values. Thus we define appropriate template functions below for the 
@@ -307,8 +304,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht,
-                         uint16_t maxMessages);
+  NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht);
   ~NanoPuArchtReassemble (void);
   
   void SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer);
@@ -329,6 +325,7 @@ protected:
 
   Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtIngressTimer> m_timer;
+  
   std::list<uint16_t> m_rxMsgIdFreeList; //!< List of free RX msg IDs
   std::unordered_map<const rxMsgIdTableKey_t, 
                      uint16_t, 
@@ -423,18 +420,6 @@ public:
   virtual void BindToNetDevice ();
   
   /**
-   * \brief Return the node this architecture is associated with.
-   * \returns the node
-   */
-  Ptr<Node> GetNode (void);
-  
-  /**
-   * \brief Return the MTU size without the header sizes
-   * \returns the payloadSize
-   */
-  uint16_t GetPayloadSize (void);
-  
-  /**
    * \brief Returns architecture's bound NetDevice, if any.
    *
    * This method corresponds to using getsockopt() SO_BINDTODEVICE
@@ -444,6 +429,12 @@ public:
    * \returns Pointer to interface.
    */
   Ptr<NetDevice> GetBoundNetDevice (void); 
+  
+  /**
+   * \brief Return the node this architecture is associated with.
+   * \returns the node
+   */
+  Ptr<Node> GetNode (void);
   
   /**
    * \brief Returns architecture's Reassembly Buffer.
@@ -468,6 +459,36 @@ public:
    * \returns the local IPv4 Address.
    */
   Ipv4Address GetLocalIp (void);
+  
+  /**
+   * \brief Return the MTU size without the header sizes
+   * \returns the payloadSize
+   */
+  uint16_t GetPayloadSize (void);
+  
+  /**
+   * \brief Return the initial credit given to messages in the beginning
+   * \returns the initialCredit
+   */
+  uint16_t GetInitialCredit (void);
+  
+  /**
+   * \brief Return the maximum number of timeouts allowed before discarding the msg
+   * \returns the maxTimeoutCnt
+   */
+  uint16_t GetMaxTimeoutCnt (void);
+  
+  /**
+   * \brief Return the time to expire a timer
+   * \returns the timeoutInterval
+   */
+  Time GetTimeoutInterval (void);
+  
+  /**
+   * \brief Return maximum number of messages NanoPU can handle at a time
+   * \returns the maxNMessages
+   */
+  uint16_t GetMaxNMessages (void);
 
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
@@ -500,10 +521,10 @@ protected:
   Ipv4Address    m_localIp; //!< the local IPv4 Address
     
   uint16_t m_payloadSize;  //!< MTU for the network interface excluding the header sizes
-  uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
-  Time m_timeoutInterval;  //!< Time value to expire the timers
   uint16_t m_initialCredit; //!< Initial window of packets to be sent
   uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
+  Time m_timeoutInterval;  //!< Time value to expire the timers
+  uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
     
   Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
   Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

@@ -143,22 +143,16 @@ TypeId NanoPuArchtPacketize::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArchtArbiter> arbiter,
-                                            uint16_t maxMessages,
-                                            uint16_t initialCredit,
-                                            uint16_t payloadSize,
-                                            uint16_t maxTimeoutCnt)
+NanoPuArchtPacketize::NanoPuArchtPacketize (Ptr<NanoPuArcht> nanoPuArcht,
+                                            Ptr<NanoPuArchtArbiter> arbiter)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
+  m_nanoPuArcht = nanoPuArcht;
   m_arbiter = arbiter;
     
-  m_txMsgIdFreeList.resize(maxMessages);
+  m_txMsgIdFreeList.resize(m_nanoPuArcht->GetMaxNMessages ());
   std::iota(m_txMsgIdFreeList.begin(), m_txMsgIdFreeList.end(), 0);
-    
-  m_initialCredit = initialCredit;
-  m_payloadSize = payloadSize;
-  m_maxTimeoutCnt = maxTimeoutCnt;
 }
 
 NanoPuArchtPacketize::~NanoPuArchtPacketize ()
@@ -293,7 +287,7 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     
   if (std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
-    if (m_timeoutCnt[txMsgId] >= m_maxTimeoutCnt)
+    if (m_timeoutCnt[txMsgId] >= m_nanoPuArcht->GetMaxTimeoutCnt ())
     {
       NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                   " Msg " << txMsgId << " expired.");
@@ -350,7 +344,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   NS_ASSERT_MSG (apphdr.GetHeaderType() == NANOPU_APP_HEADER_TYPE, 
                  "NanoPU expects packets to have NanoPU App Header!");
     
-  NS_ASSERT_MSG (apphdr.GetPayloadSize() / m_payloadSize < BITMAP_SIZE,
+  NS_ASSERT_MSG (apphdr.GetPayloadSize() / m_nanoPuArcht->GetPayloadSize () < BITMAP_SIZE,
                  "NanoPU can not handle messages larger than "
                  << BITMAP_SIZE << " packets!");
   
@@ -373,10 +367,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     Ptr<Packet> nextPkt;
     while (remainingBytes > 0)
     {
-//       NS_LOG_LOGIC("Remaining bytes to be packetized: "<<remainingBytes<<
-//                    " Max payload size: "<<m_payloadSize<<
-//                    " Org. Msg Size: "<<cmsg->GetSize ());
-      nextPktSize = std::min(remainingBytes, (uint32_t) m_payloadSize);
+      nextPktSize = std::min(remainingBytes, (uint32_t) m_nanoPuArcht->GetPayloadSize ());
       nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
       buffer[numPkts] = nextPkt;
       remainingBytes -= nextPktSize;
@@ -387,8 +378,9 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
                    "The message length in the NanoPU App header "
                    "doesn't match number of packets for this message.");
       
-    uint16_t requestedCredit = apphdr.GetInitWinSize ();  
-    m_credits[txMsgId] = (requestedCredit < m_initialCredit) ? requestedCredit : m_initialCredit;
+    uint16_t requestedCredit = apphdr.GetInitWinSize (); 
+    uint16_t initialCredit = m_nanoPuArcht->GetInitialCredit ();
+    m_credits[txMsgId] = (requestedCredit < initialCredit) ? requestedCredit : initialCredit;
       
     m_deliveredBitmap[txMsgId] = 0;
       
@@ -556,15 +548,14 @@ TypeId NanoPuArchtReassemble::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtReassemble::NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht,
-                                              uint16_t maxMessages)
+NanoPuArchtReassemble::NanoPuArchtReassemble (Ptr<NanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () 
                    << this << nanoPuArcht);
     
   m_nanoPuArcht = nanoPuArcht;
     
-  m_rxMsgIdFreeList.resize(maxMessages);
+  m_rxMsgIdFreeList.resize(m_nanoPuArcht->GetMaxNMessages ());
   std::iota(m_rxMsgIdFreeList.begin(), m_rxMsgIdFreeList.end(), 0);
 }
 
@@ -866,19 +857,14 @@ void NanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
     
   m_arbiter = CreateObject<NanoPuArchtArbiter> ();
     
-  m_packetize = CreateObject<NanoPuArchtPacketize> (m_arbiter,
-                                                    m_maxNMessages,
-                                                    m_initialCredit,
-                                                    m_payloadSize,
-                                                    m_maxTimeoutCnt);
+  m_packetize = CreateObject<NanoPuArchtPacketize> (this, m_arbiter);
     
   m_egressTimer = CreateObject<NanoPuArchtEgressTimer> (m_packetize, 
                                                         m_timeoutInterval);
-    
   m_packetize->SetTimerModule (m_egressTimer); 
     
-  m_reassemble = CreateObject<NanoPuArchtReassemble> (this,
-                                                      m_maxNMessages);
+  m_reassemble = CreateObject<NanoPuArchtReassemble> (this);
+    
   m_ingressTimer = CreateObject<NanoPuArchtIngressTimer> (m_reassemble, 
                                                           m_timeoutInterval*2);  
   m_reassemble->SetTimerModule (m_ingressTimer);
@@ -891,7 +877,8 @@ void NanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
  */
 void NanoPuArcht::BindToNetDevice ()
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << m_boundnetdevice);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () 
+                   << this << m_boundnetdevice);
     
   if (m_boundnetdevice != 0)
     {
@@ -904,7 +891,8 @@ void NanoPuArcht::BindToNetDevice ()
               break;
             }
         }
-      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a NetDevice not existing on the Node");
+      NS_ASSERT_MSG (found, "NanoPU cannot be bound to a"
+                     " NetDevice not existing on the Node");
     }
 
   m_boundnetdevice->SetReceiveCallback (MakeCallback (&NanoPuArcht::EnterIngressPipe, this));
@@ -915,22 +903,17 @@ void NanoPuArcht::BindToNetDevice ()
   m_localIp = ipv4proto->SourceAddressSelection (ifIndex, dummyAddr);
 }
     
+Ptr<NetDevice>
+NanoPuArcht::GetBoundNetDevice ()
+{
+  return m_boundnetdevice;
+}
+    
 /* Returns associated node */
 Ptr<Node>
 NanoPuArcht::GetNode (void)
 {
   return m_boundnetdevice->GetNode ();;
-}
-    
-uint16_t NanoPuArcht::GetPayloadSize (void)
-{
-  return m_payloadSize;
-}
-
-Ptr<NetDevice>
-NanoPuArcht::GetBoundNetDevice ()
-{
-  return m_boundnetdevice;
 }
     
 Ptr<NanoPuArchtReassemble> 
@@ -949,6 +932,31 @@ Ipv4Address
 NanoPuArcht::GetLocalIp (void)
 {
   return m_localIp;
+}
+    
+uint16_t NanoPuArcht::GetPayloadSize (void)
+{
+  return m_payloadSize;
+}
+    
+uint16_t NanoPuArcht::GetInitialCredit (void)
+{
+  return m_initialCredit;
+}
+    
+uint16_t NanoPuArcht::GetMaxTimeoutCnt (void)
+{
+  return m_maxTimeoutCnt;
+}
+    
+Time NanoPuArcht::GetTimeoutInterval (void)
+{
+  return m_timeoutInterval;
+}
+    
+uint16_t NanoPuArcht::GetMaxNMessages (void)
+{
+  return m_maxNMessages;
 }
    
 void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
