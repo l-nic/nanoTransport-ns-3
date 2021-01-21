@@ -307,7 +307,11 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     }
     else
     {
-      m_timeoutCnt[txMsgId] ++;
+      if (m_maxTxPktOffset[txMsgId] > rtxOffset)
+        m_timeoutCnt[txMsgId] = 0;
+      else
+        m_timeoutCnt[txMsgId] ++;
+        
 //       bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & ((((bitmap_t)1)<<(rtxOffset+1))-1);
       bitmap_t rtxPkts = (~m_deliveredBitmap[txMsgId]) & setBitMapUntil(rtxOffset+1);
       
