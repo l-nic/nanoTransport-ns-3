@@ -449,6 +449,13 @@ public:
   Ptr<NanoPuArchtReassemble> GetReassemblyBuffer (void);
   
   /**
+   * \brief Returns architecture's Packetization Buffer.
+   * 
+   * \returns Pointer to the packetization buffer.
+   */
+  Ptr<NanoPuArchtPacketize> GetPacketizationBuffer (void);
+  
+  /**
    * \brief Returns architecture's Arbiter.
    * 
    * \returns Pointer to the arbiter.

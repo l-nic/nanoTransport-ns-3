@@ -921,6 +921,12 @@ NanoPuArcht::GetReassemblyBuffer (void)
 {
   return m_reassemble;
 }
+  
+Ptr<NanoPuArchtPacketize> 
+NanoPuArcht::GetPacketizationBuffer (void)
+{
+  return m_packetize;
+}
     
 Ptr<NanoPuArchtArbiter> 
 NanoPuArcht::GetArbiter (void)

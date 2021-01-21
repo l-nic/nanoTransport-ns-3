@@ -32,6 +32,8 @@
 #define HPCC_EGRESS_PIPE_DELAY 1
 
 namespace ns3 {
+    
+class HpccNanoPuArcht;
 
 /**
  * \ingroup nanopu-archt
@@ -48,7 +50,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HpccNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
+  HpccNanoPuArchtPktGen (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtPktGen (void);
   
   void CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
@@ -56,7 +58,7 @@ public:
                      IntHeader receivedIntHeader);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
+  Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
 };
  
 /******************************************************************************/
@@ -76,12 +78,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HpccNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
-                              Ptr<NanoPuArchtPacketize> packetize,
-                              Ptr<HpccNanoPuArchtPktGen> pktgen,
-                              double baseRtt, uint32_t mtu,
-                              uint16_t initCredit, uint32_t winAI,
-                              double utilFac, uint16_t maxStage);
+  HpccNanoPuArchtIngressPipe (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtIngressPipe (void);
   
   uint16_t ComputeNumPkts (uint32_t winSizeBytes);
@@ -95,25 +92,16 @@ public:
   
 protected:
 
-    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
-    Ptr<HpccNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
+  Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
     
-    double m_baseRTT;      //!< The base propagation RTT in seconds.
-    uint32_t m_mtu;        //!< The MTU size of the network
-    uint16_t m_initCredit; //!< The initial number of packets allowed to be sent (ie. BDP in packets)
-    uint32_t m_winAI;      //!< Additive increase factor in Bytes
-    double m_utilFac;      //!< Utilization Factor (defined as \eta in HPCC paper)
-    uint16_t m_maxStage;   //!< Maximum number of stages before window is updated wrt. utilization
-    
-//     std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track validity {txMsgId => state valid or not}
-    std::unordered_map<uint16_t, uint16_t> m_credits;        //!< State to track credit {txMsgId => max seqNo for TX}
-    std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track ackNo {txMsgId => ack No}
-    std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track W^c {txMsgId => Window Size in Bytes}
-    std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track seqNo {txMsgId => Last Update Seq}
-    std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track incStage {txMsgId => inc Stage}
-    std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track INT vector {txMsgId => Prev INT hdr}
-    std::unordered_map<uint16_t, double> m_utilizations;     //!< State to track utilization {txMsgId => U}
+//   std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track validity {txMsgId => state valid or not}
+  std::unordered_map<uint16_t, uint16_t> m_credits;        //!< State to track credit {txMsgId => max seqNo for TX}
+  std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track ackNo {txMsgId => ack No}
+  std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track W^c {txMsgId => Window Size in Bytes}
+  std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track seqNo {txMsgId => Last Update Seq}
+  std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track incStage {txMsgId => inc Stage}
+  std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track INT vector {txMsgId => Prev INT hdr}
+  std::unordered_map<uint16_t, double> m_utilizations;     //!< State to track utilization {txMsgId => U}
 };
  
 /******************************************************************************/
@@ -133,13 +121,13 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HpccNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
+  HpccNanoPuArchtEgressPipe (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtEgressPipe (void);
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to send packets
+  Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send packets
 };
  
 /******************************************************************************/
@@ -164,6 +152,37 @@ public:
   virtual ~HpccNanoPuArcht (void);
   
   void AggregateIntoDevice (Ptr<NetDevice> device);
+  
+  /**
+   * \brief Returns architecture's Packet Generator.
+   * 
+   * \returns Pointer to the packet generator.
+   */
+  Ptr<HpccNanoPuArchtPktGen> GetPktGen (void);
+  
+  /**
+   * \brief Return the base RTT configured by the user
+   * \returns the base RTT
+   */
+  double GetBaseRtt (void);
+  
+  /**
+   * \brief Return WinAI value of HPCC
+   * \returns the WinAI
+   */
+  uint32_t GetWinAi (void);
+  
+  /**
+   * \brief Return the utilization factor of HPCC
+   * \returns the utilization value (eta)
+   */
+  double GetUtilFac (void);
+  
+  /**
+   * \brief Return the number of maxStage value of HPCC
+   * \returns the maxStage
+   */
+  uint32_t GetMaxStage (void);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.
