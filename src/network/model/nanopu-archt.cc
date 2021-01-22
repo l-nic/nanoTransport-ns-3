@@ -646,55 +646,64 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     
   /* Record pkt in buffer*/
   auto buffer = m_buffers.find (meta.rxMsgId);
-  NS_ASSERT (buffer != m_buffers.end ());
-  buffer->second [meta.pktOffset] = pkt;
-    
-  /* Mark the packet as received*/
-  // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
-  m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
-    
-  /* Check if all pkts have been received*/
-//   if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
-  if (m_receivedBitmap [meta.rxMsgId] == setBitMapUntil(meta.msgLen))
+  if (buffer != m_buffers.end ())
   {
-    NS_LOG_INFO ("All packets have been received for msg " << meta.rxMsgId);
-      
-    /* Push the reassembled msg to the applications*/
-    Ptr<Packet> msg = Create<Packet> ();
-    for (uint16_t i=0; i<meta.msgLen; i++)
-    {
-      msg->AddAtEnd (buffer->second[i]);
-    }
-    NanoPuAppHeader apphdr;
-    apphdr.SetRemoteIp (meta.srcIp);
-    apphdr.SetRemotePort (meta.srcPort);
-    apphdr.SetLocalPort (meta.dstPort);
-    apphdr.SetMsgLen (meta.msgLen);
-    apphdr.SetPayloadSize (msg->GetSize ());
-    msg->AddHeader (apphdr);
+    buffer->second [meta.pktOffset] = pkt;
     
-//     m_nanoPuArcht->NotifyApplications (msg, (int)meta.txMsgId);
-    Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
-                         &NanoPuArcht::NotifyApplications, 
-                         m_nanoPuArcht, msg, (int)meta.txMsgId);
+    /* Mark the packet as received*/
+    // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
+    m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
+    
+    /* Check if all pkts have been received*/
+//     if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
+    if (m_receivedBitmap [meta.rxMsgId] == setBitMapUntil(meta.msgLen))
+    {
+      NS_LOG_INFO ("All packets have been received for msg " << meta.rxMsgId);
       
-    /* Free the rxMsgId*/
-    rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
-    auto map = m_rxMsgIdTable.find (key);
-    NS_ASSERT (meta.rxMsgId == map->second);
-    m_rxMsgIdTable.erase (map);
-    m_rxMsgIdFreeList.push_back (meta.rxMsgId);
+      /* Push the reassembled msg to the applications*/
+      Ptr<Packet> msg = Create<Packet> ();
+      for (uint16_t i=0; i<meta.msgLen; i++)
+      {
+        msg->AddAtEnd (buffer->second[i]);
+      }
+      NanoPuAppHeader apphdr;
+      apphdr.SetRemoteIp (meta.srcIp);
+      apphdr.SetRemotePort (meta.srcPort);
+      apphdr.SetLocalPort (meta.dstPort);
+      apphdr.SetMsgLen (meta.msgLen);
+      apphdr.SetPayloadSize (msg->GetSize ());
+      msg->AddHeader (apphdr);
+    
+//       m_nanoPuArcht->NotifyApplications (msg, (int)meta.txMsgId);
+      Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
+                           &NanoPuArcht::NotifyApplications, 
+                           m_nanoPuArcht, msg, (int)meta.txMsgId);
       
-    m_timer->CancelTimerEvent (meta.rxMsgId);
+      /* Free the rxMsgId*/
+      rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
+      auto map = m_rxMsgIdTable.find (key);
+      NS_ASSERT (meta.rxMsgId == map->second);
+      m_rxMsgIdTable.erase (map);
+      m_rxMsgIdFreeList.push_back (meta.rxMsgId);
       
-    /* Clear the stored state for simulation performance */
-    m_receivedBitmap.erase(meta.rxMsgId);
-    m_buffers [meta.rxMsgId].clear();
-    m_buffers.erase(meta.rxMsgId);
+      m_timer->CancelTimerEvent (meta.rxMsgId);
+      
+      /* Clear the stored state for simulation performance */
+      m_receivedBitmap.erase(meta.rxMsgId);
+      m_buffers [meta.rxMsgId].clear();
+      m_buffers.erase(meta.rxMsgId);
+    }
+    else
+    {
+      m_timer->ScheduleTimerEvent (meta.rxMsgId);
+    }
   }
   else
   {
-    m_timer->ScheduleTimerEvent (meta.rxMsgId);
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                " NanoPuArchtReassemble (" << this <<
+                ") can not find the rxMsgId (" << meta.rxMsgId <<
+                ") any more!");
   }
 }
     
