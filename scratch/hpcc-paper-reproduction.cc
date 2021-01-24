@@ -130,10 +130,11 @@ main (int argc, char *argv[])
     
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
-//   Packet::EnablePrinting ();
+//   Packet::EnableChecking ();
+  Packet::EnablePrinting ();
 //   LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
-//   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
+  LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_FUNCTION);
     
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");
   inputTraceFileName += workloadName + "Trace";
@@ -282,7 +283,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
-                     UintegerValue(nHosts));
+                     UintegerValue(1000));
   Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
                      UintegerValue(160));
   Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 

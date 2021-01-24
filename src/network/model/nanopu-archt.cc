@@ -50,11 +50,10 @@ uint16_t getFirstSetBitPos(bitmap_t n) {
 };
     
 bitmap_t setBitMapUntil(uint16_t n) {
-  bitmap_t result;
-  for (uint16_t i=0; i<n; i++){
-    result.set(i);
-  }
-  return result;
+  NS_ASSERT_MSG(n <= BITMAP_SIZE, 
+                "setBitMapUntil is called for n=" << n);
+  bitmap_t bm;
+  return ~bm >> (BITMAP_SIZE-n);
 };
     
 /******************************************************************************/
@@ -80,11 +79,10 @@ NanoPuArchtEgressPipe::~NanoPuArchtEgressPipe ()
     
 void NanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
-  Ptr<Packet> cp = p->Copy ();
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
   NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () <<
                 "ERROR: NanoPU wants to send a packet of size " << 
-                p->GetSize () << ", but te egress pipe can not be found!");
+                p->GetSize () << ", but the egress pipe can not be found!");
     
   return;
 }
@@ -187,27 +185,14 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
     {
       NS_LOG_INFO("The whole message is delivered.");
         
-      m_timer->CancelTimerEvent (txMsgId);
-        
-      /* Free the txMsgId*/
-      m_txMsgIdFreeList.push_back (txMsgId);
-        
-      /* Clear the stored state for simulation performance */
-      m_appHeaders.erase(txMsgId);
-      m_buffers[txMsgId].clear();
-      m_buffers.erase(txMsgId);
-      m_deliveredBitmap.erase(txMsgId);
-      m_credits.erase(txMsgId);
-      m_toBeTxBitmap.erase(txMsgId);
-      m_maxTxPktOffset.erase(txMsgId);
-      m_timeoutCnt.erase(txMsgId);
+      this->ClearStateForMsg (txMsgId);
     }
   }
   else
   {
-    NS_LOG_ERROR(Simulator::Now ().GetNanoSeconds () <<
-                 " ERROR: DeliveredEvent was triggered for unknown tx_msg_id: "
-                 << txMsgId);
+    NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+                  " ERROR: DeliveredEvent was triggered for unknown tx_msg_id: "
+                  << txMsgId);
   }
 }
     
@@ -271,9 +256,9 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
   }
   else
   {
-    NS_LOG_ERROR(Simulator::Now ().GetNanoSeconds () <<
-                 " ERROR: CreditToBtxEvent was triggered for unknown tx_msg_id: "
-                 << txMsgId);
+    NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+                  " ERROR: CreditToBtxEvent was triggered for unknown tx_msg_id: "
+                  << txMsgId);
   }
 }
     
@@ -289,21 +274,11 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
   {
     if (m_timeoutCnt[txMsgId] >= m_nanoPuArcht->GetMaxTimeoutCnt ())
     {
-      NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
-                  " Msg " << txMsgId << " expired.");
+      NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                  " Outbound Msg " << txMsgId << " expired. "
+                  "(MsgSize = " << m_appHeaders[txMsgId]..GetMsgLen () << ")");
         
-      /* Free the txMsgId*/
-      m_txMsgIdFreeList.push_back (txMsgId);
-        
-      /* Clear the stored state for simulation performance */
-      m_appHeaders.erase(txMsgId);
-      m_buffers[txMsgId].clear();
-      m_buffers.erase(txMsgId);
-      m_deliveredBitmap.erase(txMsgId);
-      m_credits.erase(txMsgId);
-      m_toBeTxBitmap.erase(txMsgId);
-      m_maxTxPktOffset.erase(txMsgId);
-      m_timeoutCnt.erase(txMsgId);
+      this->ClearStateForMsg (txMsgId);
     }
     else
     {
@@ -348,7 +323,9 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   NS_ASSERT_MSG (apphdr.GetHeaderType() == NANOPU_APP_HEADER_TYPE, 
                  "NanoPU expects packets to have NanoPU App Header!");
     
-  NS_ASSERT_MSG (apphdr.GetPayloadSize() / m_nanoPuArcht->GetPayloadSize () < BITMAP_SIZE,
+  uint16_t msgSize = apphdr.GetPayloadSize();
+  uint16_t payloadSize = m_nanoPuArcht->GetPayloadSize ();
+  NS_ASSERT_MSG (msgSize / payloadSize + (msgSize % payloadSize != 0) < (uint16_t)BITMAP_SIZE,
                  "NanoPU can not handle messages larger than "
                  << BITMAP_SIZE << " packets!");
   
@@ -359,9 +336,9 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     NS_LOG_INFO("NanoPU Packetization Buffer allocating txMsgId: " << txMsgId);
     m_txMsgIdFreeList.pop_front ();
     
-    NS_ASSERT_MSG (apphdr.GetPayloadSize() == (uint16_t) cmsg->GetSize (),
+    NS_ASSERT_MSG (msgSize == (uint16_t) cmsg->GetSize (),
                    "The payload size in the NanoPU App header doesn't match real payload size. " <<
-                   apphdr.GetPayloadSize() << " vs " << (uint16_t) cmsg->GetSize ());
+                   msgSize << " vs " << (uint16_t) cmsg->GetSize ());
     m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
@@ -371,7 +348,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     Ptr<Packet> nextPkt;
     while (remainingBytes > 0)
     {
-      nextPktSize = std::min(remainingBytes, (uint32_t) m_nanoPuArcht->GetPayloadSize ());
+      nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
       nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
       buffer[numPkts] = nextPkt;
       remainingBytes -= nextPktSize;
@@ -413,7 +390,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
   else
   {
     NS_LOG_ERROR(Simulator::Now ().GetNanoSeconds () << 
-                 " Error: NanoPU could not allocate a new"
+                 " ERROR: NanoPU could not allocate a new"
                  " txMsgId for the new message. " << 
                  this << " " << msg);
     return -1;
@@ -423,9 +400,9 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
 void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts, 
                                     bool isRtx, bool isNewMsg)
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << txMsgId << txPkts);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << txMsgId);
   
-  egressMeta_t meta;
+  egressMeta_t meta = {};
   uint16_t pktOffset = getFirstSetBitPos(txPkts);
   while (pktOffset != BITMAP_SIZE)
   {
@@ -458,6 +435,31 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
     
     pktOffset = getFirstSetBitPos(txPkts);
   }
+}
+    
+void NanoPuArchtPacketize::ClearStateForMsg (uint16_t txMsgId)
+{
+  NS_LOG_FUNCTION(Simulator::Now ().GetNanoSeconds () << this << txMsgId);
+      
+  m_timer->CancelTimerEvent (txMsgId);
+        
+  /* Clear the stored state for simulation performance */
+  m_appHeaders.erase(txMsgId);
+  m_deliveredBitmap.erase(txMsgId);
+  m_credits.erase(txMsgId);
+  m_toBeTxBitmap.erase(txMsgId);
+  m_maxTxPktOffset.erase(txMsgId);
+  m_timeoutCnt.erase(txMsgId);
+  
+//   for (auto it = m_buffers[txMsgId].begin(); it != m_buffers[txMsgId].end(); it++)
+//   {
+//     it->second->Unref();
+//   }
+  m_buffers[txMsgId].clear();
+  m_buffers.erase(txMsgId);
+       
+  /* Free the txMsgId*/
+  m_txMsgIdFreeList.push_back (txMsgId);
 }
     
 /******************************************************************************/
@@ -509,10 +511,6 @@ void NanoPuArchtEgressTimer::CancelTimerEvent (uint16_t txMsgId)
   {
     Simulator::Cancel (m_timers[txMsgId]);
     m_timers.erase(txMsgId);
-  }
-  else
-  {
-    NS_LOG_WARN("NanoPU Egress CancelTimer Event for an unknown timer!");
   }
 }
     
@@ -601,7 +599,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second);
       
     // compute the beginning of the inflight window
-    rxMsgInfo.ackNo = getFirstSetBitPos(~m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second);
+    rxMsgInfo.ackNo = getFirstSetBitPos(~(m_receivedBitmap[rxMsgInfo.rxMsgId]));
     if (rxMsgInfo.ackNo == BITMAP_SIZE)
     {
       NS_LOG_INFO("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");
@@ -610,7 +608,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       
     rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
       
-    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second & (((bitmap_t)1)<<pktOffset)) == 0;
+    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second 
+                          & (((bitmap_t)1)<<pktOffset)) == 0;
     rxMsgInfo.success = true;
   }
   // try to allocate an rx_msg_id
@@ -627,6 +626,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     m_buffers.insert({rxMsgInfo.rxMsgId,buffer});
     
     rxMsgInfo.ackNo = 0;
+    rxMsgInfo.numPkts = 0;
     rxMsgInfo.isNewMsg = true;
     rxMsgInfo.isNewPkt = true;
     rxMsgInfo.success = true;
@@ -640,6 +640,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << pkt);
     
+  NS_ASSERT(meta.pktOffset <= meta.msgLen);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                 " Processing pkt "<< meta.pktOffset 
                 << " for msg " << meta.rxMsgId);
@@ -652,7 +653,8 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     
     /* Mark the packet as received*/
     // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
-    m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
+//     m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
+    m_receivedBitmap [meta.rxMsgId].set(meta.pktOffset);
     
     /* Check if all pkts have been received*/
 //     if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
@@ -679,19 +681,13 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
                            &NanoPuArcht::NotifyApplications, 
                            m_nanoPuArcht, msg, (int)meta.txMsgId);
       
-      /* Free the rxMsgId*/
-      rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
-      auto map = m_rxMsgIdTable.find (key);
-      NS_ASSERT (meta.rxMsgId == map->second);
-      m_rxMsgIdTable.erase (map);
-      m_rxMsgIdFreeList.push_back (meta.rxMsgId);
-      
-      m_timer->CancelTimerEvent (meta.rxMsgId);
-      
-      /* Clear the stored state for simulation performance */
-      m_receivedBitmap.erase(meta.rxMsgId);
-      m_buffers [meta.rxMsgId].clear();
-      m_buffers.erase(meta.rxMsgId);
+//       /* Free the rxMsgId*/
+//       rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
+//       auto map = m_rxMsgIdTable.find (key);
+//       NS_ASSERT (meta.rxMsgId == map->second);
+//       m_rxMsgIdTable.erase (map);
+        
+      this->ClearStateForMsg(meta.rxMsgId);
     }
     else
     {
@@ -709,18 +705,17 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     
 void NanoPuArchtReassemble::TimeoutEvent (uint16_t rxMsgId)
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this<< rxMsgId);
     
   NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Timeout for msg " << rxMsgId << " in Reassembly Buffer");
     
   if (std::find(m_rxMsgIdFreeList.begin(),m_rxMsgIdFreeList.end(),rxMsgId) == m_rxMsgIdFreeList.end())
   {
-    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
-                 " Msg " << rxMsgId << " expired.");
+    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+                 " Inbound Msg " << rxMsgId << " expired.");
         
-    /* Free the rxMsgId*/
-    m_rxMsgIdFreeList.push_back (rxMsgId);
+    this->ClearStateForMsg(rxMsgId);
   }
   else
   {
@@ -728,6 +723,34 @@ void NanoPuArchtReassemble::TimeoutEvent (uint16_t rxMsgId)
                  " TimeoutEvent was triggered for unknown rx_msg_id: "
                  << rxMsgId);
   }
+}
+    
+void NanoPuArchtReassemble::ClearStateForMsg (uint16_t rxMsgId)
+{
+  NS_LOG_FUNCTION(Simulator::Now ().GetNanoSeconds () << this << rxMsgId);
+      
+  m_timer->CancelTimerEvent (rxMsgId);
+    
+  for (auto it = m_rxMsgIdTable.begin(); it != m_rxMsgIdTable.end(); ++it) 
+  {
+    if (it->second == rxMsgId)
+    {
+      m_rxMsgIdTable.erase (it);
+      break;
+    }
+  }
+      
+  /* Clear the stored state for simulation performance */
+  m_receivedBitmap.erase(rxMsgId);
+  
+//   for (auto it = m_buffers[rxMsgId].begin(); it != m_buffers[rxMsgId].end(); it++)
+//   {
+//     it->second->Unref();
+//   }
+  m_buffers[rxMsgId].clear();
+  m_buffers.erase(rxMsgId);
+    
+  m_rxMsgIdFreeList.push_back (rxMsgId);
 }
  
 /******************************************************************************/
@@ -1009,14 +1032,15 @@ bool NanoPuArcht::SendToNetwork (Ptr<Packet> p)
   NS_ASSERT_MSG (m_boundnetdevice != 0, 
                  "NanoPU doesn't have a NetDevice to send the packet to!"); 
 
-  return m_boundnetdevice->Send (p, m_boundnetdevice->GetBroadcast (), 0x0800);
+  return m_boundnetdevice->Send (p->Copy(), 
+                                 m_boundnetdevice->GetBroadcast (), 0x0800);
 }
 
 bool NanoPuArcht::Send (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
     
-  int txMsgId = m_packetize->ProcessNewMessage (msg->Copy ());
+  int txMsgId = m_packetize->ProcessNewMessage (msg);
     
   NanoPuAppHeader apphdr;
   msg->RemoveHeader(apphdr);
@@ -1037,22 +1061,21 @@ void NanoPuArcht::NotifyApplications (Ptr<Packet> msg, int txMsgId)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << msg);
   if (!m_reassembledMsgCb.IsNull ())
     {
-      m_reassembledMsgCb (msg->Copy ());
-      
-      NanoPuAppHeader apphdr;
-      msg->RemoveHeader(apphdr);
-      
-      m_msgFinishTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
-                       apphdr.GetLocalPort(), apphdr.GetRemotePort(), 
-                       txMsgId);
+      m_reassembledMsgCb (msg);
     }
   else
     {
-      NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () << 
-                    " Error: NanoPU received a message but"
+      NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+                    " ERROR: NanoPU received a message but"
                     " no application is looking for it. " << 
                     this << " " << msg);
     }
+    
+  NanoPuAppHeader apphdr;
+  msg->RemoveHeader(apphdr);
+  m_msgFinishTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
+                   apphdr.GetLocalPort(), apphdr.GetRemotePort(), 
+                   txMsgId);
 }
     
 } // namespace ns3

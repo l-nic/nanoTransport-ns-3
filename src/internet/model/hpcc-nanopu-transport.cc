@@ -63,15 +63,15 @@ HpccNanoPuArchtPktGen::~HpccNanoPuArchtPktGen ()
 }
     
 void HpccNanoPuArchtPktGen::CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
-                                          uint16_t txMsgId, uint16_t pktOffset, uint16_t msgLen,
+                                          uint16_t txMsgId, uint16_t ackNo, uint16_t msgLen,
                                           IntHeader receivedIntHeader)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU HPCC PktGen processing CtrlPktEvent." <<
-               " txMsgId: " << txMsgId << " pktOffset: " << pktOffset);
+               " txMsgId: " << txMsgId << " pktOffset: " << ackNo);
     
-  egressMeta_t meta;
+  egressMeta_t meta = {};
   meta.isData = false;
   meta.dstIP = dstIp;
     
@@ -84,7 +84,7 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, u
   hpcch.SetDstPort (dstPort);
   hpcch.SetTxMsgId (txMsgId);
   hpcch.SetFlags (HpccHeader::Flags_t::ACK);
-  hpcch.SetPktOffset (pktOffset);
+  hpcch.SetPktOffset (ackNo);
   hpcch.SetMsgSize (msgLen);
   hpcch.SetPayloadSize ((uint16_t)p->GetSize ());
   p-> AddHeader (hpcch); 
@@ -148,7 +148,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
   intHop_t oldHopInfo;
   double maxUtil = 0.0;
   double curUtil;
-  double tao;
+  double tao = baseRtt;
   double curTao;
   double txRate;
     
@@ -351,6 +351,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
   uint16_t txMsgId = hpccHdr.GetTxMsgId ();
   uint16_t pktOffset = hpccHdr.GetPktOffset ();
   uint16_t msgLen = (uint16_t)hpccHdr.GetMsgSize (); // Msg Len is in pkts for nanoPU Archt
+  NS_ASSERT(msgLen <= BITMAP_SIZE);
     
   uint8_t hdrFlag = hpccHdr.GetFlags ();
   if (hdrFlag & HpccHeader::Flags_t::DATA)
@@ -388,8 +389,8 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
                          m_nanoPuArcht->GetReassemblyBuffer (), 
                          cp, metaData);
       
-    m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (srcIp, srcPort, dstPort, 
-                                                txMsgId, ackNo, msgLen, intHdr);  
+    m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (srcIp, srcPort, dstPort, 
+                                               txMsgId, ackNo, msgLen, intHdr);  
     
   }  
   else if (hdrFlag & HpccHeader::Flags_t::ACK)
@@ -427,14 +428,15 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
 //                          txMsgId, msgLen, setBitMapUntil (pktOffset));
       
     uint32_t newWinSizeBytes;
+    double utilization = this->MeasureInflight (txMsgId, intHdr);
     if (pktOffset > m_lastUpdateSeqs[txMsgId])
     {
-      newWinSizeBytes = this->ComputeWind (txMsgId, this->MeasureInflight (txMsgId, intHdr), true);
+      newWinSizeBytes = this->ComputeWind (txMsgId, utilization, true);
       m_lastUpdateSeqs[txMsgId] = m_credits[txMsgId]+1;
     }
     else
     {
-      newWinSizeBytes = this->ComputeWind (txMsgId, this->MeasureInflight (txMsgId, intHdr), false);
+      newWinSizeBytes = this->ComputeWind (txMsgId, utilization, false);
     }
     
     uint16_t newCreditPkts = m_ackNos[txMsgId] + this->ComputeNumPkts (newWinSizeBytes);
@@ -482,12 +484,18 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     {
       m_prevIntHdrs[txMsgId] = intHdr;
     }
+      
+//     cp->Unref();
+//     cp = 0;
   }
   else
   {
-    NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () << 
-                " NanoPU HPCC IngressPipe received an unknown type (" <<
-                hpccHdr.FlagsToString (hdrFlag) << ") of packet!");
+    NS_LOG_ERROR (Simulator::Now ().GetNanoSeconds () << 
+                  " ERROR: NanoPU HPCC IngressPipe received an unknown type (" <<
+                  hpccHdr.FlagsToString (hdrFlag) << ") of packet!");
+      
+//     cp->Unref();
+//     cp = 0;
     return false;
   }
     
@@ -551,10 +559,11 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   
   Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
   
-  Ptr<Node> node = m_nanoPuArcht->GetNode ();
-  Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
-  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
-  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
+//   Ptr<Node> node = m_nanoPuArcht->GetNode ();
+//   Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
+//   int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
+//   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
+  Ipv4Address srcIP = m_nanoPuArcht->GetLocalIp ();
     
   Ipv4Header iph;
   iph.SetSource (srcIP);

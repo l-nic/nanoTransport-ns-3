@@ -147,7 +147,7 @@ main (int argc, char *argv[])
     
   NanoPuTrafficGenerator senderApp = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   senderApp.SetLocalPort(111);
-  senderApp.SetMsgSize(12,12); // Deterministically set the message size
+  senderApp.SetMsgSize(1,1); // Deterministically set the message size
   senderApp.SetMaxMsg(1);
   senderApp.StartImmediately();
   senderApp.Start(Seconds (3.0));

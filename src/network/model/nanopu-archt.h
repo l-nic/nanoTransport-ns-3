@@ -200,6 +200,8 @@ public:
   void TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset);
                          
   int ProcessNewMessage (Ptr<Packet> msg);
+  
+  void ClearStateForMsg (uint16_t txMsgId);
  
 private:
 
@@ -321,6 +323,8 @@ public:
    * \param rxMsgId ID of the message to be processed
    */
   void TimeoutEvent (uint16_t rxMsgId);
+  
+  void ClearStateForMsg (uint16_t rxMsgId);
   
 protected:
 

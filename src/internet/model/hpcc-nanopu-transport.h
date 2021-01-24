@@ -54,7 +54,7 @@ public:
   ~HpccNanoPuArchtPktGen (void);
   
   void CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
-                     uint16_t txMsgId, uint16_t pktOffset, uint16_t msgLen,
+                     uint16_t txMsgId, uint16_t ackNo, uint16_t msgLen,
                      IntHeader receivedIntHeader);
   
 protected:

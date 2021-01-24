@@ -315,6 +315,9 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
 //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
 //                            std::greater<int>());
     }
+      
+//     cp->Unref();
+//     cp = 0;
   }
     
   return true;
@@ -372,10 +375,11 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
     
   Ipv4Header iph;
-  Ptr<Node> node = m_nanoPuArcht->GetNode ();
-  Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
-  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
-  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
+//   Ptr<Node> node = m_nanoPuArcht->GetNode ();
+//   Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
+//   int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
+//   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
+  Ipv4Address srcIP = m_nanoPuArcht->GetLocalIp ();
   iph.SetSource (srcIP);
   iph.SetDestination (meta.dstIP);
   iph.SetPayloadSize (cp->GetSize ());
