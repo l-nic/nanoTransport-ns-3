@@ -102,6 +102,7 @@ protected:
   std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track incStage {txMsgId => inc Stage}
   std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track INT vector {txMsgId => Prev INT hdr}
   std::unordered_map<uint16_t, double> m_utilizations;     //!< State to track utilization {txMsgId => U}
+  std::unordered_map<uint16_t, uint16_t> m_nDupAcks;       //!< State to track duplicate acks {txMsgId => number of duplicate acks}
 };
  
 /******************************************************************************/

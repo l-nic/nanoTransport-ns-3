@@ -234,6 +234,7 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
           m_credits[txMsgId] >>= newCredit;
         }
           
+        m_credits[txMsgId] = std::min((int)m_credits[txMsgId], (int)BITMAP_SIZE);
         NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                     " Changed credit for msg " << txMsgId <<
                     " from " << curCredit << " to " << m_credits[txMsgId]);
@@ -276,7 +277,7 @@ void NanoPuArchtPacketize::TimeoutEvent (uint16_t txMsgId, uint16_t rtxOffset)
     {
       NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
                   " Outbound Msg " << txMsgId << " expired. "
-                  "(MsgSize = " << m_appHeaders[txMsgId]..GetMsgLen () << ")");
+                  "(MsgSize = " << m_appHeaders[txMsgId].GetMsgLen () << ")");
         
       this->ClearStateForMsg (txMsgId);
     }
@@ -596,10 +597,13 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   if (entry != m_rxMsgIdTable.end())
   {
     rxMsgInfo.rxMsgId = entry->second;
-    NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second);
       
     // compute the beginning of the inflight window
     rxMsgInfo.ackNo = getFirstSetBitPos(~(m_receivedBitmap[rxMsgInfo.rxMsgId]));
+    NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second <<
+                " (ackNo: " << rxMsgInfo.ackNo << 
+                " msgLen: " << msgLen << ") ");
+      
     if (rxMsgInfo.ackNo == BITMAP_SIZE)
     {
       NS_LOG_INFO("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");

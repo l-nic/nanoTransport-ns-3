@@ -170,13 +170,13 @@ main (int argc, char *argv[])
   hostLinks.SetDeviceAttribute ("EnableInt", BooleanValue (true));
   hostLinks.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
   hostLinks.SetChannelAttribute ("Delay", StringValue ("1us"));
-  hostLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
+  hostLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("32MB"));
     
   PointToPointHelper aggregationLinks;
   aggregationLinks.SetDeviceAttribute ("EnableInt", BooleanValue (true));
   aggregationLinks.SetDeviceAttribute ("DataRate", StringValue ("400Gbps"));
   aggregationLinks.SetChannelAttribute ("Delay", StringValue ("1us"));
-  aggregationLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
+  aggregationLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("32MB"));
     
   /******** Create NetDevices ********/
   NS_LOG_UNCOND("Creating NetDevices...");
@@ -225,7 +225,7 @@ main (int argc, char *argv[])
   /* Enable and configure traffic control layers */
   TrafficControlHelper tchPfifoFast;
   tchPfifoFast.SetRootQueueDisc ("ns3::PfifoFastQueueDisc", 
-                                 "MaxSize", StringValue("32000p"));
+                                 "MaxSize", StringValue("1p"));
     
   for (int i = 0; i < nHosts; i++)
   {   
