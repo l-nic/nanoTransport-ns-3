@@ -124,10 +124,10 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
   //       Then the arbiter should prioritize control packets over
   //       data packets for higher performance.
     
-//   m_egressPipe->EgressPipe(p, meta);
-  Simulator::Schedule (NanoSeconds(PACKETIZATION_DELAY),
-                       &NanoPuArchtEgressPipe::EgressPipe, 
-                       m_egressPipe, p, meta);
+  m_egressPipe->EgressPipe(p, meta);
+//   Simulator::Schedule (NanoSeconds(PACKETIZATION_DELAY),
+//                        &NanoPuArchtEgressPipe::EgressPipe, 
+//                        m_egressPipe, p, meta);
 }
     
 /******************************************************************************/
@@ -680,10 +680,10 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       apphdr.SetPayloadSize (msg->GetSize ());
       msg->AddHeader (apphdr);
     
-//       m_nanoPuArcht->NotifyApplications (msg, (int)meta.txMsgId);
-      Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
-                           &NanoPuArcht::NotifyApplications, 
-                           m_nanoPuArcht, msg, (int)meta.txMsgId);
+      m_nanoPuArcht->NotifyApplications (msg, (int)meta.txMsgId);
+//       Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
+//                            &NanoPuArcht::NotifyApplications, 
+//                            m_nanoPuArcht, msg, (int)meta.txMsgId);
       
 //       /* Free the rxMsgId*/
 //       rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);

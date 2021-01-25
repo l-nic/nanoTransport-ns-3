@@ -131,10 +131,10 @@ main (int argc, char *argv[])
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
 //   Packet::EnableChecking ();
-  Packet::EnablePrinting ();
+//   Packet::EnablePrinting ();
 //   LogComponentEnable ("HpccPaperReproduction", LOG_LEVEL_DEBUG);  
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-  LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_FUNCTION);
+//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
+//   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_FUNCTION);
     
   std::string inputTraceFileName ("inputs/hpcc-paper-reproduction/");
   inputTraceFileName += workloadName + "Trace";
@@ -318,7 +318,7 @@ main (int argc, char *argv[])
   int nFlows;
   std::ifstream inputTraceFile;
   inputTraceFile.open (inputTraceFileName);
-  NS_LOG_INFO("Reading Msg Generation Trace From: " << inputTraceFileName);
+  NS_LOG_DEBUG ("Reading Msg Generation Trace From: " << inputTraceFileName);
     
   std::string line;
   std::istringstream lineBuffer;
@@ -326,6 +326,7 @@ main (int argc, char *argv[])
   getline (inputTraceFile, line);
   lineBuffer.str (line);
   lineBuffer >> nFlows;
+  NS_LOG_INFO (nFlows << " messages are found in the trace.");
     
   int srcHost;
   int dstHost;
@@ -333,6 +334,7 @@ main (int argc, char *argv[])
   int dstPort;
   uint32_t flowSize;
   double startTime;
+  uint32_t nScheduledMsgs = 0;
   while(getline (inputTraceFile, line)) 
   {
     lineBuffer.clear ();
@@ -347,8 +349,10 @@ main (int argc, char *argv[])
     Simulator::Schedule (Seconds (startTime), &SendMsg, 
                          nanoPuArchts[srcHost], hostAddresses[dstHost], 
                          dstPort, flowSize, payloadSize);
+     nScheduledMsgs++;
   }
   inputTraceFile.close();
+  NS_LOG_DEBUG (nScheduledMsgs << " messages are scheduled.");
 
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");

@@ -400,15 +400,13 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     metaData.msgLen = msgLen;
     metaData.pktOffset = pktOffset;
 
-//     m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
-    Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
-                         &NanoPuArchtReassemble::ProcessNewPacket, 
-                         m_nanoPuArcht->GetReassemblyBuffer (), 
-                         cp, metaData);
-      
     m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (srcIp, srcPort, dstPort, 
-                                               txMsgId, ackNo, msgLen, intHdr);  
-    
+                                               txMsgId, ackNo, msgLen, intHdr);
+    m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
+//     Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
+//                          &NanoPuArchtReassemble::ProcessNewPacket, 
+//                          m_nanoPuArcht->GetReassemblyBuffer (), 
+//                          cp, metaData);
   }  
   else if (hdrFlag & HpccHeader::Flags_t::ACK)
   {
@@ -614,10 +612,9 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                 " NanoPU HPCC EgressPipe sending: " << 
                 cp->ToString ());
     
-//   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
-//   m_nanoPuArcht->SendToNetwork(cp);
-  Simulator::Schedule (NanoSeconds(HPCC_EGRESS_PIPE_DELAY), 
-                       &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
+  m_nanoPuArcht->SendToNetwork(cp);
+//   Simulator::Schedule (NanoSeconds(HPCC_EGRESS_PIPE_DELAY), 
+//                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
 
   return;
 }
