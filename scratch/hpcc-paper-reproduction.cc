@@ -297,8 +297,8 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
                      UintegerValue(5));
     
-//   Config::SetDefault("ns3::HpccNanoPuArcht::EnableMemOptimizations", 
-//                      BooleanValue(true));
+  Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
+                     BooleanValue(true));
    
 //   LogComponentEnable ("Config", LOG_LEVEL_ALL);
   std::vector<Ptr<HpccNanoPuArcht>> nanoPuArchts;

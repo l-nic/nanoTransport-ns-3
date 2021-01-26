@@ -918,7 +918,7 @@ TypeId NanoPuArcht::GetTypeId (void)
                    UintegerValue (5),
                    MakeUintegerAccessor (&NanoPuArcht::m_maxTimeoutCnt),
                    MakeUintegerChecker<uint16_t> ())
-    .AddAttribute ("EnableMemOptimizations", 
+    .AddAttribute ("OptimizeMemory", 
                    "High performant mode (only packet sizes are stored to save from memory).",
                    BooleanValue (true),
                    MakeBooleanAccessor (&NanoPuArcht::m_memIsOptimized),

@@ -546,8 +546,6 @@ public:
   
 protected:
 
-  bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
-
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
   Ipv4Address    m_localIp; //!< the local IPv4 Address
     
@@ -556,6 +554,8 @@ protected:
   uint16_t m_maxTimeoutCnt; //!< Max allowed number of retransmissions before discarding a msg
   Time m_timeoutInterval;  //!< Time value to expire the timers
   uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
+  
+  bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
     
   Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
   Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

@@ -25,6 +25,7 @@
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
 #include "ns3/double.h"
+#include "ns3/boolean.h"
 
 #include "hpcc-nanopu-transport.h"
 #include "ns3/nanopu-archt.h"
@@ -650,6 +651,11 @@ TypeId HpccNanoPuArcht::GetTypeId (void)
                    UintegerValue (5),
                    MakeUintegerAccessor (&HpccNanoPuArcht::m_maxTimeoutCnt),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("OptimizeMemory", 
+                   "High performant mode (only packet sizes are stored to save from memory).",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&HpccNanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
     .AddAttribute ("BaseRTT", "The base propagation RTT in seconds.",
                    DoubleValue (MicroSeconds (13).GetSeconds ()),
                    MakeDoubleAccessor (&HpccNanoPuArcht::m_baseRtt),

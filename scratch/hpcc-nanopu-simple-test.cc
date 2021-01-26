@@ -126,11 +126,15 @@ main (int argc, char *argv[])
                      DoubleValue(0.95));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
                      UintegerValue(5));
+  Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
+                     BooleanValue(true));
    
   Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>();
   srcArcht->AggregateIntoDevice(senderDevices.Get (1));
+  NS_ASSERT(srcArcht->MemIsOptimized());
   Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>();
   dstArcht->AggregateIntoDevice(receiveDevices.Get (1));
+  NS_ASSERT(dstArcht->MemIsOptimized());
     
   /* Currently each nanopu is able to connect to a single application only.
    *
