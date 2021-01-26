@@ -27,6 +27,7 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
+#include "ns3/boolean.h"
 #include "node.h"
 #include "ns3/ipv4.h"
 #include "nanopu-archt.h"
@@ -343,6 +344,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
+    std::map<uint16_t,uint32_t> optBuffer;
     uint32_t remainingBytes = cmsg->GetSize ();
     uint16_t numPkts = 0;
     uint32_t nextPktSize;
@@ -350,12 +352,23 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     while (remainingBytes > 0)
     {
       nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
-      nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
-      buffer[numPkts] = nextPkt;
+      if (m_nanoPuArcht->MemIsOptimized ())
+      {
+        optBuffer[numPkts] = nextPktSize;
+      }
+      else
+      {
+        nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
+        buffer[numPkts] = nextPkt;
+      }
       remainingBytes -= nextPktSize;
       numPkts ++;
     }
-    m_buffers[txMsgId] = buffer;
+    if (m_nanoPuArcht->MemIsOptimized ())
+      m_optBuffers[txMsgId] = optBuffer;  
+    else
+      m_buffers[txMsgId] = buffer;
+      
     NS_ASSERT_MSG (apphdr.GetMsgLen() == numPkts,
                    "The message length in the NanoPU App header "
                    "doesn't match number of packets for this message.");
@@ -411,7 +424,11 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
                 " NanoPU Packetization Buffer transmitting pkt " <<
                 pktOffset << " from msg " << txMsgId);
     
-    Ptr<Packet> p = m_buffers[txMsgId][pktOffset];
+    Ptr<Packet> p;
+    if (m_nanoPuArcht->MemIsOptimized ())
+      p = Create<Packet> (m_optBuffers[txMsgId][pktOffset]);  
+    else
+      p = m_buffers[txMsgId][pktOffset];
     
     NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
     meta.isNewMsg = isNewMsg;
@@ -452,12 +469,20 @@ void NanoPuArchtPacketize::ClearStateForMsg (uint16_t txMsgId)
   m_maxTxPktOffset.erase(txMsgId);
   m_timeoutCnt.erase(txMsgId);
   
-//   for (auto it = m_buffers[txMsgId].begin(); it != m_buffers[txMsgId].end(); it++)
-//   {
-//     it->second->Unref();
-//   }
-  m_buffers[txMsgId].clear();
-  m_buffers.erase(txMsgId);
+  if (m_nanoPuArcht->MemIsOptimized ())
+  {
+    m_optBuffers[txMsgId].clear();
+    m_optBuffers.erase(txMsgId);
+  }
+  else
+  {
+//     for (auto it = m_buffers[txMsgId].begin(); it != m_buffers[txMsgId].end(); it++)
+//     {
+//       it->second->Unref();
+//     }
+    m_buffers[txMsgId].clear();
+    m_buffers.erase(txMsgId);
+  }
        
   /* Free the txMsgId*/
   m_txMsgIdFreeList.push_back (txMsgId);
@@ -610,7 +635,10 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       rxMsgInfo.ackNo = msgLen;
     }
       
-    rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
+    if (m_nanoPuArcht->MemIsOptimized ())
+      rxMsgInfo.numPkts = m_optBuffers.find (rxMsgInfo.rxMsgId) ->second.size();
+    else
+      rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
       
     rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second 
                           & (((bitmap_t)1)<<pktOffset)) == 0;
@@ -626,8 +654,17 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
     m_receivedBitmap.insert({rxMsgInfo.rxMsgId,0});
-    std::map<uint16_t,Ptr<Packet>> buffer;
-    m_buffers.insert({rxMsgInfo.rxMsgId,buffer});
+      
+    if (m_nanoPuArcht->MemIsOptimized ())
+    {
+      std::map<uint16_t,uint32_t> buffer;
+      m_optBuffers.insert({rxMsgInfo.rxMsgId,buffer});
+    }
+    else
+    {
+      std::map<uint16_t,Ptr<Packet>> buffer;
+      m_buffers.insert({rxMsgInfo.rxMsgId,buffer});
+    }
     
     rxMsgInfo.ackNo = 0;
     rxMsgInfo.numPkts = 0;
@@ -650,10 +687,15 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
                 << " for msg " << meta.rxMsgId);
     
   /* Record pkt in buffer*/
+  auto optBuffer = m_optBuffers.find (meta.rxMsgId);
   auto buffer = m_buffers.find (meta.rxMsgId);
-  if (buffer != m_buffers.end ())
+    
+  if (buffer != m_buffers.end () || optBuffer != m_optBuffers.end ())
   {
-    buffer->second [meta.pktOffset] = pkt;
+    if (m_nanoPuArcht->MemIsOptimized ())
+      optBuffer->second [meta.pktOffset] = pkt->GetSize();
+    else
+      buffer->second [meta.pktOffset] = pkt;
     
     /* Mark the packet as received*/
     // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
@@ -667,11 +709,25 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       NS_LOG_INFO ("All packets have been received for msg " << meta.rxMsgId);
       
       /* Push the reassembled msg to the applications*/
-      Ptr<Packet> msg = Create<Packet> ();
-      for (uint16_t i=0; i<meta.msgLen; i++)
+      Ptr<Packet> msg;
+      if (m_nanoPuArcht->MemIsOptimized ())
       {
-        msg->AddAtEnd (buffer->second[i]);
+        uint32_t msgSize = 0;
+        for (uint16_t i=0; i<meta.msgLen; i++)
+        {
+          msgSize += optBuffer->second[i];
+        }
+        msg =  Create<Packet> (msgSize);
       }
+      else
+      {
+        msg =  Create<Packet> ();
+        for (uint16_t i=0; i<meta.msgLen; i++)
+        {
+          msg->AddAtEnd (buffer->second[i]);
+        }
+      }
+        
       NanoPuAppHeader apphdr;
       apphdr.SetRemoteIp (meta.srcIp);
       apphdr.SetRemotePort (meta.srcPort);
@@ -747,12 +803,20 @@ void NanoPuArchtReassemble::ClearStateForMsg (uint16_t rxMsgId)
   /* Clear the stored state for simulation performance */
   m_receivedBitmap.erase(rxMsgId);
   
-//   for (auto it = m_buffers[rxMsgId].begin(); it != m_buffers[rxMsgId].end(); it++)
-//   {
-//     it->second->Unref();
-//   }
-  m_buffers[rxMsgId].clear();
-  m_buffers.erase(rxMsgId);
+  if (m_nanoPuArcht->MemIsOptimized ())
+  {
+    m_optBuffers[rxMsgId].clear();
+    m_optBuffers.erase(rxMsgId);
+  }
+  else
+  {
+//     for (auto it = m_buffers[rxMsgId].begin(); it != m_buffers[rxMsgId].end(); it++)
+//     {
+//       it->second->Unref();
+//     }
+    m_buffers[rxMsgId].clear();
+    m_buffers.erase(rxMsgId);
+  }
     
   m_rxMsgIdFreeList.push_back (rxMsgId);
 }
@@ -854,6 +918,11 @@ TypeId NanoPuArcht::GetTypeId (void)
                    UintegerValue (5),
                    MakeUintegerAccessor (&NanoPuArcht::m_maxTimeoutCnt),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("EnableMemOptimizations", 
+                   "High performant mode (only packet sizes are stored to save from memory).",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&NanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the the NanoPuArcht by the sender application layer.",
@@ -1004,6 +1073,11 @@ uint16_t NanoPuArcht::GetMaxNMessages (void)
 {
   return m_maxNMessages;
 }
+    
+bool NanoPuArcht::MemIsOptimized (void)
+{
+  return m_memIsOptimized;
+}
    
 void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)
 {
@@ -1077,8 +1151,8 @@ void NanoPuArcht::NotifyApplications (Ptr<Packet> msg, int txMsgId)
     
   NanoPuAppHeader apphdr;
   msg->RemoveHeader(apphdr);
-  m_msgFinishTrace(msg, m_localIp, apphdr.GetRemoteIp(), 
-                   apphdr.GetLocalPort(), apphdr.GetRemotePort(), 
+  m_msgFinishTrace(msg, apphdr.GetRemoteIp(), m_localIp, 
+                   apphdr.GetRemotePort(), apphdr.GetLocalPort(), 
                    txMsgId);
 }
     

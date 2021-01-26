@@ -217,9 +217,14 @@ protected:
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
   std::unordered_map<uint16_t, 
                      NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {tx_msg_id => appHeader}
+                     
+  // Only one of the buffers below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
                               Ptr<Packet>>> m_buffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet}}
+  std::unordered_map<uint16_t,
+                     std::map<uint16_t,uint32_t>> m_optBuffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet Size}}
+                     
   std::unordered_map<uint16_t, 
                        bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {tx_msg_id => bitmap}
   std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {tx_msg_id => credit} 
@@ -336,9 +341,14 @@ protected:
                      uint16_t, 
                      rxMsgIdTable_hash, 
                      rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
+                     
+  // Only one of the buffers below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
                               Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
+  std::unordered_map<uint16_t,
+                     std::map<uint16_t,uint32_t>> m_optBuffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet Size}}
+                     
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
 };
@@ -502,6 +512,12 @@ public:
    * \returns the maxNMessages
    */
   uint16_t GetMaxNMessages (void);
+  
+  /**
+   * \brief Return whether the memory optimizations are enabled
+   * \returns the m_memIsOptimized
+   */
+  bool MemIsOptimized (void);
 
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
@@ -529,6 +545,8 @@ public:
   void NotifyApplications (Ptr<Packet> msg, int txMsgId);
   
 protected:
+
+  bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
 
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
   Ipv4Address    m_localIp; //!< the local IPv4 Address

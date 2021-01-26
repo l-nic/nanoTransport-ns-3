@@ -250,6 +250,8 @@ main (int argc, char *argv[])
   {
     hostTorIfs[i] = address.Assign (hostTorDevices[i]);
     hostAddresses[i] = hostTorIfs[i].GetAddress (0);
+    NS_LOG_LOGIC("Assigned " << hostAddresses[i] << 
+                 " to host " << i);
     address.NewNetwork ();
   }
   
@@ -294,6 +296,9 @@ main (int argc, char *argv[])
                      DoubleValue(0.95));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
                      UintegerValue(5));
+    
+//   Config::SetDefault("ns3::HpccNanoPuArcht::EnableMemOptimizations", 
+//                      BooleanValue(true));
    
 //   LogComponentEnable ("Config", LOG_LEVEL_ALL);
   std::vector<Ptr<HpccNanoPuArcht>> nanoPuArchts;
