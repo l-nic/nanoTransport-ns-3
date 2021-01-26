@@ -266,11 +266,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       metaData.msgLen = msgLen;
       metaData.pktOffset = pktOffset;
             
-//       m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
-      Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-                           &NanoPuArchtReassemble::ProcessNewPacket, 
-                           m_nanoPuArcht->GetReassemblyBuffer (),
-                           cp, metaData);
+      m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
+//       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
+//                            &NanoPuArchtReassemble::ProcessNewPacket, 
+//                            m_nanoPuArcht->GetReassemblyBuffer (),
+//                            cp, metaData);
     }
  
   }  
@@ -449,10 +449,9 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                " NanoPU Homa EgressPipe sending: " << 
                 cp->ToString ());
     
-//   return m_nanoPuArcht->SendToNetwork(cp, boundnetdevice->GetAddress ());
-//   m_nanoPuArcht->SendToNetwork(cp);
-  Simulator::Schedule (NanoSeconds(HOMA_EGRESS_PIPE_DELAY), 
-                       &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
+  m_nanoPuArcht->SendToNetwork(cp);
+//   Simulator::Schedule (NanoSeconds(HOMA_EGRESS_PIPE_DELAY), 
+//                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
 
   return;
 }
