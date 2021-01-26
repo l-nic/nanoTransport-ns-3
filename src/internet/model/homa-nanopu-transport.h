@@ -29,10 +29,12 @@
 #include "ns3/nanopu-archt.h"
 
 // Define module delay in nano seconds
-#define INGRESS_PIPE_DELAY 5
-#define EGRESS_PIPE_DELAY 1
+#define HOMA_INGRESS_PIPE_DELAY 5
+#define HOMA_EGRESS_PIPE_DELAY 1
 
 namespace ns3 {
+    
+class HomaNanoPuArcht;
 
 /**
  * \ingroup nanopu-archt
@@ -49,7 +51,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
+  HomaNanoPuArchtPktGen (Ptr<HomaNanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtPktGen (void);
   
   void CtrlPktEvent (uint8_t flag, Ipv4Address dstIp, uint16_t dstPort, 
@@ -57,10 +59,7 @@ public:
                      uint16_t pktOffset, uint16_t grantOffset, uint8_t priority);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
-  
-  Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
-  Time m_packetTxTime; //!< Time to transmit/receive a full MTU packet to/from the network
+  Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
 };
  
 /******************************************************************************/
@@ -92,10 +91,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
-                             Ptr<NanoPuArchtPacketize> packetize,
-                             Ptr<HomaNanoPuArchtPktGen> pktgen,
-                             uint16_t rttPkts);
+  HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
@@ -103,11 +99,8 @@ public:
   
 protected:
 
-  Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-  Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
-  Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the Homa architecture
-  uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
-    
+  Ptr<HomaNanoPuArcht> nanoPuArcht; //!< the archt itself
+  
   std::unordered_map<uint16_t, uint16_t> m_credits; //!< grantOffset state for each {rxMsgId => credit}
     
   uint16_t m_priorities[3] = {5, 25, 100};
@@ -133,13 +126,13 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  HomaNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
+  HomaNanoPuArchtEgressPipe (Ptr<HomaNanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtEgressPipe (void);
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
+  Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
   
   std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each {txMsgId => prio}
   
@@ -165,14 +158,17 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  HomaNanoPuArcht (Ptr<Node> node,
-                  Ptr<NetDevice> device,
-                  Time timeoutInterval,
-                  uint16_t maxMessages=100,
-                  uint16_t payloadSize=1445,
-                  uint16_t initialCredit=10,
-                  uint16_t maxTimeoutCnt=5);
+  HomaNanoPuArcht ();
   virtual ~HomaNanoPuArcht (void);
+  
+  void AggregateIntoDevice (Ptr<NetDevice> device);
+  
+  /**
+   * \brief Returns architecture's Packet Generator.
+   * 
+   * \returns Pointer to the packet generator.
+   */
+  Ptr<HomaNanoPuArchtPktGen> GetPktGen (void);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.

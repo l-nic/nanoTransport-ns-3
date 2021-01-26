@@ -144,32 +144,28 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
   
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
-  Time timeoutInterval = Time("100us");
-  uint16_t maxMessages = 100;
   NdpHeader ndph;
-  uint16_t ndpHeaderSize = (uint16_t) ndph.GetSerializedSize ();
   Ipv4Header ipv4h;
-  uint16_t ipv4HeaderSize = (uint16_t) ipv4h.GetSerializedSize ();
-  uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () - ipv4HeaderSize - ndpHeaderSize;
+  uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () 
+                         - ipv4h.GetSerializedSize () 
+                         - ndph.GetSerializedSize ();
+  Config::SetDefault("ns3::NdpNanoPuArcht::PayloadSize", 
+                     UintegerValue(payloadSize));
+  Config::SetDefault("ns3::NdpNanoPuArcht::TimeoutInterval", 
+                     TimeValue(MilliSeconds(100)));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNTimeouts", 
+                     UintegerValue(5));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNMessages", 
+                     UintegerValue(100));
+  Config::SetDefault("ns3::NdpNanoPuArcht::InitialCredit", 
+                     UintegerValue(10));
+  
    
   /* Enable the NanoPU Archt on the end points*/
-//   std::vector<NdpNanoPuArcht> ndpNanoPus;
-//   for (uint16_t i=0; i<numNodes; i++)
-//   {
-//     NS_LOG_UNCOND("Creating NDP NanoPU Archt " << i);
-//     ndpNanoPus[i] = NdpNanoPuArcht(nodes.Get (i), devices.Get (i), 
-//                                 timeoutInterval, maxMessages, payloadSize);
-      
-//     NS_LOG_UNCOND("Created NDP NanoPU Archt " << i);
-//   }
-   Ptr<NdpNanoPuArcht> srcArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[0].Get (1), 
-                                                           deviceContainers[0].Get (1),
-                                                           timeoutInterval, maxMessages, 
-                                                           payloadSize);
-   Ptr<NdpNanoPuArcht> dstArcht =  CreateObject<NdpNanoPuArcht>(nodeContainers[1].Get (1), 
-                                                           deviceContainers[1].Get (1),
-                                                           timeoutInterval, maxMessages, 
-                                                           payloadSize);
+  Ptr<NdpNanoPuArcht> srcArcht =  CreateObject<NdpNanoPuArcht>();
+  srcArcht->AggregateIntoDevice (deviceContainers[0].Get (1));
+  Ptr<NdpNanoPuArcht> dstArcht =  CreateObject<NdpNanoPuArcht>();
+  dstArcht->AggregateIntoDevice (deviceContainers[1].Get (1));
     
   /*
    * In order for an application to bind to the nanoPu architecture:

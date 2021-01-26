@@ -27,10 +27,12 @@
 #include "ns3/nanopu-archt.h"
 
 // Define module delay in nano seconds
-#define INGRESS_PIPE_DELAY 5
-#define EGRESS_PIPE_DELAY 1
+#define NDP_INGRESS_PIPE_DELAY 5
+#define NDP_EGRESS_PIPE_DELAY 1
 
 namespace ns3 {
+    
+class NdpNanoPuArcht;
 
 /**
  * \ingroup nanopu-archt
@@ -47,7 +49,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtPktGen (Ptr<NanoPuArcht> nanoPuArcht);
+  NdpNanoPuArchtPktGen (Ptr<NdpNanoPuArcht> nanoPuArcht);
   ~NdpNanoPuArchtPktGen (void);
   
   void CtrlPktEvent (bool genACK, bool genNACK, bool genPULL,
@@ -56,7 +58,7 @@ public:
                      uint16_t pullOffset);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
+  Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
   
   Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
   Time m_packetTxTime; //!< Time to transmit/receive a full MTU packet to/from the network
@@ -79,21 +81,14 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtIngressPipe (Ptr<NanoPuArchtReassemble> reassemble,
-                             Ptr<NanoPuArchtPacketize> packetize,
-                             Ptr<NdpNanoPuArchtPktGen> pktgen,
-                             uint16_t rttPkts);
+  NdpNanoPuArchtIngressPipe (Ptr<NdpNanoPuArcht> nanoPuArcht);
   ~NdpNanoPuArchtIngressPipe (void);
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
   
 protected:
-
-    Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
-    Ptr<NanoPuArchtPacketize> m_packetize; //!< the packetization buffer of the architecture
-    Ptr<NdpNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator of the NDP architecture
-    uint16_t m_rttPkts; //!< Average BDP of the network (in packets)
+  Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself
     
     std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
 };
@@ -115,13 +110,13 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NdpNanoPuArchtEgressPipe (Ptr<NanoPuArcht> nanoPuArcht);
+  NdpNanoPuArchtEgressPipe (Ptr<NdpNanoPuArcht> nanoPuArcht);
   ~NdpNanoPuArchtEgressPipe (void);
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
-  Ptr<NanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
+  Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
 };
  
 /******************************************************************************/
@@ -142,14 +137,17 @@ public:
    */
   static TypeId GetTypeId (void);
   
-  NdpNanoPuArcht (Ptr<Node> node,
-                  Ptr<NetDevice> device,
-                  Time timeoutInterval,
-                  uint16_t maxMessages=100,
-                  uint16_t payloadSize=1445,
-                  uint16_t initialCredit=10,
-                  uint16_t maxTimeoutCnt=5);
+  NdpNanoPuArcht ();
   virtual ~NdpNanoPuArcht (void);
+  
+  void AggregateIntoDevice (Ptr<NetDevice> device);
+  
+  /**
+   * \brief Returns architecture's Packet Generator.
+   * 
+   * \returns Pointer to the packet generator.
+   */
+  Ptr<NdpNanoPuArchtPktGen> GetPktGen (void);
   
   /**
    * \brief Implements programmable ingress pipeline architecture.

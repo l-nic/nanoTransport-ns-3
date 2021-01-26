@@ -106,22 +106,26 @@ main (int argc, char *argv[])
 //   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
   
 //   /* Define an optional parameter for capacity of reassembly and packetize modules*/
-//   Time timeoutInterval = Time("100us");
-//   uint16_t maxMessages = 100;
 //   HomaHeader homah;
-//   uint16_t homaHeaderSize = (uint16_t) homah.GetSerializedSize ();
 //   Ipv4Header ipv4h;
-//   uint16_t ipv4HeaderSize = (uint16_t) ipv4h.GetSerializedSize ();
-//   uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () - ipv4HeaderSize - homaHeaderSize;
+//   uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () 
+//                          - ipv4h.GetSerializedSize () 
+//                          - homah.GetSerializedSize ();
+//   Config::SetDefault("ns3::HomaNanoPuArcht::PayloadSize", 
+//                      UintegerValue(payloadSize));
+//   Config::SetDefault("ns3::HomaNanoPuArcht::TimeoutInterval", 
+//                      TimeValue(MilliSeconds(100)));
+//   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNTimeouts", 
+//                      UintegerValue(5));
+//   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNMessages", 
+//                      UintegerValue(100));
+//   Config::SetDefault("ns3::HomaNanoPuArcht::InitialCredit", 
+//                      UintegerValue(10));
    
-//   Ptr<HomaNanoPuArcht> srcArcht =  CreateObject<HomaNanoPuArcht>(nodeContainers[0].Get (1), 
-//                                                            deviceContainers[0].Get (1),
-//                                                            timeoutInterval, maxMessages, 
-//                                                            payloadSize);
-//   Ptr<HomaNanoPuArcht> dstArcht =  CreateObject<HomaNanoPuArcht>(nodeContainers[1].Get (1), 
-//                                                            deviceContainers[1].Get (1),
-//                                                            timeoutInterval, maxMessages, 
-//                                                            payloadSize);
+//   Ptr<HomaNanoPuArcht> srcArcht =  CreateObject<HomaNanoPuArcht>();
+//   srcArcht->AggregateIntoDevice (nodeContainers[0].Get (1));
+//   Ptr<HomaNanoPuArcht> dstArcht =  CreateObject<HomaNanoPuArcht>();
+//   dstArcht->AggregateIntoDevice (nodeContainers[1].Get (1));
     
 //   /* Currently each nanopu is able to connect to a single application only.
 //    *
@@ -138,9 +142,6 @@ main (int argc, char *argv[])
     
 //   NanoPuTrafficGenerator sender = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
 //   sender.SetLocalPort(111);
-//   // TODO: Currectly NanoPU archt can handle msgLen of 64 max due to the 
-//   //       bitmap size limitations. Ideally, it should be able to tolerate
-//   //       much longer messages.
 //   sender.SetMsgSize(1,1); // Deterministically set the message size
 //   sender.SetMaxMsg(1);
 //   sender.StartImmediately();

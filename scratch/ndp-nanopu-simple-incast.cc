@@ -236,31 +236,32 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
   /* Define optional parameters for capacity of reassembly and packetize modules*/
-    
-  Time timeoutInterval = Time("13us");
-  uint16_t maxMessages = 100;
   NdpHeader ndph;
-  uint16_t ndpHeaderSize = (uint16_t) ndph.GetSerializedSize ();
-  uint16_t payloadSize = senderDeviceContainers[0].Get (1)->GetMtu () - 40 - ndpHeaderSize;
+  uint16_t payloadSize = senderDeviceContainers[0].Get (1)->GetMtu () 
+                         - 40 - ndph.GetSerializedSize ();
+  Config::SetDefault("ns3::NdpNanoPuArcht::PayloadSize", 
+                     UintegerValue(payloadSize));
+  Config::SetDefault("ns3::NdpNanoPuArcht::TimeoutInterval", 
+                     TimeValue(MilliSeconds(13)));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNTimeouts", 
+                     UintegerValue(5));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNMessages", 
+                     UintegerValue(100));
+  Config::SetDefault("ns3::NdpNanoPuArcht::InitialCredit", 
+                     UintegerValue(10));
     
   /* Enable the NanoPU Archt on the end points*/
   
   std::vector<Ptr<NdpNanoPuArcht>> senderArchts;
 //   senderArchts.reserve(numSenders);
-  for(uint16_t i = 0 ; i < numSenders ; i++){
-    senderArchts.push_back(CreateObject<NdpNanoPuArcht>(switch2senders[i].Get (1), 
-                                                        senderDeviceContainers[i].Get (1),
-                                                        timeoutInterval, 
-                                                        maxMessages, 
-                                                        payloadSize));
+  for(uint16_t i = 0 ; i < numSenders ; i++)
+  {
+    senderArchts.push_back(CreateObject<NdpNanoPuArcht>());
+    senderArchts[i]->AggregateIntoDevice (senderDeviceContainers[i].Get (1));
     NS_LOG_INFO("**** Sender architecture "<< i <<" is created.");
   }   
-  Ptr<NdpNanoPuArcht> receiverArcht =  CreateObject<NdpNanoPuArcht>(
-                                                 switch2receiver.Get (1), 
-                                                 receiverDeviceContainer.Get (1),
-                                                 timeoutInterval, 
-                                                 maxMessages, 
-                                                 payloadSize);
+  Ptr<NdpNanoPuArcht> receiverArcht =  CreateObject<NdpNanoPuArcht>();
+  receiverArcht->AggregateIntoDevice (receiverDeviceContainer.Get (1));
   NS_LOG_INFO("**** Receiver architecture is created.");
    
   /* Schedule senders to create incast */
