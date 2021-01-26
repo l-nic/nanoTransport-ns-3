@@ -205,10 +205,9 @@ Ipv4GlobalRouting::GetFlowHash(const Ipv4Header &header, Ptr<const Packet> ipPay
     }
     default:
     {
-      // TODO: maybe this brings us problems with other protcols no?
-      //       What about not even doing this... we can hash using 
-      //       just src,dst,proto, id
-      NS_FATAL_ERROR("Udp or Tcp header not found " << (int) header.GetProtocol());
+      NS_LOG_WARN("Udp or Tcp header not found ECMP routing! "
+                  "Only Src/Dst IPv4 Address and the protocol number ("
+                  << (int) header.GetProtocol() << ") are used to hash!");
       break;
     }
   }

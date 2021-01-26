@@ -77,9 +77,8 @@ NanoPuTrafficGenerator::NanoPuTrafficGenerator (Ptr<NanoPuArcht> nanoPu,
         
   m_nanoPu = nanoPu;
   
-  Callback<void, Ptr<Packet>> receiver;
-  receiver = MakeCallback (&NanoPuTrafficGenerator::ReceiveMessage, this);
-  m_nanoPu->GetReassemblyBuffer ()->SetRecvCallback (receiver);
+  m_nanoPu->SetRecvCallback (MakeCallback (&NanoPuTrafficGenerator::ReceiveMessage, 
+                                           this));
         
   m_remoteIp = remoteIp;
   m_remotePort = remotePort;

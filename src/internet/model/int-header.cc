@@ -32,7 +32,7 @@ NS_OBJECT_ENSURE_REGISTERED (IntHeader);
 
 
 IntHeader::IntHeader ()
-  : m_intIdentifier (IDENTIFIER),
+  : m_protocol (0),
     m_nHops (0)
 {
 }
@@ -71,6 +71,7 @@ IntHeader::Print (std::ostream &os) const
        << " bitRate: " << m_intHops[i].bitRate
        << " ]";
   }
+  os << " nextProt: " << (uint32_t)m_protocol;
 }
 
 uint32_t 
@@ -82,7 +83,7 @@ IntHeader::GetSerializedSize (void) const
 uint32_t 
 IntHeader::GetMaxSerializedSize (void) const
 {
-  return m_maxHop * sizeof(intHop_t) + 5; 
+  return MAX_INT_HOPS * sizeof(intHop_t) + 5; 
 }
     
 void
@@ -90,7 +91,7 @@ IntHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
 
-  i.WriteU8 (m_intIdentifier);
+  i.WriteU8 (m_protocol);
   i.WriteHtonU16 (m_nHops);
   for (uint16_t j=0; j < m_nHops; j++)
   {
@@ -106,7 +107,7 @@ IntHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   
-  m_intIdentifier = i.ReadU8();
+  m_protocol = i.ReadU8();
   m_nHops = i.ReadNtohU16 ();
   for (uint16_t j=0; j < m_nHops; j++)
   {
@@ -121,9 +122,14 @@ IntHeader::Deserialize (Buffer::Iterator start)
 }
 
 uint8_t 
-IntHeader::GetIntIdentifier (void) const
+IntHeader::GetProtocol (void) const
 {
-  return m_intIdentifier;
+  return m_protocol;
+}
+    
+void IntHeader::SetProtocol (uint8_t protocol)
+{
+  m_protocol = protocol;
 }
       
 uint16_t 
@@ -137,7 +143,7 @@ IntHeader::PushHop (uint64_t time, uint32_t bytes, uint32_t qlen, uint64_t rate)
 {
   NS_LOG_FUNCTION(this);
     
-  if (m_nHops < m_maxHop)
+  if (m_nHops < MAX_INT_HOPS)
   {
     m_intHops[m_nHops].time = time;
     m_intHops[m_nHops].txBytes = bytes;

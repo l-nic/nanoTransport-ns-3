@@ -110,14 +110,22 @@ main (int argc, char *argv[])
 //   serverApps.Stop (Seconds (10.0));
   
   /* Define an optional parameter for capacity of reassembly and packetize modules*/
-  Time timeoutInterval = Time("10us");
-  uint16_t maxMessages = 100;
   NdpHeader ndph;
-  uint16_t ndpHeaderSize = (uint16_t) ndph.GetSerializedSize ();
-  uint16_t payloadSize = devices.Get (1)->GetMtu () - 40 - ndpHeaderSize;
-  NdpNanoPuArcht nanoPu = NdpNanoPuArcht(nodes.Get (1), devices.Get (1), 
-                                         timeoutInterval, maxMessages, payloadSize);
-//   nanoPu.BindToNetDevice (devices.Get (1));
+  uint16_t payloadSize = devices.Get (1)->GetMtu () 
+                         - 40 - ndph.GetSerializedSize ();
+  Config::SetDefault("ns3::NdpNanoPuArcht::PayloadSize", 
+                     UintegerValue(payloadSize));
+  Config::SetDefault("ns3::NdpNanoPuArcht::TimeoutInterval", 
+                     TimeValue(MilliSeconds(10)));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNTimeouts", 
+                     UintegerValue(5));
+  Config::SetDefault("ns3::NdpNanoPuArcht::MaxNMessages", 
+                     UintegerValue(100));
+  Config::SetDefault("ns3::NdpNanoPuArcht::InitialCredit", 
+                     UintegerValue(10));
+  
+  NdpNanoPuArcht nanoPu = NdpNanoPuArcht();
+  nanoPu.AggregateIntoDevice (devices.Get (1));
     
 //   NS_LOG_UNCOND("MTU of the device: "<<devices.Get (1)->GetMtu());
     

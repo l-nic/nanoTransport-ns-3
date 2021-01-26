@@ -691,6 +691,126 @@ Ptr<T> CreateObject (T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6, T7 a7)
 {
   return CompleteConstruct (new T (a1,a2,a3,a4,a5,a6,a7));
 }
+    
+/**
+ * \copybrief CreateObject()
+ * \tparam T \explicit The type of the derived object to construct.
+ * \tparam T1 \deduced The type of the first constructor argument.
+ * \tparam T2 \deduced The type of the second constructor argument.
+ * \tparam T3 \deduced The type of the third constructor argument.
+ * \tparam T4 \deduced The type of the fourth constructor argument.
+ * \tparam T5 \deduced The type of the fifth constructor argument.
+ * \tparam T6 \deduced The type of the sixth constructor argument.
+ * \tparam T7 \deduced The type of the seventh constructor argument.
+ * \tparam T8 \deduced The type of the eighth constructor argument.
+ * \param [in] a1 The constructor first argument
+ * \param [in] a2 The constructor second argument
+ * \param [in] a3 The constructor third argument
+ * \param [in] a4 The constructor fourth argument
+ * \param [in] a5 The constructor fifth argument
+ * \param [in] a6 The constructor sixth argument
+ * \param [in] a7 The constructor seventh argument
+ * \param [in] a8 The constructor eighth argument
+ * \return The derived object.
+ */
+template <typename T, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8>
+Ptr<T> CreateObject (T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6, T7 a7, T8 a8)
+{
+  return CompleteConstruct (new T (a1,a2,a3,a4,a5,a6,a7,a8));
+}
+    
+/**
+ * \copybrief CreateObject()
+ * \tparam T \explicit The type of the derived object to construct.
+ * \tparam T1 \deduced The type of the first constructor argument.
+ * \tparam T2 \deduced The type of the second constructor argument.
+ * \tparam T3 \deduced The type of the third constructor argument.
+ * \tparam T4 \deduced The type of the fourth constructor argument.
+ * \tparam T5 \deduced The type of the fifth constructor argument.
+ * \tparam T6 \deduced The type of the sixth constructor argument.
+ * \tparam T7 \deduced The type of the seventh constructor argument.
+ * \tparam T8 \deduced The type of the eighth constructor argument.
+ * \tparam T9 \deduced The type of the nineth constructor argument.
+ * \param [in] a1 The constructor first argument
+ * \param [in] a2 The constructor second argument
+ * \param [in] a3 The constructor third argument
+ * \param [in] a4 The constructor fourth argument
+ * \param [in] a5 The constructor fifth argument
+ * \param [in] a6 The constructor sixth argument
+ * \param [in] a7 The constructor seventh argument
+ * \param [in] a8 The constructor eighth argument
+ * \param [in] a9 The constructor nineth argument
+ * \return The derived object.
+ */
+template <typename T, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9>
+Ptr<T> CreateObject (T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6, T7 a7, T8 a8, T9 a9)
+{
+  return CompleteConstruct (new T (a1,a2,a3,a4,a5,a6,a7,a8,a9));
+}
+    
+/**
+ * \copybrief CreateObject()
+ * \tparam T \explicit The type of the derived object to construct.
+ * \tparam T1 \deduced The type of the first constructor argument.
+ * \tparam T2 \deduced The type of the second constructor argument.
+ * \tparam T3 \deduced The type of the third constructor argument.
+ * \tparam T4 \deduced The type of the fourth constructor argument.
+ * \tparam T5 \deduced The type of the fifth constructor argument.
+ * \tparam T6 \deduced The type of the sixth constructor argument.
+ * \tparam T7 \deduced The type of the seventh constructor argument.
+ * \tparam T8 \deduced The type of the eighth constructor argument.
+ * \tparam T9 \deduced The type of the nineth constructor argument.
+ * \tparam T10 \deduced The type of the tenth constructor argument.
+ * \param [in] a1 The constructor first argument
+ * \param [in] a2 The constructor second argument
+ * \param [in] a3 The constructor third argument
+ * \param [in] a4 The constructor fourth argument
+ * \param [in] a5 The constructor fifth argument
+ * \param [in] a6 The constructor sixth argument
+ * \param [in] a7 The constructor seventh argument
+ * \param [in] a8 The constructor eighth argument
+ * \param [in] a9 The constructor nineth argument
+ * \param [in] a10 The constructor tenth argument
+ * \return The derived object.
+ */
+template <typename T, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9, typename T10>
+Ptr<T> CreateObject (T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6, T7 a7, T8 a8, T9 a9, T10 a10)
+{
+  return CompleteConstruct (new T (a1,a2,a3,a4,a5,a6,a7,a8,a9,a10));
+}
+    
+/**
+ * \copybrief CreateObject()
+ * \tparam T \explicit The type of the derived object to construct.
+ * \tparam T1 \deduced The type of the first constructor argument.
+ * \tparam T2 \deduced The type of the second constructor argument.
+ * \tparam T3 \deduced The type of the third constructor argument.
+ * \tparam T4 \deduced The type of the fourth constructor argument.
+ * \tparam T5 \deduced The type of the fifth constructor argument.
+ * \tparam T6 \deduced The type of the sixth constructor argument.
+ * \tparam T7 \deduced The type of the seventh constructor argument.
+ * \tparam T8 \deduced The type of the eighth constructor argument.
+ * \tparam T9 \deduced The type of the nineth constructor argument.
+ * \tparam T10 \deduced The type of the tenth constructor argument.
+ * \tparam T11 \deduced The type of the eleventh constructor argument.
+ * \param [in] a1 The constructor first argument
+ * \param [in] a2 The constructor second argument
+ * \param [in] a3 The constructor third argument
+ * \param [in] a4 The constructor fourth argument
+ * \param [in] a5 The constructor fifth argument
+ * \param [in] a6 The constructor sixth argument
+ * \param [in] a7 The constructor seventh argument
+ * \param [in] a8 The constructor eighth argument
+ * \param [in] a9 The constructor nineth argument
+ * \param [in] a10 The constructor tenth argument
+ * \param [in] a11 The constructor eleventh argument
+ * \return The derived object.
+ */
+template <typename T, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8, typename T9, typename T10, typename T11>
+Ptr<T> CreateObject (T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6, T7 a7, T8 a8, T9 a9, T10 a10, T11 a11)
+{
+  return CompleteConstruct (new T (a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11));
+}
 /**@}*/
 
 } // namespace ns3

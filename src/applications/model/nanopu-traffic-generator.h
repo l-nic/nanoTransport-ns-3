@@ -102,12 +102,12 @@ private:
   uint16_t        m_remotePort;         //!< Remote port number
   Ipv4Address     m_remoteIp;           //!< Remote IP address to send messages
   bool            m_startImmediately;   //!< True if first msg is to be sent right away
-  Ptr<ExponentialRandomVariable>  m_msgRate;//!< rng for rate of message generation in msg/sec
+  Ptr<ExponentialRandomVariable>  m_msgRate;//!< rng for rate of message generation in sec/msg
   Ptr<UniformRandomVariable>  m_msgSize;//!< rng for size of generated messages in pkts
   uint16_t        m_maxPayloadSize;     //!< Maximum size of packet payloads
   uint16_t        m_maxMsg;             //!< Limit number of messages sent sent
   uint16_t        m_numMsg;             //!< Total number of messages sent so far
-  EventId         m_nextSendEvent;      //!< Event id of pending "send packet" event
+  EventId         m_nextSendEvent;      //!< Event id of pending "send msg" event
 
 };
 
