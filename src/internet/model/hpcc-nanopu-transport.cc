@@ -164,7 +164,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
@@ -184,7 +184,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
@@ -204,7 +204,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
@@ -224,7 +224,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
@@ -244,7 +244,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
@@ -264,7 +264,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     oldHopInfo = m_prevIntHdrs[txMsgId].PeekHopN (curHopIdx);
       
     curTao = (double)(curHopInfo.time - oldHopInfo.time) *1e-9; //Converted to seconds
-    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) / curTao;
+    txRate = (double)(curHopInfo.txBytes - oldHopInfo.txBytes) * 8 / curTao;
       
     curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen)
               / ((double)curHopInfo.bitRate * baseRtt);
