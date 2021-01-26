@@ -488,6 +488,11 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                    UintegerValue (5),
                    MakeUintegerAccessor (&HomaNanoPuArcht::m_maxTimeoutCnt),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("OptimizeMemory", 
+                   "High performant mode (only packet sizes are stored to save from memory).",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&HomaNanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the the NanoPuArcht by the sender application layer.",
