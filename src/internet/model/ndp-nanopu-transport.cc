@@ -223,29 +223,35 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
                                                              msgLen, 
                                                              pktOffset);
       
+    if (!rxMsgInfo.success)
+      return false;
+      
     // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
     //       before processing this incoming data packet because this
     //       packet has not updated the receivedBitmap in the reassembly
     //       buffer yet.
-    uint16_t pullOffsetDiff;
+    uint16_t pullOffsetDiff = 0;
     if (ndph.GetFlags () & NdpHeader::Flags_t::CHOP)
     {
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing chopped data packet.");
       genNACK = true;
       genPULL = true;
-      pullOffsetDiff = 0;
     } 
     else 
     {
+      if (!rxMsgInfo.isNewPkt)
+        return true;
+        
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing data packet.");
+      
       genACK = true;
     
       if (pktOffset + m_nanoPuArcht->GetInitialCredit () <= msgLen )
           genPULL = true;
         
-      reassembleMeta_t metaData;
+      reassembleMeta_t metaData = {};
       metaData.rxMsgId = rxMsgInfo.rxMsgId;
       metaData.srcIp = srcIp;
       metaData.srcPort = srcPort;

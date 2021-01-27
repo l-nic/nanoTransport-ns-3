@@ -22,8 +22,7 @@
 #define HOMA_NANOPU_TRANSPORT_H
 
 #include <unordered_map>
-#include <deque>
-#include <array>
+#include <tuple>
 
 #include "ns3/object.h"
 #include "ns3/nanopu-archt.h"
@@ -50,6 +49,18 @@ typedef struct homaNanoPuCtrlMeta_t {
     uint8_t priority;
 }homaNanoPuCtrlMeta_t;
     
+typedef struct homaNanoPuPendingMsg_t {
+    Ipv4Address remoteIp;
+    uint16_t remotePort;
+    uint16_t localPort;
+    uint16_t txMsgId;
+    uint16_t msgLen;
+    uint16_t ackNo;
+    uint16_t grantedIdx;
+    uint16_t grantableIdx;
+    uint16_t remainingSize;
+}homaNanoPuPendingMsg_t;
+    
 /******************************************************************************/
     
 /**
@@ -72,7 +83,7 @@ public:
   
   void CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta);
   
-protected:
+private:
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
 };
  
@@ -100,15 +111,18 @@ public:
                     uint16_t protocol, const Address &from);
   
 protected:
+  /**
+   * \brief Chooses a pending msg and determines a priority to GRANT it
+   * \return the corresponding rxMsgId and the priority
+   */
+  std::tuple<uint16_t, uint8_t> GetNextMsgIdToGrant (uint16_t mostRecentRxMsgId);
+
+private:
 
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself
   
-  std::unordered_map<uint16_t, uint16_t> m_credits; //!< grantOffset state for each {rxMsgId => credit}
-    
-//   uint16_t m_priorities[3] = {5, 25, 100};
-//   uint8_t GetPriority (uint16_t msgLen);
-  
-//   std::array<std::deque<uint16_t>, 4> m_scheduledMsgs; //!< List of scheduled messages for every level of priorities
+  std::unordered_map<uint16_t, bool> m_busyMsgs; //!< state to mark BUSY messages {rxMsgId => BUSY mark}
+  std::unordered_map<uint16_t, homaNanoPuPendingMsg_t> m_pendingMsgInfo; //!< pending msg state {rxMsgId => pending msg info}
 };
  
 /******************************************************************************/
@@ -134,12 +148,17 @@ public:
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
 protected:
+  /**
+   * \brief Returns the priority for sending the unscheduled packets
+   * \return priority value
+   */
+  uint8_t GetPriority (uint16_t msgLen);
+  
+private:
+  
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
   
-  std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each {txMsgId => prio}
-  
-//   uint16_t m_priorityCutoffs[3] = {5, 25, 100};
-//   uint8_t GetPriority (uint16_t msgLen);
+  std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each outbound msg {txMsgId => prio}
 };
  
 /******************************************************************************/
@@ -173,6 +192,24 @@ public:
   Ptr<HomaNanoPuArchtPktGen> GetPktGen (void);
   
   /**
+   * \brief Get total number of priority levels in the network
+   * \return Total number of priority levels used within the network
+   */
+  uint8_t GetNumTotalPrioBands (void) const;
+  
+  /**
+   * \brief Get number of priority levels dedicated to unscheduled packets in the network
+   * \return Number of priority bands dedicated for unscheduled packets
+   */
+  uint8_t GetNumUnschedPrioBands (void) const;
+  
+  /**
+   * \brief Get the configured number of messages to grant at the same time
+   * \return Minimum number of messages to Grant at the same time
+   */
+  uint8_t GetOvercommitLevel (void) const;
+  
+  /**
    * \brief Implements programmable ingress pipeline architecture.
    *
    * \param device Pointer to NetDevice of desired interface
@@ -184,11 +221,15 @@ public:
   bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
 
-protected:
+private:
 
   Ptr<HomaNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<HomaNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
   Ptr<HomaNanoPuArchtPktGen> m_pktgen; //!< the programmable packet generator for the archt
+  
+  uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
+  uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
+  uint8_t m_overcommitLevel;     //!< Minimum number of messages to Grant at the same time
 };   
 
 } // namespace ns3

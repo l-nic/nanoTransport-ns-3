@@ -606,7 +606,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << 
                    srcIp << srcPort << txMsgId << msgLen << pktOffset);
     
-  rxMsgInfoMeta_t rxMsgInfo;
+  rxMsgInfoMeta_t rxMsgInfo = {};
   rxMsgInfo.isNewMsg = false;
   rxMsgInfo.isNewPkt = false;
   rxMsgInfo.success = false;

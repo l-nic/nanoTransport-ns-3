@@ -57,7 +57,8 @@ public:
                      uint16_t txMsgId, uint16_t msgLen, uint16_t pktOffset, 
                      uint16_t pullOffset);
   
-protected:
+private:
+
   Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
   
   Time m_pacerLastTxTime; //!< The last simulation time the packet generator sent out a packet
@@ -87,10 +88,11 @@ public:
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
   
-protected:
+private:
+
   Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself
     
-    std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {rx_msg_id => credit}
 };
  
 /******************************************************************************/
@@ -115,7 +117,8 @@ public:
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
-protected:
+private:
+
   Ptr<NdpNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
 };
  
@@ -161,7 +164,7 @@ public:
   bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
 
-protected:
+private:
 
   Ptr<NdpNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<NdpNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt

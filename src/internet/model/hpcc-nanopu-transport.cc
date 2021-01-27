@@ -387,6 +387,8 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
                                                              txMsgId,
                                                              msgLen, 
                                                              pktOffset);
+    if (!rxMsgInfo.success)
+      return false;
     
     uint16_t ackNo = rxMsgInfo.ackNo;
     if (rxMsgInfo.ackNo == pktOffset)

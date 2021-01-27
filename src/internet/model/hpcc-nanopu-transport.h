@@ -57,7 +57,8 @@ public:
                      uint16_t txMsgId, uint16_t ackNo, uint16_t msgLen,
                      IntHeader receivedIntHeader);
   
-protected:
+private:
+
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
 };
  
@@ -81,16 +82,18 @@ public:
   HpccNanoPuArchtIngressPipe (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtIngressPipe (void);
   
+  bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
+                    uint16_t protocol, const Address &from);
+  
+protected:
+
   uint16_t ComputeNumPkts (uint32_t winSizeBytes);
   
   double MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
   
   uint32_t ComputeWind (uint16_t txMsgId, double utilization, bool updateWc);
-  
-  bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
-                    uint16_t protocol, const Address &from);
-  
-protected:
+
+private:
 
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
     
@@ -127,7 +130,7 @@ public:
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
-protected:
+private:
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send packets
 };
  
@@ -197,7 +200,7 @@ public:
   bool EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                          uint16_t protocol, const Address &from);
 
-protected:
+private:
 
   Ptr<HpccNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<HpccNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
