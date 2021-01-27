@@ -149,7 +149,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     
   double baseRtt = m_nanoPuArcht->GetBaseRtt ();
     
-  uint16_t nHops = intHdr.GetNHops ();
+  uint8_t nHops = intHdr.GetNHops ();
   intHop_t curHopInfo;
   intHop_t oldHopInfo;
   double maxUtil = 0.0;
@@ -158,7 +158,7 @@ double HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
   double curTao;
   double txRate;
     
-  uint16_t curHopIdx = 0;
+  uint8_t curHopIdx = 0;
   if (curHopIdx < nHops)
   {
     curHopInfo = intHdr.PeekHopN (curHopIdx);

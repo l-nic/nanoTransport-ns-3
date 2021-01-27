@@ -48,6 +48,7 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::NS);
+  LogComponentEnable ("HpccNanoPuSimpleTest", LOG_LEVEL_FUNCTION);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
   LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
@@ -108,13 +109,14 @@ main (int argc, char *argv[])
   Ipv4Header ipv4h;
   uint16_t payloadSize = switchDevices.Get (1)->GetMtu () - ipv4h.GetSerializedSize () 
                          - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
-  Config::SetDefault("ns3::NanoPuArcht::PayloadSize", 
+  NS_LOG_DEBUG("MaxPayloadSize for HpccNanoPuArcht: " << payloadSize);
+  Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
-  Config::SetDefault("ns3::NanoPuArcht::TimeoutInterval", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
                      TimeValue(MilliSeconds(10)));
-  Config::SetDefault("ns3::NanoPuArcht::MaxNTimeouts", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
                      UintegerValue(5));
-  Config::SetDefault("ns3::NanoPuArcht::MaxNMessages", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
                      UintegerValue(100));
   Config::SetDefault("ns3::NanoPuArcht::InitialCredit", 
                      UintegerValue(10));
