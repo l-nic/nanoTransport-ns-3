@@ -68,8 +68,8 @@ typedef struct rxMsgInfoMeta_t {
     bool success;
 }rxMsgInfoMeta_t;
 typedef struct egressMeta_t {
+    bool containsData;
     bool isNewMsg;
-    bool isData;
     bool isRtx;
     Ipv4Address dstIP;
     uint16_t srcPort;
@@ -77,7 +77,7 @@ typedef struct egressMeta_t {
     uint16_t txMsgId;
     uint16_t msgLen;
     uint16_t pktOffset;
-    uint16_t pullOffset;
+    uint8_t priority;
 }egressMeta_t;
 
 /******************************************************************************/

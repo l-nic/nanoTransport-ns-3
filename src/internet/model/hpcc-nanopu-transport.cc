@@ -73,7 +73,7 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, u
                " txMsgId: " << txMsgId << " pktOffset: " << ackNo);
     
   egressMeta_t meta = {};
-  meta.isData = false;
+  meta.containsData = false;
   meta.dstIP = dstIp;
     
   Ptr<Packet> p = Create<Packet> ();
@@ -566,7 +566,7 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
   
-  if (meta.isData)
+  if (meta.containsData)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU HPCC EgressPipe processing data packet.");

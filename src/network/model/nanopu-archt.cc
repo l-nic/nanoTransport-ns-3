@@ -432,9 +432,8 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
     
     NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
     meta.isNewMsg = isNewMsg;
-    isNewMsg = false;
       
-    meta.isData = true;
+    meta.containsData = true;
     meta.isRtx = isRtx;
     meta.dstIP = apphdr.GetRemoteIp();
     meta.dstPort = apphdr.GetRemotePort();

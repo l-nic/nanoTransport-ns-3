@@ -88,8 +88,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
     
   Time delay = Time(0);
     
-  egressMeta_t meta;
-  meta.isData = false;
+  egressMeta_t meta = {};
+  meta.containsData = false;
   meta.dstIP = dstIp;
     
   NdpHeader ndph;
@@ -353,7 +353,7 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
   
-  if (meta.isData)
+  if (meta.containsData)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU NDP EgressPipe processing data packet.");

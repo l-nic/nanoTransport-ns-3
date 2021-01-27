@@ -24,6 +24,8 @@
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/uinteger.h"
+#include "ns3/boolean.h"
+
 #include "ns3/node.h"
 #include "ns3/ipv4.h"
 #include "ns3/data-rate.h"
@@ -62,36 +64,46 @@ HomaNanoPuArchtPktGen::~HomaNanoPuArchtPktGen ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-void HomaNanoPuArchtPktGen::CtrlPktEvent (uint8_t flag, Ipv4Address dstIp, 
-                                          uint16_t dstPort, uint16_t srcPort, 
-                                          uint16_t txMsgId, uint16_t msgLen, 
-                                          uint16_t pktOffset, uint16_t grantOffset, 
-                                          uint8_t priority)
+void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Homa PktGen processing CtrlPktEvent." <<
-               " Flags: " << HomaHeader::FlagsToString (flag));
+               " ShouldUpdateState: " << ctrlMeta.shouldUpdateState <<
+               " ShouldGenCtrlPkt: " << ctrlMeta.shouldGenCtrlPkt <<
+               " (" << HomaHeader::FlagsToString (ctrlMeta.flag) << ")");
   
-  egressMeta_t meta;
-  meta.isData = false;
-  meta.dstIP = dstIp;
-  meta.msgLen = msgLen;
-    
-  HomaHeader homah;
-  homah.SetSrcPort (srcPort);
-  homah.SetDstPort (dstPort);
-  homah.SetTxMsgId (txMsgId);
-  homah.SetMsgLen (msgLen);
-  homah.SetPktOffset (pktOffset);
-  homah.SetGrantOffset (grantOffset);
-  homah.SetPrio (priority);
-  homah.SetPayloadSize (0);
-  homah.SetFlags (flag);
-    
   Ptr<Packet> p = Create<Packet> ();
+  HomaHeader homah;
+    
+  egressMeta_t egressMeta = {};
+  egressMeta.containsData = false;
+    
+  if (ctrlMeta.shouldGenCtrlPkt)
+  {
+    egressMeta.dstIP = ctrlMeta.remoteIp;
+      
+    homah.SetSrcPort (ctrlMeta.localPort);
+    homah.SetDstPort (ctrlMeta.remotePort);
+    homah.SetTxMsgId (ctrlMeta.txMsgId);
+    homah.SetMsgSize (ctrlMeta.msgLen);
+    homah.SetPktOffset (ctrlMeta.pktOffset);
+    homah.SetGrantOffset (ctrlMeta.grantOffset);
+    homah.SetPrio (ctrlMeta.priority);
+    homah.SetPayloadSize (0);
+    homah.SetFlags (ctrlMeta.flag);
+  }
+    
+  if (ctrlMeta.shouldUpdateState)
+  {
+    egressMeta.txMsgId = ctrlMeta.txMsgId;
+    egressMeta.priority = ctrlMeta.priority;
+      
+    homah.SetFlags(HomaHeader::Flags_t::BOGUS);
+  }
+    
   p-> AddHeader (homah);
-  m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
+  m_nanoPuArcht->GetArbiter ()->Receive(p, egressMeta);
 }
 
 /******************************************************************************/
@@ -117,20 +129,20 @@ HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-uint8_t HomaNanoPuArchtIngressPipe::GetPriority (uint16_t msgLen)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+// uint8_t HomaNanoPuArchtIngressPipe::GetPriority (uint16_t msgLen)
+// {
+//   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
-  uint8_t prio = 0;
-  for (auto & threshold : m_priorities)
-  {
-    if (msgLen <= threshold)
-      return prio;
+//   uint8_t prio = 0;
+//   for (auto & threshold : m_priorities)
+//   {
+//     if (msgLen <= threshold)
+//       return prio;
       
-    prio++;
-  }
-  return prio;
-}
+//     prio++;
+//   }
+//   return prio;
+// }
     
 bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                              uint16_t protocol, const Address &from)
@@ -148,183 +160,197 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
   cp->RemoveHeader (iph); 
     
   NS_ASSERT_MSG(iph.GetProtocol() == HomaHeader::PROT_NUMBER,
-                  "This ingress pipeline only works for Homa Transport");
+                "This ingress pipeline only works for Homa Transport");
     
   HomaHeader homah;
   cp->RemoveHeader (homah);
     
   uint16_t txMsgId = homah.GetTxMsgId ();
   uint16_t pktOffset = homah.GetPktOffset ();
-  uint16_t msgLen = homah.GetMsgLen ();
+  uint16_t msgLen = (uint16_t)homah.GetMsgSize ();
   uint8_t rxFlag = homah.GetFlags ();
     
   if (rxFlag & HomaHeader::Flags_t::DATA ||
-      rxFlag & HomaHeader::Flags_t::RESEND )
+      rxFlag & HomaHeader::Flags_t::BUSY )
   {   
 
-    Ipv4Address srcIp = iph.GetSource ();
-    uint16_t srcPort = homah.GetSrcPort ();
-    uint16_t dstPort = homah.GetDstPort ();
+//     Ipv4Address srcIp = iph.GetSource ();
+//     uint16_t srcPort = homah.GetSrcPort ();
+//     uint16_t dstPort = homah.GetDstPort ();
       
-    rxMsgInfoMeta_t rxMsgInfo = m_nanoPuArcht->GetReassemblyBuffer ()
-                                             ->GetRxMsgInfo (srcIp, 
-                                                             srcPort, 
-                                                             txMsgId,
-                                                             msgLen, 
-                                                             pktOffset);
+//     rxMsgInfoMeta_t rxMsgInfo = m_nanoPuArcht->GetReassemblyBuffer ()
+//                                              ->GetRxMsgInfo (srcIp, 
+//                                                              srcPort, 
+//                                                              txMsgId,
+//                                                              msgLen, 
+//                                                              pktOffset);
       
-    // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
-    //       before processing this incoming data packet because this
-    //       packet has not updated the receivedBitmap in the reassembly
-    //       buffer yet.
+//     // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
+//     //       before processing this incoming data packet because this
+//     //       packet has not updated the receivedBitmap in the reassembly
+//     //       buffer yet.
       
-    uint8_t responseFlag = 0;
-    uint16_t grantOffsetDiff;
-    if (rxFlag & HomaHeader::Flags_t::RESEND)
-    {
-      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-                   " NanoPU Homa IngressPipe processing RESEND request.");
-      grantOffsetDiff = 0;
-      if (rxMsgInfo.isNewPkt)
-        responseFlag |= HomaHeader::Flags_t::RSNDRSPNS;
-    } 
-    else 
-    {
-      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
-                   " NanoPU Homa IngressPipe processing DATA packet.");
-      grantOffsetDiff = 1;
-    }
+//     uint8_t responseFlag = 0;
+//     uint16_t grantOffsetDiff;
+//     if (rxFlag & HomaHeader::Flags_t::RESEND)
+//     {
+//       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+//                    " NanoPU Homa IngressPipe processing RESEND request.");
+//       grantOffsetDiff = 0;
+//       if (rxMsgInfo.isNewPkt)
+//         responseFlag |= HomaHeader::Flags_t::RSNDRSPNS;
+//     } 
+//     else 
+//     {
+//       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+//                    " NanoPU Homa IngressPipe processing DATA packet.");
+//       grantOffsetDiff = 1;
+//     }
       
-    // Compute grantOffset with a PRAW extern
-    uint16_t grantOffset = 0;
-    if (rxMsgInfo.isNewMsg)
-    {
-      m_credits[rxMsgInfo.rxMsgId] = m_nanoPuArcht->GetInitialCredit ()
-                                     + grantOffsetDiff;
-    }
-    else
-    {
-      m_credits[rxMsgInfo.rxMsgId] += grantOffsetDiff;
-    }
-    grantOffset = m_credits[rxMsgInfo.rxMsgId];
+//     // Compute grantOffset with a PRAW extern
+//     uint16_t grantOffset = 0;
+//     if (rxMsgInfo.isNewMsg)
+//     {
+//       m_credits[rxMsgInfo.rxMsgId] = m_nanoPuArcht->GetInitialCredit ()
+//                                      + grantOffsetDiff;
+//     }
+//     else
+//     {
+//       m_credits[rxMsgInfo.rxMsgId] += grantOffsetDiff;
+//     }
+//     grantOffset = m_credits[rxMsgInfo.rxMsgId];
       
-    // Compute the priority of the message and find the active msg
-    uint8_t priority = GetPriority (msgLen);
+//     // Compute the priority of the message and find the active msg
+//     uint8_t priority = GetPriority (msgLen);
       
-    // Begin Read-Modify-(Delete/Write) Operation
-    bool scheduledMsgsIsEmpty = m_scheduledMsgs[priority].empty();
-    uint16_t activeRxMsgId = m_scheduledMsgs[priority].front();
+//     // Begin Read-Modify-(Delete/Write) Operation
+//     bool scheduledMsgsIsEmpty = m_scheduledMsgs[priority].empty();
+//     uint16_t activeRxMsgId = m_scheduledMsgs[priority].front();
       
-    if (scheduledMsgsIsEmpty || activeRxMsgId==rxMsgInfo.rxMsgId)
-    {
-      // Msg of the received pkt is the active one for this prio
-      responseFlag |= HomaHeader::Flags_t::GRANT;
+//     if (scheduledMsgsIsEmpty || activeRxMsgId==rxMsgInfo.rxMsgId)
+//     {
+//       // Msg of the received pkt is the active one for this prio
+//       responseFlag |= HomaHeader::Flags_t::GRANT;
        
-      m_nanoPuArcht->GetPktGen ()
-                   ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
-                                  dstPort, txMsgId, msgLen, 
-                                  pktOffset, grantOffset, priority);
+//       m_nanoPuArcht->GetPktGen ()
+//                    ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
+//                                   dstPort, txMsgId, msgLen, 
+//                                   pktOffset, grantOffset, priority);
         
-      if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
-        // The active msg is fully granted, so unschedule it. 
-        // BUSY packets will be used to ACK remaining packets.
-//       if (!scheduledMsgsIsEmpty 
-//           && rxMsgInfo.numPkts == msgLen-1
-//           && rxMsgInfo.ackNo == pktOffset)
-      {
-        // This was the last expected packet of the message
-        m_scheduledMsgs[priority].pop_front();
-        // TODO: Activate the next message and send a grant.
-        //       Otherwise the sender should retransmit to get Granted.
-      }
-    }
-    else
-    {
-      // This packet doesn't belong to an active msg
-      responseFlag |= HomaHeader::Flags_t::BUSY;
+//       if (!scheduledMsgsIsEmpty && grantOffset >= msgLen)
+//         // The active msg is fully granted, so unschedule it. 
+//         // BUSY packets will be used to ACK remaining packets.
+// //       if (!scheduledMsgsIsEmpty 
+// //           && rxMsgInfo.numPkts == msgLen-1
+// //           && rxMsgInfo.ackNo == pktOffset)
+//       {
+//         // This was the last expected packet of the message
+//         m_scheduledMsgs[priority].pop_front();
+//         // TODO: Activate the next message and send a grant.
+//         //       Otherwise the sender should retransmit to get Granted.
+//       }
+//     }
+//     else
+//     {
+//       // This packet doesn't belong to an active msg
+//       responseFlag |= HomaHeader::Flags_t::BUSY;
         
-      m_nanoPuArcht->GetPktGen ()
-                   ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
-                                  dstPort, txMsgId, msgLen, 
-                                  pktOffset, grantOffset, priority);
-    }
+//       m_nanoPuArcht->GetPktGen ()
+//                    ->CtrlPktEvent(responseFlag, srcIp, srcPort, 
+//                                   dstPort, txMsgId, msgLen, 
+//                                   pktOffset, grantOffset, priority);
+//     }
       
-    if ((scheduledMsgsIsEmpty ||  rxMsgInfo.isNewMsg) && grantOffset < msgLen)
-    {
-      m_scheduledMsgs[priority].push_back(rxMsgInfo.rxMsgId);
-    }
-    // End Read-Modify-(Delete/Write) Operation
+//     if ((scheduledMsgsIsEmpty ||  rxMsgInfo.isNewMsg) && grantOffset < msgLen)
+//     {
+//       m_scheduledMsgs[priority].push_back(rxMsgInfo.rxMsgId);
+//     }
+//     // End Read-Modify-(Delete/Write) Operation
       
-    if (rxFlag & HomaHeader::Flags_t::DATA)
-    {
-      reassembleMeta_t metaData;
-      metaData.rxMsgId = rxMsgInfo.rxMsgId;
-      metaData.srcIp = srcIp;
-      metaData.srcPort = srcPort;
-      metaData.dstPort = dstPort;
-      metaData.txMsgId = txMsgId;
-      metaData.msgLen = msgLen;
-      metaData.pktOffset = pktOffset;
+//     if (rxFlag & HomaHeader::Flags_t::DATA)
+//     {
+//       reassembleMeta_t metaData;
+//       metaData.rxMsgId = rxMsgInfo.rxMsgId;
+//       metaData.srcIp = srcIp;
+//       metaData.srcPort = srcPort;
+//       metaData.dstPort = dstPort;
+//       metaData.txMsgId = txMsgId;
+//       metaData.msgLen = msgLen;
+//       metaData.pktOffset = pktOffset;
             
-      m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
-//       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-//                            &NanoPuArchtReassemble::ProcessNewPacket, 
-//                            m_nanoPuArcht->GetReassemblyBuffer (),
-//                            cp, metaData);
-    }
+//       m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
+// //       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
+// //                            &NanoPuArchtReassemble::ProcessNewPacket, 
+// //                            m_nanoPuArcht->GetReassemblyBuffer (),
+// //                            cp, metaData);
+//     }
+      
+    // TODO: Deactivate the current msg (should be keeping a list of active msgs)
  
   }  
-  else // not a DATA or RESEND packet
+  else if (rxFlag & HomaHeader::Flags_t::GRANT ||
+           rxFlag & HomaHeader::Flags_t::RESEND ||
+           rxFlag & HomaHeader::Flags_t::ACK)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa IngressPipe processing a "
                  << homah.FlagsToString(rxFlag) << " packet.");
-    
-    int rtxPkt;
+      
+    int rtxPkt = -1;
     int credit = homah.GetGrantOffset ();
-    if (rxFlag & HomaHeader::Flags_t::RSNDRSPNS)
+      
+    homaNanoPuCtrlMeta_t ctrlMeta = {};
+    ctrlMeta.txMsgId = txMsgId;
+    ctrlMeta.priority = homah.GetPrio ();
+    ctrlMeta.shouldUpdateState = true;
+    
+    if (rxFlag & HomaHeader::Flags_t::GRANT)
     {
-      rtxPkt = (int) pktOffset;
+      m_nanoPuArcht->GetPacketizationBuffer ()
+                   ->DeliveredEvent (txMsgId, msgLen, (((bitmap_t)1)<<pktOffset));
+        
       m_nanoPuArcht->GetPacketizationBuffer ()
                    ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                        NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                        std::greater<int>());
+      
+      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
     }
-    else
+    else if (rxFlag & HomaHeader::Flags_t::RESEND)
+    {   
+      rtxPkt = pktOffset;
+      m_nanoPuArcht->GetPacketizationBuffer ()
+                   ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
+                                       NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
+                                       std::greater<int>());
+        
+      // TODO: The receiver might be sending a RESEND but the sender might 
+      //       be busy with other msgs out, so the sender sends out a BUSY packet.
+      // if (!TargetMsgIsTheHighestPrioOne())
+      // {
+      //   ctrlMeta.shouldGenCtrlPkt = true;
+      //   ctrlMeta.flag = HomaHeader::Flags_t::BUSY;
+      //   ctrlMeta.remoteIp = iph.GetSource ();
+      //   ctrlMeta.remotePort = homah.GetDstPort ();
+      //   ctrlMeta.localPort = homah.GetSrcPort ();
+      //   ctrlMeta.msgLen = msgLen;
+      //   ctrlMeta.pktOffset = pktOffset;
+      //   ctrlMeta.grantOffset = credit;
+      // }
+      // TODO: Should keep a list of active msgs for tx direction as well.
+      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
+    }
+    else if (rxFlag & HomaHeader::Flags_t::ACK)
     {
       m_nanoPuArcht->GetPacketizationBuffer ()
-                   ->DeliveredEvent (txMsgId, msgLen, 
-                                     (((bitmap_t)1)<<pktOffset));
-//       Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-//                          &NanoPuArchtPacketize::DeliveredEvent, 
-//                          m_nanoPuArcht->GetPacketizationBuffer (), 
-//                          txMsgId, msgLen, (1<<pktOffset));
-      rtxPkt = -1;
-      
-      if (rxFlag & HomaHeader::Flags_t::GRANT)
-      {
-        // TODO: The receiver might be sending a GRANT but the sender might 
-        //       be busy with sending other msgs out, so the sender sends out a 
-        //       BUSY packet.
-        // TODO: Should keep a list of active msgs for tx direction as well.
-      }
-      else if (rxFlag & HomaHeader::Flags_t::BUSY && credit < msgLen)
-      {
-        // TODO: Deactivate the current msg (should be keeping a list of active msgs)
-      }
+                   ->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(msgLen));
     }
-      
-    m_nanoPuArcht->GetPacketizationBuffer ()
-                 ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
-                                     NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-                                     std::greater<int>());
-//     Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
-//                          &NanoPuArchtPacketize::CreditToBtxEvent, 
-//                          m_nanoPuArcht->GetPacketizationBuffer ()
-//                          txMsgId, rtxPkt, credit, credit,
-//                          NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-//                          std::greater<int>());
-      
+  }
+  else
+  {
+    NS_LOG_WARN (Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU Homa IngressPipe received an unknown ("
+                 << homah.FlagsToString(rxFlag) << ") type of a packet.");
   }
     
   return true;
@@ -353,81 +379,74 @@ HomaNanoPuArchtEgressPipe::~HomaNanoPuArchtEgressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-uint8_t HomaNanoPuArchtEgressPipe::GetPriority (uint16_t msgLen)
-{
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+// uint8_t HomaNanoPuArchtEgressPipe::GetPriority (uint16_t msgLen)
+// {
+//   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
-  uint8_t prio = 0;
-  for (auto & threshold : m_priorityCutoffs)
-  {
-    if (msgLen <= threshold)
-      return prio;
+//   uint8_t prio = 0;
+//   for (auto & threshold : m_priorityCutoffs)
+//   {
+//     if (msgLen <= threshold)
+//       return prio;
       
-    prio++;
-  }
-  return prio;
-}
+//     prio++;
+//   }
+//   return prio;
+// }
     
 void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t meta)
 {
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
     
+  HomaHeader homah;
   uint8_t priority;
   
-  if (meta.isData)
+  if (meta.containsData)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa EgressPipe processing data packet.");
       
     if (meta.isNewMsg)
-      m_priorities[meta.txMsgId] = GetPriority (meta.msgLen);
+      m_priorities[meta.txMsgId] = 0;
       
-    HomaHeader homah;
     homah.SetSrcPort (meta.srcPort);
     homah.SetDstPort (meta.dstPort);
     homah.SetTxMsgId (meta.txMsgId);
-    homah.SetMsgLen (meta.msgLen);
+    homah.SetMsgSize (meta.msgLen);
     homah.SetPktOffset (meta.pktOffset);
+    homah.SetFlags (HomaHeader::Flags_t::DATA);
+    homah.SetPayloadSize ((uint16_t) cp->GetSize ());
+      
+    // Priority of Data packets are determined by the packet tags
+    priority = m_priorities[meta.txMsgId];
     
     // TODO: Set generation information on the packet. (Not essential)
-    
-    uint16_t payloadSize = (uint16_t) cp->GetSize ();
-    if (meta.isRtx)
-    {
-      cp->RemoveAtEnd (payloadSize);
-        
-      homah.SetFlags (HomaHeader::Flags_t::RESEND);
-      homah.SetPayloadSize (0);
-      priority = 0; // Highest Priority
-    }
-    else
-    {
-      homah.SetFlags (HomaHeader::Flags_t::DATA);
-      homah.SetPayloadSize (payloadSize);
-      // Priority of Data packets are determined by the packet tags
-      // TODO: Determine the priority of response packets based on the 
-      //       priority signalled by the control packets.
-      priority = m_priorities[meta.txMsgId];
-    }
       
     cp-> AddHeader (homah);
   }
   else
   {
+    cp-> PeekHeader (homah);
+    uint8_t ctrlFlag = homah.GetFlags ();
+    if (ctrlFlag & HomaHeader::Flags_t::BOGUS ||
+        ctrlFlag & HomaHeader::Flags_t::BUSY)
+    {
+      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                   " NanoPU Homa EgressPipe updating local state.");
+      m_priorities[meta.txMsgId] = meta.priority;
+        
+      if (ctrlFlag & HomaHeader::Flags_t::BOGUS)
+        return;
+    }
+      
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa EgressPipe processing control packet.");
     priority = 0; // Highest Priority
   }
-  
-  Ptr<NetDevice> boundnetdevice = m_nanoPuArcht->GetBoundNetDevice ();
-  Ptr<Node> node = m_nanoPuArcht->GetNode ();
-  Ptr<Ipv4> ipv4proto = node->GetObject<Ipv4> ();
-  int32_t ifIndex = ipv4proto->GetInterfaceForDevice (boundnetdevice);
-  Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
     
   Ipv4Header iph;
-  iph.SetSource (srcIP);
+  iph.SetSource (m_nanoPuArcht->GetLocalIp ());
   iph.SetDestination (meta.dstIP);
   iph.SetPayloadSize (cp->GetSize ());
   iph.SetTtl (64);
@@ -438,12 +457,12 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   SocketIpTosTag priorityTag;
   priorityTag.SetTos(priority);
   cp-> AddPacketTag (priorityTag);
-//   NS_LOG_DEBUG("Adding priority tag on the packet: " << 
-//                (uint32_t)priorityTag.GetTos () << 
-//                " where intended priority is " << (uint32_t)priority);
+  NS_LOG_LOGIC("Adding priority tag on the packet: " << 
+               (uint32_t)priorityTag.GetTos () << 
+               " where intended priority is " << (uint32_t)priority);
     
   NS_ASSERT_MSG(cp->PeekPacketTag (priorityTag),
-               "The packet should have a priority tag before transmission!");
+                "The packet should have a priority tag before transmission!");
   
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Homa EgressPipe sending: " << 
@@ -524,14 +543,14 @@ void HomaNanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
     
   m_pktgen = CreateObject<HomaNanoPuArchtPktGen> (this);
     
-  m_egresspipe = CreateObject<HomsNanoPuArchtEgressPipe> (this);
+  m_egresspipe = CreateObject<HomaNanoPuArchtEgressPipe> (this);
     
   m_arbiter->SetEgressPipe (m_egresspipe);
     
   m_ingresspipe = CreateObject<HomaNanoPuArchtIngressPipe> (this);
 }
     
-Ptr<HpccNanoPuArchtPktGen> 
+Ptr<HomaNanoPuArchtPktGen> 
 HomaNanoPuArcht::GetPktGen (void)
 {
   return m_pktgen;

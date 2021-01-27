@@ -35,7 +35,23 @@
 namespace ns3 {
     
 class HomaNanoPuArcht;
-
+    
+typedef struct homaNanoPuCtrlMeta_t {
+    bool shouldUpdateState;
+    bool shouldGenCtrlPkt;
+    uint8_t flag;
+    Ipv4Address remoteIp;
+    uint16_t remotePort;
+    uint16_t localPort;
+    uint16_t txMsgId;
+    uint16_t msgLen;
+    uint16_t pktOffset;
+    uint16_t grantOffset;
+    uint8_t priority;
+}homaNanoPuCtrlMeta_t;
+    
+/******************************************************************************/
+    
 /**
  * \ingroup nanopu-archt
  *
@@ -54,27 +70,13 @@ public:
   HomaNanoPuArchtPktGen (Ptr<HomaNanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (uint8_t flag, Ipv4Address dstIp, uint16_t dstPort, 
-                     uint16_t srcPort, uint16_t txMsgId, uint16_t msgLen, 
-                     uint16_t pktOffset, uint16_t grantOffset, uint8_t priority);
+  void CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta);
   
 protected:
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to configure pacer
 };
  
 /******************************************************************************/
-
-typedef struct scheduledMsgMeta_t {
-    uint16_t rxMsgId;
-    Ipv4Address srcIp;
-    uint16_t srcPort;
-    uint16_t dstPort;
-    uint16_t txMsgId;
-    uint16_t msgLen;
-    uint16_t pktOffset;
-    uint16_t grantOffset;
-    uint8_t priority;
-}scheduledMsgMeta_t;
     
 /**
  * \ingroup nanopu-archt
@@ -99,14 +101,14 @@ public:
   
 protected:
 
-  Ptr<HomaNanoPuArcht> nanoPuArcht; //!< the archt itself
+  Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself
   
   std::unordered_map<uint16_t, uint16_t> m_credits; //!< grantOffset state for each {rxMsgId => credit}
     
-  uint16_t m_priorities[3] = {5, 25, 100};
-  uint8_t GetPriority (uint16_t msgLen);
+//   uint16_t m_priorities[3] = {5, 25, 100};
+//   uint8_t GetPriority (uint16_t msgLen);
   
-  std::array<std::deque<uint16_t>, 4> m_scheduledMsgs; //!< List of scheduled messages for every level of priorities
+//   std::array<std::deque<uint16_t>, 4> m_scheduledMsgs; //!< List of scheduled messages for every level of priorities
 };
  
 /******************************************************************************/
@@ -136,8 +138,8 @@ protected:
   
   std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each {txMsgId => prio}
   
-  uint16_t m_priorityCutoffs[3] = {5, 25, 100};
-  uint8_t GetPriority (uint16_t msgLen);
+//   uint16_t m_priorityCutoffs[3] = {5, 25, 100};
+//   uint8_t GetPriority (uint16_t msgLen);
 };
  
 /******************************************************************************/
