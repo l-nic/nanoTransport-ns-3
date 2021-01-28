@@ -450,9 +450,8 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
   SocketIpTosTag priorityTag;
   priorityTag.SetTos(priority);
   cp-> AddPacketTag (priorityTag);
-  NS_LOG_LOGIC("Adding priority tag on the packet: " << 
-               (uint32_t)priorityTag.GetTos () << 
-               " where intended priority is " << (uint32_t)priority);
+  NS_LOG_LOGIC("Adding priority tag (" << (uint32_t)priorityTag.GetTos () << 
+               ") on the packet where intended priority is " << (uint32_t)priority);
     
   NS_ASSERT_MSG(cp->PeekPacketTag (priorityTag),
                 "The packet should have a priority tag before transmission!");

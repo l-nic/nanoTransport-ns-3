@@ -45,7 +45,7 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("HomaPaperReproduction");
+NS_LOG_COMPONENT_DEFINE ("HomaOfficialPaperReproduction");
 
 void TraceMsgBegin (Ptr<OutputStreamWrapper> stream,
                     Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
@@ -146,13 +146,13 @@ main (int argc, char *argv[])
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
-//   LogComponentEnable ("HomaPaperReproduction", LOG_LEVEL_DEBUG);  
+//   LogComponentEnable ("HomaOfficialPaperReproduction", LOG_LEVEL_DEBUG);  
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);  
 //   LogComponentEnable ("HomaSocket", LOG_LEVEL_ALL);
   LogComponentEnable ("HomaL4Protocol", LOG_LEVEL_WARN);
     
   std::string msgSizeDistFileName ("inputs/homa-paper-reproduction/DCTCP-MsgSizeDist.txt");
-  std::string tracesFileName ("outputs/homa-paper-reproduction/MsgTraces");
+  std::string tracesFileName ("outputs/homa-paper-reproduction/official-impl/MsgTraces");
   tracesFileName += "_W5";
   tracesFileName += "_load-" + std::to_string((int)(networkLoad*100)) + "p";
   tracesFileName += "_" + std::to_string(simIdx);
@@ -300,11 +300,13 @@ main (int argc, char *argv[])
   uint32_t payloadSize = hostTorDevices[0].Get (0)->GetMtu() 
                          - homah.GetSerializedSize ()
                          - ipv4h.GetSerializedSize ();
+  Config::SetDefault("ns3::MsgGeneratorApp::PayloadSize", 
+                     UintegerValue(payloadSize));
     
   for (int i = 0; i < nHosts; i++)
   {
     Ptr<MsgGeneratorApp> app = CreateObject<MsgGeneratorApp>(hostTorIfs[i].GetAddress (0),
-                                                             1000 + i, payloadSize);
+                                                             1000 + i);
     app->Install (hostNodes.Get (i), clientAddresses);
     app->SetWorkload (networkLoad, msgSizeCDF, avgMsgSizePkts);
       
@@ -320,7 +322,7 @@ main (int argc, char *argv[])
   Config::ConnectWithoutContext("/NodeList/*/$ns3::HomaL4Protocol/MsgFinish", 
                                 MakeBoundCallback(&TraceMsgFinish, msgStream));
   
-//   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/pcaps/tor-spine", false);
+//   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/official-impl/pcaps/tor-spine", false);
 
   /******** Run the Actual Simulation ********/
   Simulator::Run ();

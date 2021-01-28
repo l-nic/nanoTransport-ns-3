@@ -21,13 +21,17 @@
 #ifndef MSG_GENERATOR_APP_H
 #define MSG_GENERATOR_APP_H
 
+#include <map>
+
 #include "ns3/application.h"
+#include "ns3/random-variable-stream.h"
 #include "ns3/address.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/socket.h"
 #include "ns3/socket-factory.h"
 #include "ns3/packet.h"
 #include "ns3/event-id.h"
+#include "ns3/nanopu-archt.h"
 
 namespace ns3 {
     
@@ -53,8 +57,7 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  MsgGeneratorApp (Ipv4Address localIp, uint16_t localPort=0xffff, 
-                   uint32_t maxPayloadSize=0);
+  MsgGeneratorApp (Ipv4Address localIp, uint16_t localPort=0xffff);
   
   virtual ~MsgGeneratorApp();
   
@@ -98,13 +101,20 @@ private:
   void SendMessage ();
   
   /**
-   * \brief Receive a message from the NanoPU Archt
+   * \brief Receive a message from the protocol socket
    */
   void ReceiveMessage (Ptr<Socket> socket);
+  /**
+   * \brief Receive a message from the NanoPU Archt
+   */
+  void ReceiveMessageFromNanoPu (Ptr<Packet> msg);
   
   Ptr<Socket>       m_socket;        //!< The socket this app uses to send/receive msgs
   TypeId            m_tid;           //!< The type of the socket used
   EventId           m_nextSendEvent; //!< Event id of pending "send msg" event
+  
+  bool m_enableNanoPuArcht;          //!< Forwards msgs to the NanoPU Architecture instead of protocol sockets
+  Ptr<NanoPuArcht> m_nanoPuArcht;    //!< The bounded NanoPu Architecture
   
   Ipv4Address     m_localIp;         //!< Local IP address to bind 
   uint16_t        m_localPort;       //!< Local port number to bind
