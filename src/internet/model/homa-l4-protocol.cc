@@ -86,6 +86,11 @@ HomaL4Protocol::GetTypeId (void)
                    UintegerValue (5),
                    MakeUintegerAccessor (&HomaL4Protocol::m_maxNumRtxPerMsg),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("OptimizeMemory", 
+                   "High performant mode (only packet sizes are stored to save from memory).",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&HomaL4Protocol::m_memIsOptimized),
+                   MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the HomaL4Protocol by the sender application layer.",
@@ -186,6 +191,11 @@ uint8_t
 HomaL4Protocol::GetOvercommitLevel (void) const
 {
   return m_overcommitLevel;
+}
+    
+bool HomaL4Protocol::MemIsOptimized (void)
+{
+  return m_memIsOptimized;
 }
     
 /*
@@ -582,9 +592,17 @@ HomaOutboundMsg::HomaOutboundMsg (Ptr<Packet> message,
   while (unpacketizedBytes > 0)
   {
     nextPktSize = std::min(unpacketizedBytes, m_maxPayloadSize);
-    nextPkt = message->CreateFragment (m_msgSizeBytes - unpacketizedBytes, nextPktSize);
 
-    m_packets.push_back(nextPkt);
+    if (m_homa->MemIsOptimized ())
+    {
+      m_pktSizes.push_back(nextPktSize);
+    }
+    else
+    {
+      nextPkt = message->CreateFragment (m_msgSizeBytes - unpacketizedBytes, nextPktSize);
+      m_packets.push_back(nextPkt);
+    }
+
     m_pktTxQ.push(numPkts);
 
     unpacketizedBytes -= nextPktSize;
@@ -711,8 +729,11 @@ Ptr<Packet> HomaOutboundMsg::RemoveNextPktFromTxQ (uint16_t pktOffset)
   {
     m_pktTxQ.pop();
   }
-    
-  return m_packets[pktOffset]->Copy();
+   
+  if (m_homa->MemIsOptimized ())
+    return Create<Packet> (m_pktSizes[pktOffset]);
+  else
+    return m_packets[pktOffset]->Copy();
 }
     
 /*
@@ -1179,7 +1200,8 @@ TypeId HomaInboundMsg::GetTypeId (void)
  */
 HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
                                 Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
-                                Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets)
+                                Ptr<Ipv4Interface> iface, uint32_t mtuBytes, 
+                                uint16_t rttPackets, bool memIsOptimized)
     : m_prio(0),
       m_numRtxWithoutProgress (0)
 {
@@ -1202,11 +1224,19 @@ HomaInboundMsg::HomaInboundMsg (Ptr<Packet> p,
   // Fill in the packet buffer with place holder (empty) packets and set the received info as false
   for (uint16_t i = 0; i < m_msgSizePkts; i++)
   {
-    m_packets.push_back(Create<Packet> ());
+    if (memIsOptimized)
+      m_pktSizes.push_back(0);
+    else
+      m_packets.push_back(Create<Packet> ());
+      
     m_receivedPackets.push_back(false);
   } 
+          
   uint16_t pktOffset = homaHeader.GetPktOffset ();
-  m_packets[pktOffset] = p;
+  if (memIsOptimized)
+    m_pktSizes[pktOffset] = p->GetSize ();
+  else
+    m_packets[pktOffset] = p;
   m_receivedPackets[pktOffset] = true;
           
   m_maxGrantedIdx = std::min((uint16_t)(rttPackets-1), m_msgSizePkts); // Unscheduled pkts are already granted
@@ -1330,7 +1360,10 @@ void HomaInboundMsg::ReceiveDataPacket (Ptr<Packet> p, uint16_t pktOffset)
     
   if (!m_receivedPackets[pktOffset])
   {
-    m_packets[pktOffset] = p;
+    if (m_pktSizes.size())
+      m_pktSizes[pktOffset] = p->GetSize ();
+    else
+      m_packets[pktOffset] = p;
     m_receivedPackets[pktOffset] = true;
       
     m_remainingBytes -= p->GetSize ();
@@ -1355,15 +1388,30 @@ Ptr<Packet> HomaInboundMsg::GetReassembledMsg ()
 {
   NS_LOG_FUNCTION (this);
     
-  Ptr<Packet> completeMsg = Create<Packet> ();
-  for (std::size_t i = 0; i < m_msgSizePkts; i++)
+  if (m_pktSizes.size())
   {
-    NS_ASSERT_MSG(m_receivedPackets[i],
-                  "ERROR: HomaRecvScheduler is trying to reassemble an incomplete msg!");
-    completeMsg->AddAtEnd (m_packets[i]);
+    uint32_t msgSize = 0;
+    for (std::size_t i = 0; i < m_msgSizePkts; i++)
+    {
+      NS_ASSERT_MSG(m_receivedPackets[i],
+                    "ERROR: HomaRecvScheduler is trying to reassemble an incomplete msg!");
+      msgSize += m_pktSizes[i];
+    }
+      
+    return Create<Packet> (msgSize);
   }
+  else
+  {
+    Ptr<Packet> completeMsg = Create<Packet> ();
+    for (std::size_t i = 0; i < m_msgSizePkts; i++)
+    {
+      NS_ASSERT_MSG(m_receivedPackets[i],
+                    "ERROR: HomaRecvScheduler is trying to reassemble an incomplete msg!");
+      completeMsg->AddAtEnd (m_packets[i]);
+    }
   
-  return completeMsg;
+    return completeMsg;
+  }
 }
     
 Ptr<Packet> HomaInboundMsg::GenerateGrantOrAck(uint8_t grantedPrio,
@@ -1525,7 +1573,8 @@ void HomaRecvScheduler::ReceiveDataPacket (Ptr<Packet> packet,
   else
   {
     inboundMsg = CreateObject<HomaInboundMsg> (cp, ipv4Header, homaHeader, interface, 
-                                               m_homa->GetMtu (), m_homa->GetBdp ());
+                                               m_homa->GetMtu (), m_homa->GetBdp (), 
+                                               m_homa->MemIsOptimized ());
     inboundMsg-> SetRtxEvent (Simulator::Schedule (m_homa->GetInboundRtxTimeout(), 
                                                    &HomaRecvScheduler::ExpireRtxTimeout, this, 
                                                    inboundMsg, inboundMsg->GetMaxGrantedIdx ()));
