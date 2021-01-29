@@ -319,19 +319,16 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                                        NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                        std::greater<int>());
         
-      // TODO: The receiver might be sending a RESEND but the sender might 
-      //       be busy with other msgs out, so the sender sends out a BUSY packet.
-      // if (!TargetMsgIsTheHighestPrioOne())
-      // {
-      //   ctrlMeta.shouldGenCtrlPkt = true;
-      //   ctrlMeta.flag = HomaHeader::Flags_t::BUSY;
-      //   ctrlMeta.remoteIp = iph.GetSource ();
-      //   ctrlMeta.remotePort = homah.GetDstPort ();
-      //   ctrlMeta.localPort = homah.GetSrcPort ();
-      //   ctrlMeta.msgLen = msgLen;
-      //   ctrlMeta.pktOffset = pktOffset;
-      //   ctrlMeta.grantOffset = credit;
-      // }
+      // Generate a BUSY packet anyway. This packet will be dropped 
+      // in the egress pipeline if the message is the active one.
+      ctrlMeta.shouldGenCtrlPkt = true;
+      ctrlMeta.flag = HomaHeader::Flags_t::BUSY;
+      ctrlMeta.remoteIp = iph.GetSource ();
+      ctrlMeta.remotePort = homah.GetDstPort ();
+      ctrlMeta.localPort = homah.GetSrcPort ();
+      ctrlMeta.msgLen = msgLen;
+      ctrlMeta.pktOffset = pktOffset;
+      ctrlMeta.grantOffset = credit;
         
       m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
     }
@@ -410,13 +407,14 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     homah.SetPktOffset (meta.pktOffset);
     homah.SetFlags (HomaHeader::Flags_t::DATA);
     homah.SetPayloadSize ((uint16_t) cp->GetSize ());
+    // TODO: Set generation information on the packet. (Not essential)
       
     // Priority of Data packets are determined by the packet tags
     priority = m_priorities[meta.txMsgId];
-    
-    // TODO: Set generation information on the packet. (Not essential)
       
     cp-> AddHeader (homah);
+      
+    m_activeOutboundMsgId = meta.txMsgId;
   }
   else
   {
@@ -431,6 +429,15 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
         
       if (ctrlFlag & HomaHeader::Flags_t::BOGUS)
         return;
+    }
+      
+    if (ctrlFlag & HomaHeader::Flags_t::BUSY &&
+        m_activeOutboundMsgId == meta.txMsgId)
+    {
+      NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                   " NanoPU Homa EgressPipe dropping the BUSY packet"
+                   " because it belongs to the most recent (active) msg.");
+      return;
     }
       
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 

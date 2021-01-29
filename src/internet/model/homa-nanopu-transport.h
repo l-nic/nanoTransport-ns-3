@@ -159,6 +159,12 @@ private:
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself to be able to send packets
   
   std::unordered_map<uint16_t, uint8_t> m_priorities; //!< priority state for each outbound msg {txMsgId => prio}
+  
+  // Ideally the packetization buffer should be sending the message with
+  // the shortest remaining size and run to completion. Then the active outbound msg
+  // ID would stay the same while the message is being transmitted. This can be 
+  // compared against when generating BUSY packets.
+  uint16_t m_activeOutboundMsgId; //!< The txMsgId of the most recent active message
 };
  
 /******************************************************************************/
