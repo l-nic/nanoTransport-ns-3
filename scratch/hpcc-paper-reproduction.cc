@@ -118,7 +118,8 @@ main (int argc, char *argv[])
   HpccHeader hpcch;
   IntHeader inth;
   Ipv4Header ipv4h;
-  uint16_t mtuBytes = 1000 + ipv4h.GetSerializedSize () 
+  uint16_t payloadSize = 1000;
+  uint16_t mtuBytes = payloadSize + ipv4h.GetSerializedSize () 
                       + inth.GetMaxSerializedSize () + hpcch.GetSerializedSize ();
     
   CommandLine cmd (__FILE__);
@@ -274,10 +275,6 @@ main (int argc, char *argv[])
   /* Define an optional/default parameters for nanoPU modules*/
   NS_LOG_UNCOND("Deploying NanoPU Architectures...");
     
-  uint16_t payloadSize = hostTorDevices[0].Get (0)->GetMtu () 
-                         - ipv4h.GetSerializedSize () 
-                         - inth.GetMaxSerializedSize () 
-                         - hpcch.GetSerializedSize ();
   Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
@@ -287,7 +284,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
                      UintegerValue(1000));
   Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
-                     UintegerValue(160));
+                     UintegerValue(141));
   Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
                      DoubleValue(MicroSeconds (13).GetSeconds ()));
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
