@@ -345,7 +345,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
-    std::map<uint16_t,uint32_t> optBuffer;
+    std::map<uint16_t,uint16_t> optBuffer;
     uint16_t numPkts = 0;
     uint32_t nextPktSize;
     while (remainingBytes > 0)
@@ -353,7 +353,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
         
       if (m_nanoPuArcht->MemIsOptimized ())
-        optBuffer[numPkts] = nextPktSize;
+        optBuffer[numPkts] = (uint16_t)nextPktSize;
       else
         buffer[numPkts] = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, 
                                                     nextPktSize);
@@ -651,7 +651,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       
     if (m_nanoPuArcht->MemIsOptimized ())
     {
-      std::map<uint16_t,uint32_t> buffer;
+      std::map<uint16_t,uint16_t> buffer;
       m_optBuffers.insert({rxMsgInfo.rxMsgId,buffer});
     }
     else
