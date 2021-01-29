@@ -338,29 +338,25 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     NS_LOG_INFO("NanoPU Packetization Buffer allocating txMsgId: " << txMsgId);
     m_txMsgIdFreeList.pop_front ();
     
-    NS_ASSERT_MSG (msgSize == (uint16_t) cmsg->GetSize (),
+    uint32_t remainingBytes = cmsg->GetSize ();
+    NS_ASSERT_MSG (msgSize == (uint16_t) remainingBytes,
                    "The payload size in the NanoPU App header doesn't match real payload size. " <<
-                   msgSize << " vs " << (uint16_t) cmsg->GetSize ());
+                   msgSize << " vs " << (uint16_t) remainingBytes);
     m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
     std::map<uint16_t,uint32_t> optBuffer;
-    uint32_t remainingBytes = cmsg->GetSize ();
     uint16_t numPkts = 0;
     uint32_t nextPktSize;
-    Ptr<Packet> nextPkt;
     while (remainingBytes > 0)
     {
       nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
+        
       if (m_nanoPuArcht->MemIsOptimized ())
-      {
         optBuffer[numPkts] = nextPktSize;
-      }
       else
-      {
-        nextPkt = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, nextPktSize);
-        buffer[numPkts] = nextPkt;
-      }
+        buffer[numPkts] = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, 
+                                                    nextPktSize);
       remainingBytes -= nextPktSize;
       numPkts ++;
     }
@@ -428,7 +424,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
     if (m_nanoPuArcht->MemIsOptimized ())
       p = Create<Packet> (m_optBuffers[txMsgId][pktOffset]);  
     else
-      p = m_buffers[txMsgId][pktOffset];
+      p = m_buffers[txMsgId][pktOffset]->Copy ();
     
     NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
     meta.isNewMsg = isNewMsg;
@@ -445,10 +441,9 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
     m_arbiter->Receive(p, meta);
       
     txPkts &= ~(((bitmap_t)1)<<pktOffset);
+      
     if (pktOffset > m_maxTxPktOffset[txMsgId])
-    {
       m_maxTxPktOffset[txMsgId] = pktOffset;
-    }
     
     pktOffset = getFirstSetBitPos(txPkts);
   }
@@ -635,9 +630,9 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     }
       
     if (m_nanoPuArcht->MemIsOptimized ())
-      rxMsgInfo.numPkts = m_optBuffers.find (rxMsgInfo.rxMsgId) ->second.size();
+      rxMsgInfo.numPkts = m_optBuffers.find (rxMsgInfo.rxMsgId)->second.size();
     else
-      rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId) ->second.size();
+      rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId)->second.size();
       
     rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second 
                           & (((bitmap_t)1)<<pktOffset)) == 0;
