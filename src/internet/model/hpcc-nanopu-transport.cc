@@ -423,7 +423,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       
     if (rxMsgInfo.isNewPkt)
     {
-      reassembleMeta_t metaData;
+      reassembleMeta_t metaData = {};
       metaData.rxMsgId = rxMsgInfo.rxMsgId;
       metaData.srcIp = srcIp;
       metaData.srcPort = srcPort;
@@ -474,6 +474,14 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
         m_msgStates[txMsgId].nDupAck++;
     }
       
+    m_nanoPuArcht->GetPacketizationBuffer ()
+                 ->DeliveredEvent (txMsgId, msgLen, 
+                                   setBitMapUntil (m_msgStates[txMsgId].ackNo));
+//     Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
+//                          &NanoPuArchtPacketize::DeliveredEvent, 
+//                          m_nanoPuArcht->GetPacketizationBuffer (), 
+//                          txMsgId, msgLen, setBitMapUntil (m_msgStates[txMsgId].ackNo));
+      
     if (m_msgStates[txMsgId].ackNo >= msgLen)
     {
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
@@ -493,14 +501,6 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       //       initiated.
       return true;
     }
-      
-    m_nanoPuArcht->GetPacketizationBuffer ()
-                 ->DeliveredEvent (txMsgId, msgLen, 
-                                   setBitMapUntil (m_msgStates[txMsgId].ackNo));
-//     Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
-//                          &NanoPuArchtPacketize::DeliveredEvent, 
-//                          m_nanoPuArcht->GetPacketizationBuffer (), 
-//                          txMsgId, msgLen, setBitMapUntil (m_msgStates[txMsgId].ackNo));
       
     uint16_t nextSeq = m_msgStates[txMsgId].credit + 1;
     if (m_msgStates[txMsgId].lastUpdateSeq == 0) // first RTT
