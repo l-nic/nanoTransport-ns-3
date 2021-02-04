@@ -345,23 +345,20 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     m_appHeaders[txMsgId] = apphdr;
      
     std::map<uint16_t,Ptr<Packet>> buffer;
-    std::map<uint16_t,uint16_t> optBuffer;
     uint16_t numPkts = 0;
     uint32_t nextPktSize;
     while (remainingBytes > 0)
     {
       nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
         
-      if (m_nanoPuArcht->MemIsOptimized ())
-        optBuffer[numPkts] = (uint16_t)nextPktSize;
-      else
+      if (!m_nanoPuArcht->MemIsOptimized ())
         buffer[numPkts] = cmsg->CreateFragment (cmsg->GetSize () - remainingBytes, 
                                                     nextPktSize);
       remainingBytes -= nextPktSize;
       numPkts ++;
     }
     if (m_nanoPuArcht->MemIsOptimized ())
-      m_optBuffers[txMsgId] = optBuffer;  
+      m_lastPktSize[txMsgId] = nextPktSize;  
     else
       m_buffers[txMsgId] = buffer;
       
@@ -420,22 +417,28 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
                 " NanoPU Packetization Buffer transmitting pkt " <<
                 pktOffset << " from msg " << txMsgId);
     
+    NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
+    uint16_t msgLen = apphdr.GetMsgLen();
+      
     Ptr<Packet> p;
     if (m_nanoPuArcht->MemIsOptimized ())
-      p = Create<Packet> (m_optBuffers[txMsgId][pktOffset]);  
+    {
+      if (pktOffset == msgLen-1)
+        p = Create<Packet> (m_lastPktSize[txMsgId]); 
+      else
+        p = Create<Packet> (m_nanoPuArcht->GetPayloadSize ()); 
+    }
     else
       p = m_buffers[txMsgId][pktOffset]->Copy ();
     
-    NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
     meta.isNewMsg = isNewMsg;
-      
     meta.containsData = true;
     meta.isRtx = isRtx;
     meta.dstIP = apphdr.GetRemoteIp();
     meta.dstPort = apphdr.GetRemotePort();
     meta.srcPort = apphdr.GetLocalPort();
     meta.txMsgId = txMsgId;
-    meta.msgLen = apphdr.GetMsgLen();
+    meta.msgLen = msgLen;
     meta.pktOffset = pktOffset;
       
     m_arbiter->Receive(p, meta);
@@ -465,8 +468,7 @@ void NanoPuArchtPacketize::ClearStateForMsg (uint16_t txMsgId)
   
   if (m_nanoPuArcht->MemIsOptimized ())
   {
-    m_optBuffers[txMsgId].clear();
-    m_optBuffers.erase(txMsgId);
+    m_lastPktSize.erase(txMsgId);
   }
   else
   {
@@ -623,19 +625,10 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
                 " (ackNo: " << rxMsgInfo.ackNo << 
                 " msgLen: " << msgLen << ") ");
       
-    if (rxMsgInfo.ackNo == BITMAP_SIZE)
-    {
-      NS_LOG_INFO("Msg " << rxMsgInfo.rxMsgId << "has already been fully received");
-      rxMsgInfo.ackNo = msgLen;
-    }
+    rxMsgInfo.numPkts = m_receivedBitmap[rxMsgInfo.rxMsgId].count();
       
-    if (m_nanoPuArcht->MemIsOptimized ())
-      rxMsgInfo.numPkts = m_optBuffers.find (rxMsgInfo.rxMsgId)->second.size();
-    else
-      rxMsgInfo.numPkts = m_buffers.find (rxMsgInfo.rxMsgId)->second.size();
+    rxMsgInfo.isNewPkt = m_receivedBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
       
-    rxMsgInfo.isNewPkt = (m_receivedBitmap.find (rxMsgInfo.rxMsgId)->second 
-                          & (((bitmap_t)1)<<pktOffset)) == 0;
     rxMsgInfo.success = true;
   }
   // try to allocate an rx_msg_id
@@ -651,8 +644,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       
     if (m_nanoPuArcht->MemIsOptimized ())
     {
-      std::map<uint16_t,uint16_t> buffer;
-      m_optBuffers.insert({rxMsgInfo.rxMsgId,buffer});
+      m_lastPktSize.insert({rxMsgInfo.rxMsgId,0});
     }
     else
     {
@@ -680,24 +672,21 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
                 " Processing pkt "<< meta.pktOffset 
                 << " for msg " << meta.rxMsgId);
     
-  /* Record pkt in buffer*/
-  auto optBuffer = m_optBuffers.find (meta.rxMsgId);
-  auto buffer = m_buffers.find (meta.rxMsgId);
-    
-  if (buffer != m_buffers.end () || optBuffer != m_optBuffers.end ())
+  if (m_receivedBitmap.find(meta.rxMsgId) != m_receivedBitmap.end ())
   {
     if (m_nanoPuArcht->MemIsOptimized ())
-      optBuffer->second [meta.pktOffset] = pkt->GetSize();
-    else
-      buffer->second [meta.pktOffset] = pkt;
+    {
+      if (meta.pktOffset == meta.msgLen -1)
+        m_lastPktSize [meta.rxMsgId] = pkt->GetSize();
+    }
+    else /* Record pkt in buffer*/
+      m_buffers[meta.rxMsgId][meta.pktOffset] = pkt;
     
     /* Mark the packet as received*/
     // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
-//     m_receivedBitmap [meta.rxMsgId] |= (((bitmap_t)1)<<meta.pktOffset);
     m_receivedBitmap [meta.rxMsgId].set(meta.pktOffset);
     
     /* Check if all pkts have been received*/
-//     if (m_receivedBitmap [meta.rxMsgId] == (((bitmap_t)1)<<meta.msgLen)-1)
     if (m_receivedBitmap [meta.rxMsgId] == setBitMapUntil(meta.msgLen))
     {
       NS_LOG_INFO ("All packets have been received for msg " << meta.rxMsgId);
@@ -706,11 +695,8 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       Ptr<Packet> msg;
       if (m_nanoPuArcht->MemIsOptimized ())
       {
-        uint32_t msgSize = 0;
-        for (uint16_t i=0; i<meta.msgLen; i++)
-        {
-          msgSize += optBuffer->second[i];
-        }
+        uint32_t msgSize = (meta.msgLen-1) * m_nanoPuArcht->GetPayloadSize ();
+        msgSize += m_lastPktSize [meta.rxMsgId];
         msg =  Create<Packet> (msgSize);
       }
       else
@@ -718,7 +704,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
         msg =  Create<Packet> ();
         for (uint16_t i=0; i<meta.msgLen; i++)
         {
-          msg->AddAtEnd (buffer->second[i]);
+          msg->AddAtEnd (m_buffers[meta.rxMsgId][i]);
         }
       }
         
@@ -799,8 +785,7 @@ void NanoPuArchtReassemble::ClearStateForMsg (uint16_t rxMsgId)
   
   if (m_nanoPuArcht->MemIsOptimized ())
   {
-    m_optBuffers[rxMsgId].clear();
-    m_optBuffers.erase(rxMsgId);
+    m_lastPktSize.erase(rxMsgId);
   }
   else
   {

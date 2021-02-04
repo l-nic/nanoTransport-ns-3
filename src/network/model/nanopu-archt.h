@@ -218,12 +218,11 @@ protected:
   std::unordered_map<uint16_t, 
                      NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {tx_msg_id => appHeader}
                      
-  // Only one of the buffers below are used
+  // Either the buffer or the lastPktSize below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
                               Ptr<Packet>>> m_buffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet}}
-  std::unordered_map<uint16_t,
-                     std::map<uint16_t,uint16_t>> m_optBuffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet Size}}
+  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {tx_msg_id => Last Packet Size}
                      
   std::unordered_map<uint16_t, 
                        bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {tx_msg_id => bitmap}
@@ -342,12 +341,11 @@ protected:
                      rxMsgIdTable_hash, 
                      rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
                      
-  // Only one of the buffers below are used
+  // Either the buffer or the lastPktSize below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
                               Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
-  std::unordered_map<uint16_t,
-                     std::map<uint16_t,uint16_t>> m_optBuffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet Size}}
+  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {rx_msg_id => Last Packet Size}
                      
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
