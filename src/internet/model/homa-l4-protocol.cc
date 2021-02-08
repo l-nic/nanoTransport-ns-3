@@ -675,7 +675,8 @@ uint8_t HomaOutboundMsg::GetPrio (uint16_t pktOffset)
 {
   if (!m_prioSetByReceiver)
   {
-    if (this->GetMsgSizePkts () < m_homa->GetBdp ())
+//     if (this->GetMsgSizePkts () < m_homa->GetBdp ())
+    if (this->GetMsgSizePkts () < 13) // Based on heuristics
         return 0;
     else
       return m_homa->GetNumUnschedPrioBands () - 1;

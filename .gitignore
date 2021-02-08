@@ -8,6 +8,7 @@
 *.pyo
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
+oprofile_data/
 
 *.cwnd
 *.dat
@@ -18,6 +19,7 @@
 *.routes
 *.tr
 *.qlen
+*.out
 [D|U]l[A-Z][a-z]*Stats.txt
 seventh-packet-byte-count.png
 
