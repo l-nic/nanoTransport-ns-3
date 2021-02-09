@@ -48,11 +48,11 @@ typedef struct hpccNanoPuCtrlMeta_t {
 typedef struct hpccNanoPuIngState_t {
     uint16_t credit;
     uint16_t ackNo;
-    uint32_t winSize;
+    uint32_t curWinSize;
     uint16_t lastUpdateSeq;
     uint16_t incStage;
     uint16_t nDupAck;
-    double utilization;
+    double util;
     IntHeader prevIntHeader;
 }hpccNanoPuIngState_t;
     
@@ -76,7 +76,7 @@ public:
   HpccNanoPuArchtPktGen (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta);
+  void CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta, Ptr<Packet> p);
   
 private:
 
@@ -108,16 +108,17 @@ public:
   
 protected:
 
-  uint16_t ComputeNumPkts (uint32_t winSizeBytes);
+  uint16_t ComputeNumPkts (uint32_t bytes);
   
-  bool MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
+  void MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
   
-  uint32_t ComputeWind (uint16_t txMsgId, double utilization, bool updateWc);
+  uint32_t ComputeWind (uint16_t txMsgId, bool fastReact);
 
 private:
 
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
-  uint64_t m_maxRate; //!< Line rate of the corresponding NetDevice
+  uint64_t m_maxRate;     //!< Line rate of the corresponding NetDevice
+  uint32_t m_maxWinSize;  //!< Window size in bytes for state initialization
     
   std::unordered_map<uint16_t, hpccNanoPuIngState_t> m_msgStates; //!< State of each msg {txMsgId => state}
 };
@@ -203,6 +204,12 @@ public:
   uint32_t GetMaxStage (void);
   
   /**
+   * \brief Return the minimum number of packets to keep in flight
+   * \returns the minCredit
+   */
+  uint16_t GetMinCredit (void);
+  
+  /**
    * \brief Implements programmable ingress pipeline architecture.
    *
    * \param device Pointer to NetDevice of desired interface
@@ -224,6 +231,7 @@ private:
   uint32_t m_winAi;      //!< Additive increase factor in Bytes
   double m_utilFac;      //!< Utilization Factor (defined as \eta in HPCC paper)
   uint16_t m_maxStage;   //!< Maximum number of stages before window is updated wrt. utilization
+  uint16_t m_minCredit;  //!< Minimum number of packets to keep in flight
 };   
 
 } // namespace ns3

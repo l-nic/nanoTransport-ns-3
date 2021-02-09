@@ -346,7 +346,7 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
      
     std::map<uint16_t,Ptr<Packet>> buffer;
     uint16_t numPkts = 0;
-    uint32_t nextPktSize;
+    uint32_t nextPktSize = remainingBytes;
     while (remainingBytes > 0)
     {
       nextPktSize = std::min(remainingBytes, (uint32_t) payloadSize);
@@ -621,15 +621,16 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       
     // compute the beginning of the inflight window
     rxMsgInfo.ackNo = getFirstSetBitPos(~(m_receivedBitmap[rxMsgInfo.rxMsgId]));
-    NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second <<
-                " (ackNo: " << rxMsgInfo.ackNo << 
-                " msgLen: " << msgLen << ") ");
       
     rxMsgInfo.numPkts = m_receivedBitmap[rxMsgInfo.rxMsgId].count();
       
-    rxMsgInfo.isNewPkt = m_receivedBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
+    rxMsgInfo.isNewPkt = !m_receivedBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
       
     rxMsgInfo.success = true;
+    NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second <<
+                " (ackNo: " << rxMsgInfo.ackNo << 
+                " msgLen: " << msgLen << " numPkts: " << rxMsgInfo.numPkts <<
+                " isNewPkt: " << rxMsgInfo.isNewPkt << ") ");
   }
   // try to allocate an rx_msg_id
   else if (m_rxMsgIdFreeList.size() > 0)
@@ -697,12 +698,14 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       {
         uint32_t msgSize = (meta.msgLen-1) * m_nanoPuArcht->GetPayloadSize ();
         msgSize += m_lastPktSize [meta.rxMsgId];
-        msg =  Create<Packet> (msgSize);
+//         msg =  Create<Packet> (msgSize);
+        pkt->AddPaddingAtEnd(msgSize - pkt->GetSize());
+        msg = pkt; // Avoids creating a new packet from scratch
       }
       else
       {
-        msg =  Create<Packet> ();
-        for (uint16_t i=0; i<meta.msgLen; i++)
+        msg =  m_buffers[meta.rxMsgId][0];
+        for (uint16_t i=1; i<meta.msgLen; i++)
         {
           msg->AddAtEnd (m_buffers[meta.rxMsgId][i]);
         }

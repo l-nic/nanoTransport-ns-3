@@ -25,9 +25,6 @@
 
 namespace ns3 {
     
-// TODO: The original INT implementation advertised by the HPCC uses only 64
-//       bits to represent the whole hop information. Should compress the struct
-//       below 3 times to be compatible.
 typedef struct intHop_t {
     uint64_t time;
     uint32_t txBytes;

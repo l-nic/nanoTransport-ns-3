@@ -283,8 +283,9 @@ main (int argc, char *argv[])
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
                      UintegerValue(1000));
+  uint16_t initialCredit = 142;
   Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
-                     UintegerValue(141));
+                     UintegerValue(initialCredit));
   Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
                      DoubleValue(MicroSeconds (13).GetSeconds ()));
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
@@ -351,13 +352,14 @@ main (int argc, char *argv[])
     Simulator::Schedule (Seconds (startTime), &SendMsg, 
                          nanoPuArchts[srcHost], hostAddresses[dstHost], 
                          dstPort, flowSize, payloadSize);
-     nScheduledMsgs++;
+    nScheduledMsgs++;
   }
   inputTraceFile.close();
   NS_LOG_DEBUG (nScheduledMsgs << " messages are scheduled.");
 
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");
+//   Simulator::Stop(Seconds(2.001)); // Used for unit tests without running everything
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;
