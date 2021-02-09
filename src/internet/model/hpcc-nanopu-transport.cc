@@ -73,7 +73,8 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta,
     
   egressMeta_t meta = {};
   meta.containsData = false;
-  meta.dstIP = ctrlMeta.remoteIp;
+  meta.rank = 0; // High Rank for control packets
+  meta.remoteIp = ctrlMeta.remoteIp;
     
   Ptr<Packet> cp; 
   if (m_nanoPuArcht->MemIsOptimized ())
@@ -120,10 +121,6 @@ HpccNanoPuArchtIngressPipe::HpccNanoPuArchtIngressPipe (Ptr<HpccNanoPuArcht> nan
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
-  Ptr<NetDevice> netDevice = m_nanoPuArcht->GetBoundNetDevice ();
-  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
-  
-  m_maxRate = p2pNetDevice->GetDataRate ().GetBitRate();
     
   m_maxWinSize = m_nanoPuArcht->GetInitialCredit () 
                   * m_nanoPuArcht->GetPayloadSize ();
@@ -179,6 +176,10 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
     curHopInfo = intHdr.PeekHopN (curHopIdx);
     oldHopInfo = m_msgStates[txMsgId].prevIntHeader.PeekHopN (curHopIdx);
       
+    NS_ASSERT_MSG (oldHopInfo.bitRate != 0, 
+                   "The old INT header for a message has fewer "
+                   "hops than the current INT header.");
+      
     uint64_t timeDelta;
     if (curHopInfo.time > oldHopInfo.time)
         timeDelta = curHopInfo.time - oldHopInfo.time;
@@ -193,7 +194,8 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
       bytesDelta = curHopInfo.txBytes + (1<<IntHeader::BYTE_WIDTH) - oldHopInfo.txBytes;
     txRate = ((double)bytesDelta) * 8.0 / curTao;
       
-    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen) * (double)m_maxRate
+    curUtil = (double)std::min(curHopInfo.qlen, oldHopInfo.qlen) 
+              * (double)(m_nanoPuArcht->GetNicRate().GetBitRate())
               / ((double)curHopInfo.bitRate * m_maxWinSize);
     curUtil += txRate / (double)curHopInfo.bitRate;
       
@@ -503,8 +505,8 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                  " NanoPU HPCC EgressPipe processing data packet.");
         
     HpccHeader hpcch;
-    hpcch.SetSrcPort (meta.srcPort);
-    hpcch.SetDstPort (meta.dstPort);
+    hpcch.SetSrcPort (meta.localPort);
+    hpcch.SetDstPort (meta.remotePort);
     hpcch.SetTxMsgId (meta.txMsgId);
     hpcch.SetFlags (HpccHeader::Flags_t::DATA);
     hpcch.SetPktOffset (meta.pktOffset);
@@ -534,7 +536,7 @@ void HpccNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     
   Ipv4Header iph;
   iph.SetSource (srcIP);
-  iph.SetDestination (meta.dstIP);
+  iph.SetDestination (meta.remoteIp);
   iph.SetPayloadSize (cp->GetSize ());
   iph.SetTtl (64);
   iph.SetProtocol (IntHeader::PROT_NUMBER);
@@ -586,6 +588,11 @@ TypeId HpccNanoPuArcht::GetTypeId (void)
                    "High performant mode (only packet sizes are stored to save from memory).",
                    BooleanValue (true),
                    MakeBooleanAccessor (&HpccNanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
+    .AddAttribute ("EnableArbiterQueueing", 
+                   "Enables priority queuing on Arbiter.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&HpccNanoPuArcht::m_enableArbiterQueueing),
                    MakeBooleanChecker ())
     .AddAttribute ("BaseRTT", "The base propagation RTT in seconds.",
                    DoubleValue (MicroSeconds (13).GetSeconds ()),

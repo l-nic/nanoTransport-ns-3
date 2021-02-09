@@ -290,6 +290,8 @@ main (int argc, char *argv[])
                      UintegerValue(7));
   Config::SetDefault("ns3::HomaNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HomaNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(true));
   Config::SetDefault("ns3::HomaNanoPuArcht::NumTotalPrioBands", 
                      UintegerValue(numTotalPrioBands));
   Config::SetDefault("ns3::HomaNanoPuArcht::NumUnschedPrioBands", 

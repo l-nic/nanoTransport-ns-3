@@ -117,7 +117,6 @@ protected:
 private:
 
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
-  uint64_t m_maxRate;     //!< Line rate of the corresponding NetDevice
   uint32_t m_maxWinSize;  //!< Window size in bytes for state initialization
     
   std::unordered_map<uint16_t, hpccNanoPuIngState_t> m_msgStates; //!< State of each msg {txMsgId => state}

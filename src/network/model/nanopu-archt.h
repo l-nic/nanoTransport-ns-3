@@ -22,15 +22,18 @@
 
 #include <unordered_map>
 #include <tuple>
+#include <vector>
 #include <list>
 #include <math.h>
 #include <functional>
 #include <bitset>
+#include <queue>
 
 #include "ns3/object.h"
 #include "ns3/traced-callback.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/data-rate.h"
 #include "ns3/nanopu-app-header.h"
 
 // Define module delay in nano seconds
@@ -71,14 +74,19 @@ typedef struct egressMeta_t {
     bool containsData;
     bool isNewMsg;
     bool isRtx;
-    Ipv4Address dstIP;
-    uint16_t srcPort;
-    uint16_t dstPort;
+    Ipv4Address remoteIp;
+    uint16_t localPort;
+    uint16_t remotePort;
     uint16_t txMsgId;
     uint16_t msgLen;
     uint16_t pktOffset;
-    uint8_t priority;
+    uint16_t rank;
 }egressMeta_t;
+typedef struct arbiterMeta_t {
+    Ptr<Packet> p;
+    egressMeta_t egressMeta;
+}arbiterMeta_t;   
+
 
 /******************************************************************************/
 
@@ -110,8 +118,16 @@ public:
   
 protected:
 };
- 
+    
 /******************************************************************************/
+    
+struct HighRankFirst
+{
+  bool operator()(const arbiterMeta_t& lhs, const arbiterMeta_t& rhs) const
+  {
+    return lhs.egressMeta.rank > rhs.egressMeta.rank;
+  }
+};
     
 /**
  * \ingroup nanopu-archt
@@ -128,16 +144,24 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtArbiter (void);
+  NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht);
   ~NanoPuArchtArbiter (void);
   
   void SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe);
   
   void Receive(Ptr<Packet> p, egressMeta_t meta);
   
+  void TxPkt (void);
+  
 protected:
   
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtEgressPipe> m_egressPipe;
+  
+  uint16_t m_headerSize; //<! HSize of header that is typically added after the arbiter
+  
+  std::priority_queue<arbiterMeta_t, std::vector<arbiterMeta_t>, HighRankFirst> m_pq;
+  EventId m_nextTxEvent;        //!< The EventID for the next transmission
 };
     
 /******************************************************************************/
@@ -216,21 +240,22 @@ protected:
   
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
   std::unordered_map<uint16_t, 
-                     NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {tx_msg_id => appHeader}
+                     NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {txMsgId => appHeader}
                      
   // Either the buffer or the lastPktSize below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
-                              Ptr<Packet>>> m_buffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet}}
-  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {tx_msg_id => Last Packet Size}
+                              Ptr<Packet>>> m_buffers; //!< message packetization buffers, {txMsgId => {pktOffset => Packet}}
+  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {txMsgId => Last Packet Size}
                      
   std::unordered_map<uint16_t, 
-                       bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {tx_msg_id => bitmap}
-  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {tx_msg_id => credit} 
+                       bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {txMsgId => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {txMsgId => credit} 
   std::unordered_map<uint16_t, 
-                       bitmap_t> m_toBeTxBitmap; //!< bitmap to determine which packet to send, {tx_msg_id => bitmap}
-  std::unordered_map<uint16_t, uint16_t> m_maxTxPktOffset; //!< State to track max pktOffset sent so far {tx_msg_id => offset}
-  std::unordered_map<uint16_t, uint16_t> m_timeoutCnt; //!< State to track number of timeouts {tx_msg_id => timeout count}
+                       bitmap_t> m_toBeTxBitmap; //!< bitmap to determine which packet to send, {txMsgId => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_maxTxPktOffset; //!< State to track max pktOffset sent so far {txMsgId => offset}
+  std::unordered_map<uint16_t, uint16_t> m_timeoutCnt; //!< State to track number of timeouts {txMsgId => timeout count}
+  std::unordered_map<uint16_t, uint16_t> m_ranks; //!< State to track rank {txMsgId => rank}
 };
     
 /******************************************************************************/
@@ -482,6 +507,13 @@ public:
   Ipv4Address GetLocalIp (void);
   
   /**
+   * \brief Returns the associated NIC's line rate.
+   * 
+   * \returns the line rate.
+   */
+  DataRate GetNicRate (void);
+  
+  /**
    * \brief Return the MTU size without the header sizes
    * \returns the payloadSize
    */
@@ -516,6 +548,12 @@ public:
    * \returns the m_memIsOptimized
    */
   bool MemIsOptimized (void);
+  
+  /**
+   * \brief Return whether the priority queueing on the Arbiter is enabled
+   * \returns the m_enableArbiterQueueing
+   */
+  bool ArbiterQueueEnabled (void);
 
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
@@ -546,6 +584,7 @@ protected:
 
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
   Ipv4Address    m_localIp; //!< the local IPv4 Address
+  DataRate       m_nicRate; //<! the line rate of the NIC
     
   uint16_t m_payloadSize;  //!< MTU for the network interface excluding the header sizes
   uint16_t m_initialCredit; //!< Initial window of packets to be sent
@@ -554,6 +593,7 @@ protected:
   uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
   
   bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
+  bool m_enableArbiterQueueing; //!< Enables priority queuing on Arbiter
     
   Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
   Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture

@@ -29,9 +29,10 @@
 #include "ns3/uinteger.h"
 #include "ns3/boolean.h"
 #include "node.h"
+#include "ns3/point-to-point-net-device.h"
 #include "ns3/ipv4.h"
-#include "nanopu-archt.h"
 #include "ns3/ipv4-header.h"
+#include "nanopu-archt.h"
 #include "ns3/nanopu-app-header.h"
 
 namespace ns3 {
@@ -99,9 +100,14 @@ TypeId NanoPuArchtArbiter::GetTypeId (void)
   return tid;
 }
 
-NanoPuArchtArbiter::NanoPuArchtArbiter ()
+NanoPuArchtArbiter::NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+    
+  m_nanoPuArcht = nanoPuArcht;
+  
+  m_headerSize = m_nanoPuArcht->GetBoundNetDevice()->GetMtu () 
+                 - m_nanoPuArcht->GetPayloadSize ();
 }
 
 NanoPuArchtArbiter::~NanoPuArchtArbiter ()
@@ -120,15 +126,44 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
-  // TODO: The arbiter acts as a priority queue that pulls packets 
-  //       from the packetization buffer and the packet generator.
-  //       Then the arbiter should prioritize control packets over
-  //       data packets for higher performance.
+  if (m_nanoPuArcht->ArbiterQueueEnabled())
+  {
+    arbiterMeta_t arbiterMeta = {};
+    arbiterMeta.p = p;
+    arbiterMeta.egressMeta = meta;
+      
+    m_pq.push(arbiterMeta);
+      
+    if (m_nextTxEvent.IsExpired())
+      this->TxPkt ();
+  }
+  else
+    m_egressPipe->EgressPipe(p, meta);
+}
     
-  m_egressPipe->EgressPipe(p, meta);
-//   Simulator::Schedule (NanoSeconds(PACKETIZATION_DELAY),
-//                        &NanoPuArchtEgressPipe::EgressPipe, 
-//                        m_egressPipe, p, meta);
+void NanoPuArchtArbiter::TxPkt()
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  
+  NS_ASSERT(!m_pq.empty());
+    
+  arbiterMeta_t arbiterMeta = m_pq.top();
+  m_pq.pop();
+    
+  if(!m_pq.empty())
+  {
+    NS_ASSERT(m_nextTxEvent.IsExpired());
+      
+    // TODO: Below, we assume that the difference between MTU and 
+    //       the configured payloas size is all reserved for 
+    //       transport + IP + PPP headers
+    uint32_t packetSize = m_headerSize + arbiterMeta.p->GetSize ();
+    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (packetSize);
+    
+    m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
+  }
+    
+  m_egressPipe->EgressPipe(arbiterMeta.p, arbiterMeta.egressMeta);
 }
     
 /******************************************************************************/
@@ -180,8 +215,10 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
       && std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
     m_deliveredBitmap[txMsgId] |= ackPkts;
+    m_ranks[txMsgId] = msgLen -  m_deliveredBitmap[txMsgId].count();
       
 //     if (m_deliveredBitmap[txMsgId] == (((bitmap_t)1)<<msgLen)-1)
+//     if (m_ranks[txMsgId] == 0) // More efficient, but bug prone
     if (m_deliveredBitmap[txMsgId] == setBitMapUntil(msgLen))
     {
       NS_LOG_INFO("The whole message is delivered.");
@@ -209,12 +246,12 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
     
   if (std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
-    if (rtxPkt != -1 && m_deliveredBitmap.find(txMsgId) != m_deliveredBitmap.end())
+    if (rtxPkt != -1 && m_toBeTxBitmap.find(txMsgId) != m_toBeTxBitmap.end())
     {
       NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                    " Marking msg " << txMsgId << ", pkt " << rtxPkt <<
                    " for retransmission.");
-      m_toBeTxBitmap[txMsgId] |= (((bitmap_t)1)<<rtxPkt);
+      m_toBeTxBitmap[txMsgId].set(rtxPkt);
     }
       
     if (newCredit != -1 && m_credits.find(txMsgId) != m_credits.end())
@@ -377,15 +414,13 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
     m_maxTxPktOffset[txMsgId] = 0;
       
     m_timeoutCnt[txMsgId] = 0;
+      
+    m_ranks[txMsgId] = numPkts;
     
     m_timer->ScheduleTimerEvent (txMsgId, 0);
       
 //     bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
     bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
-    // TODO: txPkts should be placed in a fifo queue where schedulings
-    //       from other events also place packets to. Since this is just
-    //       a discrete event simulator, direct function calls would also
-    //       work as a fifo.
     bool isRtx = false;
     bool isNewMsg = true;
     Dequeue (txMsgId, txPkts, isRtx, isNewMsg);
@@ -409,7 +444,18 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << txMsgId);
   
+  NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
+  uint16_t msgLen = apphdr.GetMsgLen();
+    
   egressMeta_t meta = {};
+  meta.containsData = true;
+  meta.txMsgId = txMsgId;
+  meta.msgLen = msgLen;
+  meta.remoteIp = apphdr.GetRemoteIp();
+  meta.remotePort = apphdr.GetRemotePort();
+  meta.localPort = apphdr.GetLocalPort();
+  meta.rank = m_ranks[txMsgId];
+    
   uint16_t pktOffset = getFirstSetBitPos(txPkts);
   while (pktOffset != BITMAP_SIZE)
   {
@@ -417,9 +463,6 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
                 " NanoPU Packetization Buffer transmitting pkt " <<
                 pktOffset << " from msg " << txMsgId);
     
-    NanoPuAppHeader apphdr = m_appHeaders[txMsgId];
-    uint16_t msgLen = apphdr.GetMsgLen();
-      
     Ptr<Packet> p;
     if (m_nanoPuArcht->MemIsOptimized ())
     {
@@ -432,13 +475,7 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
       p = m_buffers[txMsgId][pktOffset]->Copy ();
     
     meta.isNewMsg = isNewMsg;
-    meta.containsData = true;
     meta.isRtx = isRtx;
-    meta.dstIP = apphdr.GetRemoteIp();
-    meta.dstPort = apphdr.GetRemotePort();
-    meta.srcPort = apphdr.GetLocalPort();
-    meta.txMsgId = txMsgId;
-    meta.msgLen = msgLen;
     meta.pktOffset = pktOffset;
       
     m_arbiter->Receive(p, meta);
@@ -459,12 +496,13 @@ void NanoPuArchtPacketize::ClearStateForMsg (uint16_t txMsgId)
   m_timer->CancelTimerEvent (txMsgId);
         
   /* Clear the stored state for simulation performance */
-  m_appHeaders.erase(txMsgId);
-  m_deliveredBitmap.erase(txMsgId);
-  m_credits.erase(txMsgId);
-  m_toBeTxBitmap.erase(txMsgId);
-  m_maxTxPktOffset.erase(txMsgId);
-  m_timeoutCnt.erase(txMsgId);
+  m_appHeaders.erase (txMsgId);
+  m_deliveredBitmap.erase (txMsgId);
+  m_credits.erase (txMsgId);
+  m_toBeTxBitmap.erase (txMsgId);
+  m_maxTxPktOffset.erase (txMsgId);
+  m_timeoutCnt.erase (txMsgId);
+  m_ranks.erase (txMsgId);
   
   if (m_nanoPuArcht->MemIsOptimized ())
   {
@@ -905,6 +943,11 @@ TypeId NanoPuArcht::GetTypeId (void)
                    BooleanValue (true),
                    MakeBooleanAccessor (&NanoPuArcht::m_memIsOptimized),
                    MakeBooleanChecker ())
+    .AddAttribute ("EnableArbiterQueueing", 
+                   "Enables priority queuing on Arbiter.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&NanoPuArcht::m_enableArbiterQueueing),
+                   MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the the NanoPuArcht by the sender application layer.",
@@ -946,7 +989,7 @@ void NanoPuArcht::AggregateIntoDevice (Ptr<NetDevice> device)
   BindToNetDevice ();
   AggregateObject(m_boundnetdevice);
     
-  m_arbiter = CreateObject<NanoPuArchtArbiter> ();
+  m_arbiter = CreateObject<NanoPuArchtArbiter> (this);
     
   m_packetize = CreateObject<NanoPuArchtPacketize> (this, m_arbiter);
     
@@ -992,6 +1035,9 @@ void NanoPuArcht::BindToNetDevice ()
   int32_t ifIndex = ipv4proto->GetInterfaceForDevice (m_boundnetdevice);
   Ipv4Address dummyAddr ((uint32_t)0);
   m_localIp = ipv4proto->SourceAddressSelection (ifIndex, dummyAddr);
+    
+  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(m_boundnetdevice))); 
+  m_nicRate = p2pNetDevice->GetDataRate ();
 }
     
 Ptr<NetDevice>
@@ -1031,6 +1077,12 @@ NanoPuArcht::GetLocalIp (void)
   return m_localIp;
 }
     
+DataRate
+NanoPuArcht::GetNicRate (void)
+{
+  return m_nicRate;
+}
+    
 uint16_t NanoPuArcht::GetPayloadSize (void)
 {
   return m_payloadSize;
@@ -1059,6 +1111,11 @@ uint16_t NanoPuArcht::GetMaxNMessages (void)
 bool NanoPuArcht::MemIsOptimized (void)
 {
   return m_memIsOptimized;
+}
+    
+bool NanoPuArcht::ArbiterQueueEnabled (void)
+{
+  return m_enableArbiterQueueing;
 }
    
 void NanoPuArcht::SetRecvCallback (Callback<void, Ptr<Packet> > reassembledMsgCb)

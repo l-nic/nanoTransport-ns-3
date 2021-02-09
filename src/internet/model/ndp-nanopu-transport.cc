@@ -29,7 +29,6 @@
 #include "ns3/node.h"
 #include "ns3/ipv4.h"
 #include "ns3/data-rate.h"
-#include "ns3/point-to-point-net-device.h"
 #include "ns3/nanopu-archt.h"
 #include "ndp-nanopu-transport.h"
 #include "ns3/ipv4-header.h"
@@ -58,10 +57,7 @@ NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NdpNanoPuArcht> nanoPuArcht)
     
   m_nanoPuArcht = nanoPuArcht;
     
-  Ptr<NetDevice> netDevice = m_nanoPuArcht->GetBoundNetDevice ();
-  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
-  
-  DataRate dataRate = p2pNetDevice->GetDataRate ();
+  DataRate dataRate = m_nanoPuArcht->GetNicRate ();
   uint16_t mtuBytes = m_nanoPuArcht->GetBoundNetDevice ()->GetMtu ();
   m_packetTxTime = dataRate.CalculateBytesTxTime ((uint32_t) mtuBytes);
     
@@ -90,7 +86,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
     
   egressMeta_t meta = {};
   meta.containsData = false;
-  meta.dstIP = dstIp;
+  meta.rank = 0; // High Rank for control packets
+  meta.remoteIp = dstIp;
     
   NdpHeader ndph;
   ndph.SetSrcPort (srcPort);
@@ -365,8 +362,8 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
                  " NanoPU NDP EgressPipe processing data packet.");
       
     NdpHeader ndph;
-    ndph.SetSrcPort (meta.srcPort);
-    ndph.SetDstPort (meta.dstPort);
+    ndph.SetSrcPort (meta.localPort);
+    ndph.SetDstPort (meta.remotePort);
     ndph.SetTxMsgId (meta.txMsgId);
     ndph.SetMsgLen (meta.msgLen);
     ndph.SetPktOffset (meta.pktOffset);
@@ -389,7 +386,7 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
 //   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
   Ipv4Address srcIP = m_nanoPuArcht->GetLocalIp ();
   iph.SetSource (srcIP);
-  iph.SetDestination (meta.dstIP);
+  iph.SetDestination (meta.remoteIp);
   iph.SetPayloadSize (cp->GetSize ());
   iph.SetTtl (64);
   iph.SetProtocol (NdpHeader::PROT_NUMBER);
@@ -441,6 +438,11 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
                    "High performant mode (only packet sizes are stored to save from memory).",
                    BooleanValue (true),
                    MakeBooleanAccessor (&NdpNanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
+    .AddAttribute ("EnableArbiterQueueing", 
+                   "Enables priority queuing on Arbiter.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&NdpNanoPuArcht::m_enableArbiterQueueing),
                    MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "

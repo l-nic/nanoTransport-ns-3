@@ -28,6 +28,7 @@
 
 #include <iostream>
 #include <stdlib.h>
+#include <chrono>
 
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
@@ -130,6 +131,8 @@ main (int argc, char *argv[])
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(true));
    
   Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>();
   srcArcht->AggregateIntoDevice(senderDevices.Get (1));
@@ -163,7 +166,15 @@ main (int argc, char *argv[])
     
 // //   pointToPoint.EnablePcapAll ("tmp.pcap", true);
 
+  auto start = std::chrono::high_resolution_clock::now();
+    
   Simulator::Run ();
+    
+  auto stop = std::chrono::high_resolution_clock::now(); 
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  NS_LOG_DEBUG("*** Time taken by simulation: "
+                << duration.count() << " microseconds ***");
+    
   Simulator::Destroy ();
   return 0;
 }

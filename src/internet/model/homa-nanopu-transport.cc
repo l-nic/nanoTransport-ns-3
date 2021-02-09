@@ -78,10 +78,11 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
     
   egressMeta_t egressMeta = {};
   egressMeta.containsData = false;
+  egressMeta.rank = 0; // High Rank for control packets
     
   if (ctrlMeta.shouldGenCtrlPkt)
   {
-    egressMeta.dstIP = ctrlMeta.remoteIp;
+    egressMeta.remoteIp = ctrlMeta.remoteIp;
       
     homah.SetSrcPort (ctrlMeta.localPort);
     homah.SetDstPort (ctrlMeta.remotePort);
@@ -97,9 +98,9 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
   if (ctrlMeta.shouldUpdateState)
   {
     egressMeta.txMsgId = ctrlMeta.txMsgId;
-    egressMeta.priority = ctrlMeta.priority;
       
     homah.SetFlags(HomaHeader::Flags_t::BOGUS);
+    homah.SetPrio (ctrlMeta.priority);
   }
     
   p-> AddHeader (homah);
@@ -400,8 +401,8 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     if (meta.isNewMsg)
       m_priorities[meta.txMsgId] = this->GetPriority (meta.msgLen);
       
-    homah.SetSrcPort (meta.srcPort);
-    homah.SetDstPort (meta.dstPort);
+    homah.SetSrcPort (meta.localPort);
+    homah.SetDstPort (meta.remotePort);
     homah.SetTxMsgId (meta.txMsgId);
     homah.SetMsgSize (meta.msgLen);
     homah.SetPktOffset (meta.pktOffset);
@@ -425,7 +426,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     {
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU Homa EgressPipe updating local state.");
-      m_priorities[meta.txMsgId] = meta.priority;
+      m_priorities[meta.txMsgId] = homah.GetPrio();
         
       if (ctrlFlag & HomaHeader::Flags_t::BOGUS)
         return;
@@ -447,7 +448,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     
   Ipv4Header iph;
   iph.SetSource (m_nanoPuArcht->GetLocalIp ());
-  iph.SetDestination (meta.dstIP);
+  iph.SetDestination (meta.remoteIp);
   iph.SetPayloadSize (cp->GetSize ());
   iph.SetTtl (64);
   iph.SetProtocol (HomaHeader::PROT_NUMBER);
@@ -509,6 +510,11 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                    "High performant mode (only packet sizes are stored to save from memory).",
                    BooleanValue (true),
                    MakeBooleanAccessor (&HomaNanoPuArcht::m_memIsOptimized),
+                   MakeBooleanChecker ())
+    .AddAttribute ("EnableArbiterQueueing", 
+                   "Enables priority queuing on Arbiter.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&HomaNanoPuArcht::m_enableArbiterQueueing),
                    MakeBooleanChecker ())
     .AddAttribute ("NumTotalPrioBands", "Total number of priority levels used within the network",
                    UintegerValue (8),
