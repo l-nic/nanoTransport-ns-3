@@ -42,6 +42,15 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("HpccNanoPuSimpleTest");
 
+static void
+BytesInArbiterQueueTrace (Ipv4Address saddr, 
+                          uint32_t oldval, uint32_t newval)
+{
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+               " Arbiter Queue size from " << oldval << " to " << newval <<
+               " ("<< saddr << ")");
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -50,9 +59,9 @@ main (int argc, char *argv[])
   
   Time::SetResolution (Time::NS);
   LogComponentEnable ("HpccNanoPuSimpleTest", LOG_LEVEL_FUNCTION);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-  LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
+//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
+//   LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
+//   LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
 
@@ -110,7 +119,7 @@ main (int argc, char *argv[])
   Ipv4Header ipv4h;
   uint16_t payloadSize = switchDevices.Get (1)->GetMtu () - ipv4h.GetSerializedSize () 
                          - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
-  NS_LOG_DEBUG("MaxPayloadSize for HpccNanoPuArcht: " << payloadSize);
+  NS_LOG_INFO("MaxPayloadSize for HpccNanoPuArcht: " << payloadSize);
   Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
@@ -132,7 +141,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
   Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 
-                     BooleanValue(true));
+                     BooleanValue(false));
    
   Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>();
   srcArcht->AggregateIntoDevice(senderDevices.Get (1));
@@ -140,6 +149,10 @@ main (int argc, char *argv[])
   Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>();
   dstArcht->AggregateIntoDevice(receiveDevices.Get (1));
   NS_ASSERT(dstArcht->MemIsOptimized());
+    
+  srcArcht->TraceConnectWithoutContext ("PacketsInArbiterQueue", 
+                                        MakeBoundCallback (&BytesInArbiterQueueTrace, 
+                                                           senderIf.GetAddress (1)));
     
   /* Currently each nanopu is able to connect to a single application only.
    *
@@ -156,7 +169,7 @@ main (int argc, char *argv[])
     
   NanoPuTrafficGenerator senderApp = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   senderApp.SetLocalPort(111);
-  senderApp.SetMsgSize(1,1); // Deterministically set the message size
+  senderApp.SetMsgSize(3,3); // Deterministically set the message size
   senderApp.SetMaxMsg(1);
   senderApp.StartImmediately();
   senderApp.Start(Seconds (3.0));

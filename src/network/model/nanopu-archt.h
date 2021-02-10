@@ -30,6 +30,7 @@
 #include <queue>
 
 #include "ns3/object.h"
+#include "ns3/traced-value.h"
 #include "ns3/traced-callback.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-header.h"
@@ -499,6 +500,14 @@ public:
    */
   Ptr<NanoPuArchtArbiter> GetArbiter (void);
   
+  uint32_t GetNArbiterPackets (void) const;
+  
+  uint32_t GetNArbiterBytes (void) const;
+  
+  void SetNArbiterPackets (uint32_t nArbiterPackets);
+  
+  void SetNArbiterBytes (uint32_t nArbiterBytes);
+  
   /**
    * \brief Returns architecture's local IPv4 address.
    * 
@@ -605,6 +614,9 @@ protected:
   
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
+  
+  TracedValue<uint32_t> m_nArbiterPackets; //<! Trace source to track occupancy of Arbiter
+  TracedValue<uint32_t> m_nArbiterBytes; //<! Trace source to track occupancy of Arbiter
 };
     
 } // namespace ns3

@@ -626,6 +626,14 @@ TypeId HpccNanoPuArcht::GetTypeId (void)
                      "the receiver application by the NanoPuArcht layer.",
                      MakeTraceSourceAccessor (&HpccNanoPuArcht::m_msgFinishTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("PacketsInArbiterQueue",
+                     "Number of packets currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&HpccNanoPuArcht::m_nArbiterPackets),
+                     "ns3::TracedValueCallback::Uint32")
+    .AddTraceSource ("BytesInArbiterQueue",
+                     "Number of bytes (without metadata) currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&HpccNanoPuArcht::m_nArbiterBytes),
+                     "ns3::TracedValueCallback::Uint32")
   ;
   return tid;
 }

@@ -134,6 +134,9 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
       
     m_pq.push(arbiterMeta);
       
+    m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()+1);
+    m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () + p->GetSize());
+      
     if (m_nextTxEvent.IsExpired())
       this->TxPkt ();
   }
@@ -145,23 +148,25 @@ void NanoPuArchtArbiter::TxPkt()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
-  NS_ASSERT(!m_pq.empty());
+  if (m_pq.empty())
+    return;
     
   arbiterMeta_t arbiterMeta = m_pq.top();
   m_pq.pop();
     
-  if(!m_pq.empty())
-  {
-    NS_ASSERT(m_nextTxEvent.IsExpired());
-      
-    // TODO: Below, we assume that the difference between MTU and 
-    //       the configured payloas size is all reserved for 
-    //       transport + IP + PPP headers
-    uint32_t packetSize = m_headerSize + arbiterMeta.p->GetSize ();
-    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (packetSize);
+  uint32_t pSize = arbiterMeta.p->GetSize ();
+  // TODO: Below, we assume that the difference between MTU and 
+  //       the configured payloas size is all reserved for 
+  //       transport + IP + PPP headers
+  uint32_t totSize = m_headerSize + pSize;
     
-    m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
-  }
+  Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (totSize);
+   
+  NS_ASSERT(m_nextTxEvent.IsExpired());
+  m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
+    
+  m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()-1);
+  m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () - pSize);
     
   m_egressPipe->EgressPipe(arbiterMeta.p, arbiterMeta.egressMeta);
 }
@@ -958,6 +963,14 @@ TypeId NanoPuArcht::GetTypeId (void)
                      "the receiver application by the NanoPuArcht layer.",
                      MakeTraceSourceAccessor (&NanoPuArcht::m_msgFinishTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("PacketsInArbiterQueue",
+                     "Number of packets currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&NanoPuArcht::m_nArbiterPackets),
+                     "ns3::TracedValueCallback::Uint32")
+    .AddTraceSource ("BytesInArbiterQueue",
+                     "Number of bytes (without metadata) currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&NanoPuArcht::m_nArbiterBytes),
+                     "ns3::TracedValueCallback::Uint32")
   ;
   return tid;
 }
@@ -967,6 +980,8 @@ TypeId NanoPuArcht::GetTypeId (void)
  * see ../../internet/model/.*-nanopu-transport.{h/cc) for constructor
  */
 NanoPuArcht::NanoPuArcht ()
+  : m_nArbiterPackets (0),
+    m_nArbiterBytes (0)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
@@ -1069,6 +1084,30 @@ Ptr<NanoPuArchtArbiter>
 NanoPuArcht::GetArbiter (void)
 {
   return m_arbiter;
+}
+    
+uint32_t
+NanoPuArcht::GetNArbiterPackets (void) const
+{
+  return m_nArbiterPackets;
+}
+    
+uint32_t
+NanoPuArcht::GetNArbiterBytes (void) const
+{
+  return m_nArbiterBytes;
+}
+    
+void
+NanoPuArcht::SetNArbiterPackets (uint32_t nArbiterPackets)
+{
+  m_nArbiterPackets = nArbiterPackets;
+}
+    
+void
+NanoPuArcht::SetNArbiterBytes (uint32_t nArbiterBytes)
+{
+  m_nArbiterBytes = nArbiterBytes;
 }
     
 Ipv4Address
