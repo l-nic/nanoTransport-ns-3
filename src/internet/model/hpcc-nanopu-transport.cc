@@ -99,8 +99,8 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta,
   hpcch.SetPayloadSize ((uint16_t)cp->GetSize ());
   cp-> AddHeader (hpcch); 
     
-  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-                " NanoPU HPCC PktGen generated: " << cp->ToString ());
+//   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
+//                 " NanoPU HPCC PktGen generated: " << cp->ToString ());
     
   m_nanoPuArcht->GetArbiter ()->Receive(cp, meta);
 }
@@ -171,8 +171,8 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
   double txRate;
   
   // TODO: Unroll the for loop below when implementing on P4
-  for (uint8_t curHopIdx = 0; curHopIdx < nHops; curHopIdx++)
-  {
+  for (uint8_t curHopIdx = 1; curHopIdx < nHops; curHopIdx++)
+  { // Ignore the first hop which is essentially the bursty host itself
     curHopInfo = intHdr.PeekHopN (curHopIdx);
     oldHopInfo = m_msgStates[txMsgId].prevIntHeader.PeekHopN (curHopIdx);
       
@@ -199,6 +199,15 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
               / ((double)curHopInfo.bitRate * m_maxWinSize);
     curUtil += txRate / (double)curHopInfo.bitRate;
       
+    NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+                 " maxUtil (" << maxUtil << 
+                   ") to be updated to " << curUtil <<
+                   " (curTao: " << curTao <<
+                   " bytesDelta: " << bytesDelta << 
+                   " txRate: " << txRate <<
+                   " qlen: " << std::min(curHopInfo.qlen, oldHopInfo.qlen) <<
+                   " m_maxWinSize: " << m_maxWinSize << ")");
+      
     if (curUtil > maxUtil)
     {
       maxUtil = curUtil;
@@ -211,9 +220,9 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
   tao = std::min(tao, baseRtt);
   m_msgStates[txMsgId].util = (m_msgStates[txMsgId].util * (baseRtt - tao) + maxUtil * tao) / baseRtt;
     
-  NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () <<
-               " MeasureInflight computed new utilization as: " <<
-               m_msgStates[txMsgId].util << " (maxUtil: " << maxUtil << ")");
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+                " MeasureInflight computed new utilization as: " <<
+                m_msgStates[txMsgId].util << " (maxUtil: " << maxUtil << ")");
     
   return;
 }
@@ -418,6 +427,13 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     uint16_t nextSeq = m_msgStates[txMsgId].credit + 1;
     if (m_msgStates[txMsgId].lastUpdateSeq == 0) // first RTT
     {
+      NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+                   " Credit (" << m_msgStates[txMsgId].credit << 
+                   ") to be updated to " << nextSeq <<
+                   " (ackNo: " << m_msgStates[txMsgId].ackNo <<
+                   " curWinSize: " << m_msgStates[txMsgId].curWinSize << 
+                   " pktOffset: " << pktOffset << ")");
+        
       m_msgStates[txMsgId].lastUpdateSeq = nextSeq;
       m_msgStates[txMsgId].credit = nextSeq;
     }
@@ -438,6 +454,8 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
                    ") to be updated to " << newCreditPkts <<
                    " (ackNo: " << m_msgStates[txMsgId].ackNo <<
                    " curWinSize: " << m_msgStates[txMsgId].curWinSize << 
+                   " activeWinSizeBytes: " << winSizeBytes <<
+                   " activeWinSizePkts: " << winSizePkts <<
                    " pktOffset: " << pktOffset << ")");
       
       if (newCreditPkts > m_msgStates[txMsgId].credit)

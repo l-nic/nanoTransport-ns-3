@@ -62,7 +62,8 @@ IntHeader::GetInstanceTypeId (void) const
 void 
 IntHeader::Print (std::ostream &os) const
 {   
-  os << "nHops: " << (uint16_t)m_nHops;
+  os << "length: " << m_payloadSize + GetSerializedSize ()
+     << " nHops: " << (uint16_t)m_nHops;
     
   for (uint8_t i=0; i < m_nHops; i++)
   {

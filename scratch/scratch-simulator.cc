@@ -109,68 +109,79 @@ main (int argc, char *argv[])
     
   /**********************************************************/
     
-  struct HighRankFirst
-  {
-    bool operator()(const Ptr<Packet> lhs, const Ptr<Packet> rhs) const
-    {
-      SocketPriorityTag lhsTag;
-      lhs->PeekPacketTag(lhsTag);
-      uint8_t lhsRank = lhsTag.GetPriority ();
+//   struct HighRankFirst
+//   {
+//     bool operator()(const Ptr<Packet> lhs, const Ptr<Packet> rhs) const
+//     {
+//       SocketPriorityTag lhsTag;
+//       lhs->PeekPacketTag(lhsTag);
+//       uint8_t lhsRank = lhsTag.GetPriority ();
       
-      SocketPriorityTag rhsTag;
-      rhs->PeekPacketTag(rhsTag);
-      uint8_t rhsRank = rhsTag.GetPriority ();
+//       SocketPriorityTag rhsTag;
+//       rhs->PeekPacketTag(rhsTag);
+//       uint8_t rhsRank = rhsTag.GetPriority ();
       
-      return lhsRank > rhsRank;
-    }
-  };
+//       return lhsRank > rhsRank;
+//     }
+//   };
     
-  Ptr<Packet> p0 = Create<Packet> ();
-  SocketPriorityTag tag0;
-  uint8_t rank0 = 0;
-  tag0.SetPriority(rank0);
-  p0->AddPacketTag (tag0);
-  NS_LOG_DEBUG("Packet with rank " << (int)rank0 << ": " << p0);
+//   Ptr<Packet> p0 = Create<Packet> ();
+//   SocketPriorityTag tag0;
+//   uint8_t rank0 = 0;
+//   tag0.SetPriority(rank0);
+//   p0->AddPacketTag (tag0);
+//   NS_LOG_DEBUG("Packet with rank " << (int)rank0 << ": " << p0);
     
-  Ptr<Packet> p1 = Create<Packet> ();
-  SocketPriorityTag tag1;
-  uint8_t rank1 = 1;
-  tag1.SetPriority(rank1);
-  p1->AddPacketTag (tag1);
-  NS_LOG_DEBUG("Packet with rank " << (int)rank1 << ": " << p1);
+//   Ptr<Packet> p1 = Create<Packet> ();
+//   SocketPriorityTag tag1;
+//   uint8_t rank1 = 1;
+//   tag1.SetPriority(rank1);
+//   p1->AddPacketTag (tag1);
+//   NS_LOG_DEBUG("Packet with rank " << (int)rank1 << ": " << p1);
     
-  Ptr<Packet> p2 = Create<Packet> ();
-  SocketPriorityTag tag2;
-  uint8_t rank2 = 2;
-  tag2.SetPriority(rank2);
-  p2->AddPacketTag (tag2);
-  NS_LOG_DEBUG("Packet with rank " << (int)rank2 << ": " << p2);
+//   Ptr<Packet> p2 = Create<Packet> ();
+//   SocketPriorityTag tag2;
+//   uint8_t rank2 = 2;
+//   tag2.SetPriority(rank2);
+//   p2->AddPacketTag (tag2);
+//   NS_LOG_DEBUG("Packet with rank " << (int)rank2 << ": " << p2);
     
-  Ptr<Packet> p3 = Create<Packet> ();
-  SocketPriorityTag tag3;
-  uint8_t rank3 = 3;
-  tag3.SetPriority(rank3);
-  p3->AddPacketTag (tag3);
-  NS_LOG_DEBUG("Packet with rank " << (int)rank3 << ": " << p3);
+//   Ptr<Packet> p3 = Create<Packet> ();
+//   SocketPriorityTag tag3;
+//   uint8_t rank3 = 3;
+//   tag3.SetPriority(rank3);
+//   p3->AddPacketTag (tag3);
+//   NS_LOG_DEBUG("Packet with rank " << (int)rank3 << ": " << p3);
     
-  Ptr<Packet> p4 = Create<Packet> ();
-  SocketPriorityTag tag4;
-  p4->PeekPacketTag(tag4);
-  NS_LOG_DEBUG("Packet without rank: " << p4 <<
-               " Default priority: " << (int)tag4.GetPriority());
+//   Ptr<Packet> p4 = Create<Packet> ();
+//   SocketPriorityTag tag4;
+//   p4->PeekPacketTag(tag4);
+//   NS_LOG_DEBUG("Packet without rank: " << p4 <<
+//                " Default priority: " << (int)tag4.GetPriority());
     
-  std::priority_queue<Ptr<Packet>, std::vector<Ptr<Packet>>, HighRankFirst> pq;
-  pq.push(p3);
-  pq.push(p1);
-  pq.push(p0);
-  pq.push(p4);
-  pq.push(p2);
+//   std::priority_queue<Ptr<Packet>, std::vector<Ptr<Packet>>, HighRankFirst> pq;
+//   pq.push(p3);
+//   pq.push(p1);
+//   pq.push(p0);
+//   pq.push(p4);
+//   pq.push(p2);
     
-  while(!pq.empty()) 
-  {
-    NS_LOG_DEBUG("Top Packet in the priority queue: " << pq.top());
-    pq.pop();
-  }
+//   while(!pq.empty()) 
+//   {
+//     NS_LOG_DEBUG("Top Packet in the priority queue: " << pq.top());
+//     pq.pop();
+//   }
+    
+  /**********************************************************/
+    
+  IntHeader inthdr;
+  NS_LOG_DEBUG ("Max Size of an INT Header: " << inthdr.GetMaxSerializedSize());
+  NS_LOG_DEBUG ("Size of an empty INT Header: " << inthdr.GetSerializedSize());
+    
+  Ptr<Packet> p = Create<Packet> (1000);
+  NS_LOG_DEBUG ("Size of the payload: " << p->GetSize());
+  p->AddHeader(inthdr);
+  NS_LOG_DEBUG ("Size of the packet with empty INT header: " << p->GetSize());
     
   /**********************************************************/
   

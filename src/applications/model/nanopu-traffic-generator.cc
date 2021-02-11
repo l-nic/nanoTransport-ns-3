@@ -201,7 +201,7 @@ void NanoPuTrafficGenerator::SendMessage ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
   double msgSizePkts = m_msgSize->GetValue();
-  uint16_t msgSizeBytes = (uint16_t) (msgSizePkts * (double) m_maxPayloadSize);
+  uint32_t msgSizeBytes = (uint32_t) (msgSizePkts * (double) m_maxPayloadSize);
   uint16_t numPkts = (uint16_t) std::ceil(msgSizePkts); 
   Ptr<Packet> msg;
   msg = Create<Packet> (msgSizeBytes);   
@@ -213,8 +213,10 @@ void NanoPuTrafficGenerator::SendMessage ()
 //   Ptr<Packet> msg;
 //   msg = Create<Packet> (buffer, msgSizeBytes);
     
-  NS_LOG_LOGIC ("NanoPuTrafficGenerator generates a message of size: "<<
-                msgSizeBytes << " Bytes " << numPkts << " packets.");
+  NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () <<
+                " NanoPuTrafficGenerator (" << m_nanoPu->GetLocalIp () << 
+                ") generates a message of size: "<< msgSizeBytes << 
+                " Bytes " << numPkts << " packets.");
     
   NanoPuAppHeader appHdr;
   appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
@@ -241,7 +243,13 @@ void NanoPuTrafficGenerator::ReceiveMessage (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
-  NS_LOG_DEBUG("NanoPuTrafficGenerator received a message: " << msg->ToString ());
+  NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+               " NanoPuTrafficGenerator (" << m_nanoPu->GetLocalIp () << 
+               ") received a message: " << msg->ToString ());
+    
+//   NanoPuAppHeader appHdr;
+//   msg-> RemoveHeader (appHdr);
+//   NS_LOG_DEBUG("\t\t\t message size: " << msg->GetSize ());
 }
     
 } // Namespace ns3

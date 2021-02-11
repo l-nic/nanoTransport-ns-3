@@ -108,6 +108,7 @@ NanoPuArchtArbiter::NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht)
   
   m_headerSize = m_nanoPuArcht->GetBoundNetDevice()->GetMtu () 
                  - m_nanoPuArcht->GetPayloadSize ();
+  m_pqInsertionOrder = 0;
 }
 
 NanoPuArchtArbiter::~NanoPuArchtArbiter ()
@@ -131,8 +132,10 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
     arbiterMeta_t arbiterMeta = {};
     arbiterMeta.p = p;
     arbiterMeta.egressMeta = meta;
+    arbiterMeta.insertionOrder = m_pqInsertionOrder;
       
     m_pq.push(arbiterMeta);
+    m_pqInsertionOrder++;
       
     m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()+1);
     m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () + p->GetSize());
@@ -149,7 +152,10 @@ void NanoPuArchtArbiter::TxPkt()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   
   if (m_pq.empty())
+  {
+    m_pqInsertionOrder = 0;
     return;
+  }
     
   arbiterMeta_t arbiterMeta = m_pq.top();
   m_pq.pop();
@@ -161,6 +167,11 @@ void NanoPuArchtArbiter::TxPkt()
   uint32_t totSize = m_headerSize + pSize;
     
   Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (totSize);
+//   delay -= NanoSeconds(1); // Accounts for rounding errors
+  
+  NS_LOG_DEBUG(" Arbiter delay = " << delay.GetNanoSeconds() <<
+               " PacketSize = " << totSize <<
+               " NicRate = " << m_nanoPuArcht->GetNicRate ());
    
   NS_ASSERT(m_nextTxEvent.IsExpired());
   m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
@@ -410,7 +421,10 @@ int NanoPuArchtPacketize::ProcessNewMessage (Ptr<Packet> msg)
       
     uint16_t requestedCredit = apphdr.GetInitWinSize (); 
     uint16_t initialCredit = m_nanoPuArcht->GetInitialCredit ();
-    m_credits[txMsgId] = (requestedCredit < initialCredit) ? requestedCredit : initialCredit;
+    if (requestedCredit != 0)
+      m_credits[txMsgId] = (requestedCredit < initialCredit) ? requestedCredit : initialCredit;
+    else
+      m_credits[txMsgId] = initialCredit;
       
     m_deliveredBitmap[txMsgId] = 0;
       
@@ -755,10 +769,12 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       }
         
       NanoPuAppHeader apphdr;
+      apphdr.SetHeaderType (NANOPU_APP_HEADER_TYPE);
       apphdr.SetRemoteIp (meta.srcIp);
       apphdr.SetRemotePort (meta.srcPort);
       apphdr.SetLocalPort (meta.dstPort);
       apphdr.SetMsgLen (meta.msgLen);
+      apphdr.SetInitWinSize (m_nanoPuArcht->GetInitialCredit ());
       apphdr.SetPayloadSize (msg->GetSize ());
       msg->AddHeader (apphdr);
     

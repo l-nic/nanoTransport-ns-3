@@ -114,7 +114,6 @@ main (int argc, char *argv[])
   bool traceQueues = false;
   std::string workloadName ("FbHdp");
     
-  
   HpccHeader hpcch;
   IntHeader inth;
   Ipv4Header ipv4h;
@@ -278,7 +277,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
-                     TimeValue(MilliSeconds(10)));
+                     TimeValue(MilliSeconds(5)));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
@@ -291,12 +290,13 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
                      UintegerValue(80));
   Config::SetDefault("ns3::HpccNanoPuArcht::UtilFactor", 
-                     DoubleValue(0.95));
+                     DoubleValue(0.99));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
-                     UintegerValue(5));
-    
+                     UintegerValue(0));
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(false));
    
 //   LogComponentEnable ("Config", LOG_LEVEL_ALL);
   std::vector<Ptr<HpccNanoPuArcht>> nanoPuArchts;
