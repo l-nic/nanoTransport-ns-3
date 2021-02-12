@@ -154,14 +154,14 @@ public:
   
   void Receive(Ptr<Packet> p, egressMeta_t meta);
   
+  void EmitAfterPktOfSize (uint32_t size);
+  
   void TxPkt (void);
   
 protected:
   
   Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtEgressPipe> m_egressPipe;
-  
-  uint16_t m_headerSize; //<! Size of header that is typically added after the arbiter
   
   std::priority_queue<arbiterMeta_t, std::vector<arbiterMeta_t>, HighRankFirst> m_pq;
   uint32_t m_pqInsertionOrder;  //!< virtual timestamp of insertion into prio queue

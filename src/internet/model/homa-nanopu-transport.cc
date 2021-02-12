@@ -468,6 +468,8 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                " NanoPU Homa EgressPipe sending: " << 
                 cp->ToString ());
     
+  m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (cp->GetSize ());
+    
   m_nanoPuArcht->SendToNetwork(cp);
 //   Simulator::Schedule (NanoSeconds(HOMA_EGRESS_PIPE_DELAY), 
 //                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);

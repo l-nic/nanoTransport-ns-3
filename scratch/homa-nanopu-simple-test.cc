@@ -28,6 +28,7 @@
 
 #include <iostream>
 #include <stdlib.h>
+#include <chrono>
 
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
@@ -48,9 +49,10 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-  LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
+  LogComponentEnable ("HomaNanoPuSimpleTest", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_DEBUG);
 //   LogComponentEnable ("PfifoHomaQueueDisc", LOG_LEVEL_ALL);
 //   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
@@ -73,11 +75,19 @@ main (int argc, char *argv[])
   pointToPoint.SetQueue ("ns3::DropTailQueue", 
                          "MaxSize", StringValue ("1p"));
 
+  PointerValue ptr;
+    
   NetDeviceContainer deviceContainers[numEndPoints];
   deviceContainers[0] = pointToPoint.Install (nodeContainers[0]);
+  // The queue on the end hosts should not be 1 packet large
+  deviceContainers[0].Get (1)->GetAttribute ("TxQueue", ptr);
+  ptr.Get<Queue<Packet> > ()->SetAttribute ("MaxSize", StringValue ("10p"));
     
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Gbps"));
   deviceContainers[1] = pointToPoint.Install (nodeContainers[1]);
+  // The queue on the end hosts should not be 1 packet large
+  deviceContainers[1].Get (1)->GetAttribute ("TxQueue", ptr);
+  ptr.Get<Queue<Packet> > ()->SetAttribute ("MaxSize", StringValue ("10p"));
   
   // Enable multi-path routing
   Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
@@ -112,6 +122,7 @@ main (int argc, char *argv[])
   uint16_t payloadSize = deviceContainers[0].Get (1)->GetMtu () 
                          - ipv4h.GetSerializedSize () 
                          - homah.GetSerializedSize ();
+  NS_LOG_DEBUG("Payload size for Homa: " << payloadSize);
   Config::SetDefault("ns3::HomaNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HomaNanoPuArcht::TimeoutInterval", 
@@ -121,9 +132,17 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNMessages", 
                      UintegerValue(100));
   Config::SetDefault("ns3::HomaNanoPuArcht::InitialCredit", 
-                     UintegerValue(10));
+                     UintegerValue(5));
   Config::SetDefault("ns3::HomaNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HomaNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(true));
+  Config::SetDefault("ns3::HomaNanoPuArcht::NumTotalPrioBands", 
+                     UintegerValue(8));
+  Config::SetDefault("ns3::HomaNanoPuArcht::NumUnschedPrioBands", 
+                     UintegerValue(2));
+  Config::SetDefault("ns3::HomaNanoPuArcht::OvercommitLevel", 
+                     UintegerValue(6));
    
   Ptr<HomaNanoPuArcht> srcArcht =  CreateObject<HomaNanoPuArcht>();
   srcArcht->AggregateIntoDevice (deviceContainers[0].Get (1));
@@ -145,7 +164,7 @@ main (int argc, char *argv[])
     
   NanoPuTrafficGenerator sender = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   sender.SetLocalPort(111);
-  sender.SetMsgSize(1,1); // Deterministically set the message size
+  sender.SetMsgSize(BITMAP_SIZE,BITMAP_SIZE); // Deterministically set the message size
   sender.SetMaxMsg(1);
   sender.StartImmediately();
   sender.Start(Seconds (3.0));
@@ -155,7 +174,15 @@ main (int argc, char *argv[])
     
 //   pointToPoint.EnablePcapAll ("tmp.pcap", true);
 
+  auto start = std::chrono::high_resolution_clock::now();
+    
   Simulator::Run ();
+    
+  auto stop = std::chrono::high_resolution_clock::now(); 
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  NS_LOG_DEBUG("*** Time taken by simulation: "
+                << duration.count() << " microseconds ***");
+    
   Simulator::Destroy ();
   return 0;
 }

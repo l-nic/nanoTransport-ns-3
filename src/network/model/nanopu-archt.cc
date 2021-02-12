@@ -106,8 +106,6 @@ NanoPuArchtArbiter::NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht)
     
   m_nanoPuArcht = nanoPuArcht;
   
-  m_headerSize = m_nanoPuArcht->GetBoundNetDevice()->GetMtu () 
-                 - m_nanoPuArcht->GetPayloadSize ();
   m_pqInsertionOrder = 0;
 }
 
@@ -147,6 +145,26 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
     m_egressPipe->EgressPipe(p, meta);
 }
     
+void NanoPuArchtArbiter::EmitAfterPktOfSize (uint32_t size)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << size);
+    
+  if (!m_nanoPuArcht->ArbiterQueueEnabled())
+    return;
+   
+  if (m_nextTxEvent.IsExpired())
+  {
+    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (size);
+//     delay -= NanoSeconds(1); // Accounts for rounding errors
+      
+    m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
+     
+    NS_LOG_DEBUG(" Arbiter delay = " << delay.GetNanoSeconds() <<
+               " PacketSize = " << size <<
+               " NicRate = " << m_nanoPuArcht->GetNicRate ());
+  }
+}
+    
 void NanoPuArchtArbiter::TxPkt()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
@@ -160,24 +178,9 @@ void NanoPuArchtArbiter::TxPkt()
   arbiterMeta_t arbiterMeta = m_pq.top();
   m_pq.pop();
     
-  uint32_t pSize = arbiterMeta.p->GetSize ();
-  // TODO: Below, we assume that the difference between MTU and 
-  //       the configured payloas size is all reserved for 
-  //       transport + IP + PPP headers
-  uint32_t totSize = m_headerSize + pSize;
-    
-  Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (totSize);
-//   delay -= NanoSeconds(1); // Accounts for rounding errors
-  
-  NS_LOG_DEBUG(" Arbiter delay = " << delay.GetNanoSeconds() <<
-               " PacketSize = " << totSize <<
-               " NicRate = " << m_nanoPuArcht->GetNicRate ());
-   
-  NS_ASSERT(m_nextTxEvent.IsExpired());
-  m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
-    
   m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()-1);
-  m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () - pSize);
+  m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () 
+                                   - arbiterMeta.p->GetSize());
     
   m_egressPipe->EgressPipe(arbiterMeta.p, arbiterMeta.egressMeta);
 }

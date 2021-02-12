@@ -396,6 +396,8 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
                " NanoPU NDP EgressPipe sending: " << 
                 cp->ToString ());
     
+  m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (cp->GetSize ());
+    
   m_nanoPuArcht->SendToNetwork(cp);
 //   Simulator::Schedule (NanoSeconds(NDP_EGRESS_PIPE_DELAY), 
 //                        &NanoPuArcht::SendToNetwork, m_nanoPuArcht, cp);
