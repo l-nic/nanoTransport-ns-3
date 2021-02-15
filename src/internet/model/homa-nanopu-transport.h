@@ -226,6 +226,13 @@ public:
    */
   bool EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
+       
+  /**
+   * \brief Calls the Data packet arrival trace source
+   */
+  void DataRecvTrace (Ptr<const Packet> p, Ipv4Address srcIp, Ipv4Address dstIp,
+                      uint16_t srcPort, uint16_t dstPort, int txMsgId, 
+                      uint16_t pktOffset, uint8_t prio);
 
 private:
 
@@ -236,6 +243,10 @@ private:
   uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   uint8_t m_overcommitLevel;     //!< Minimum number of messages to Grant at the same time
+  
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, 
+                 uint16_t, uint16_t, int, 
+                 uint16_t, uint8_t> m_dataRecvTrace; //!< Trace of {pkt, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio} for arriving DATA packets
 };   
 
 } // namespace ns3

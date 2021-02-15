@@ -181,6 +181,17 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                                                              txMsgId,
                                                              msgLen, 
                                                              pktOffset);
+      
+    if (rxFlag & HomaHeader::Flags_t::DATA)
+    {
+      SocketIpTosTag priorityTag;
+      p-> PeekPacketTag (priorityTag);
+        
+      m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
+                                   srcPort, dstPort, txMsgId, 
+                                   pktOffset, priorityTag.GetTos()); 
+    }
+      
     if (!rxMsgInfo.success)
       return false;
       
@@ -548,6 +559,11 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                      "Number of bytes (without metadata) currently stored in the arbiter queue",
                      MakeTraceSourceAccessor (&HomaNanoPuArcht::m_nArbiterBytes),
                      "ns3::TracedValueCallback::Uint32")
+    .AddTraceSource ("DataPktArrival",
+                     "Trace source indicating a DATA packet has arrived "
+                     "to the receiver NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&HomaNanoPuArcht::m_dataRecvTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -609,6 +625,16 @@ bool HomaNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet>
   m_ingresspipe->IngressPipe (device, p, protocol, from);
     
   return true;
+}
+    
+void HomaNanoPuArcht::DataRecvTrace (Ptr<const Packet> p, 
+                                     Ipv4Address srcIp, Ipv4Address dstIp,
+                                     uint16_t srcPort, uint16_t dstPort, 
+                                     int txMsgId, uint16_t pktOffset, uint8_t prio)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
+    
+  m_dataRecvTrace(p, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio);
 }
     
 } // namespace ns3

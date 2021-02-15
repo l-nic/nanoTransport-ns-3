@@ -451,7 +451,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       uint16_t newCreditPkts = std::min((m_msgStates[txMsgId].ackNo + winSizePkts),
                                         (uint16_t)BITMAP_SIZE);
       
-      NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
+      NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
                    " Credit (" << m_msgStates[txMsgId].credit << 
                    ") to be updated to " << newCreditPkts <<
                    " (ackNo: " << m_msgStates[txMsgId].ackNo <<
