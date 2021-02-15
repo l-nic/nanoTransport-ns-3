@@ -277,7 +277,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
-                     TimeValue(MilliSeconds(5)));
+                     TimeValue(MilliSeconds(10)));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
@@ -290,9 +290,9 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
                      UintegerValue(80));
   Config::SetDefault("ns3::HpccNanoPuArcht::UtilFactor", 
-                     DoubleValue(0.99));
+                     DoubleValue(0.95));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
-                     UintegerValue(0));
+                     UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
   Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 

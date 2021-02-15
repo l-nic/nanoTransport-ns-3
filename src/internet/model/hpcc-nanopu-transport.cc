@@ -76,18 +76,7 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta,
   meta.rank = 0; // High Rank for control packets
   meta.remoteIp = ctrlMeta.remoteIp;
     
-  Ptr<Packet> cp; 
-  if (m_nanoPuArcht->MemIsOptimized ())
-  {
-    cp = p->Copy(); // Avoid creating a new packet
-    cp->RemoveAtEnd (p->GetSize()); // This is a non-dirty operation that should be cheap
-  }
-  else
-  {
-    cp = Create<Packet> ();
-  }
   ctrlMeta.receivedIntHeader.SetProtocol(0); // Nothing else will exist after this in an ACK packet.
-  cp-> AddHeader (ctrlMeta.receivedIntHeader); // This will be payload of HPCC header.
     
   HpccHeader hpcch;
   hpcch.SetSrcPort (ctrlMeta.localPort);
@@ -96,13 +85,30 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta,
   hpcch.SetFlags (HpccHeader::Flags_t::ACK);
   hpcch.SetPktOffset (ctrlMeta.ackNo);
   hpcch.SetMsgSize (ctrlMeta.msgLen);
-  hpcch.SetPayloadSize ((uint16_t)cp->GetSize ());
-  cp-> AddHeader (hpcch); 
+  hpcch.SetPayloadSize ((uint16_t)ctrlMeta.receivedIntHeader.GetSerializedSize());
     
-//   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-//                 " NanoPU HPCC PktGen generated: " << cp->ToString ());
-    
-  m_nanoPuArcht->GetArbiter ()->Receive(cp, meta);
+  if (m_nanoPuArcht->MemIsOptimized ())
+  { // Avoid creating a new packet
+    p->RemoveAtEnd (p->GetSize()); // This is a non-dirty operation that should be cheap
+    p->AddHeader (ctrlMeta.receivedIntHeader); // This will be payload of HPCC header.
+    p->AddHeader (hpcch);
+      
+    NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC PktGen generated: " << p->ToString ());
+      
+    m_nanoPuArcht->GetArbiter ()->Receive(p, meta);
+  }
+  else
+  {
+    Ptr<Packet> cp = Create<Packet> ();
+    cp->AddHeader (ctrlMeta.receivedIntHeader); // This will be payload of HPCC header.
+    cp->AddHeader (hpcch);
+      
+    NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPU HPCC PktGen generated: " << cp->ToString ());
+      
+    m_nanoPuArcht->GetArbiter ()->Receive(cp, meta);
+  } 
 }
 
 /******************************************************************************/
@@ -171,7 +177,7 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
   double txRate;
   
   // TODO: Unroll the for loop below when implementing on P4
-  for (uint8_t curHopIdx = 1; curHopIdx < nHops; curHopIdx++)
+  for (uint8_t curHopIdx = 0; curHopIdx < nHops; curHopIdx++)
   { // Ignore the first hop which is essentially the bursty host itself
     curHopInfo = intHdr.PeekHopN (curHopIdx);
     oldHopInfo = m_msgStates[txMsgId].prevIntHeader.PeekHopN (curHopIdx);
@@ -329,17 +335,6 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     uint16_t ackNo = rxMsgInfo.ackNo;
     if (rxMsgInfo.ackNo == pktOffset)
       ackNo++;
-        
-    hpccNanoPuCtrlMeta_t ctrlMeta = {};
-    ctrlMeta.remoteIp = srcIp;
-    ctrlMeta.remotePort = srcPort;
-    ctrlMeta.localPort = dstPort;
-    ctrlMeta.txMsgId = txMsgId;
-    ctrlMeta.ackNo = ackNo;
-    ctrlMeta.msgLen = msgLen;
-    ctrlMeta.receivedIntHeader = intHdr;
-      
-    m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta, cp);
       
     if (rxMsgInfo.isNewPkt)
     {
@@ -353,11 +348,18 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       metaData.pktOffset = pktOffset;
 
       m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
-//       Simulator::Schedule (NanoSeconds(HPCC_INGRESS_PIPE_DELAY), 
-//                            &NanoPuArchtReassemble::ProcessNewPacket, 
-//                            m_nanoPuArcht->GetReassemblyBuffer (), 
-//                            cp, metaData);
     }
+      
+    hpccNanoPuCtrlMeta_t ctrlMeta = {};
+    ctrlMeta.remoteIp = srcIp;
+    ctrlMeta.remotePort = srcPort;
+    ctrlMeta.localPort = dstPort;
+    ctrlMeta.txMsgId = txMsgId;
+    ctrlMeta.ackNo = ackNo;
+    ctrlMeta.msgLen = msgLen;
+    ctrlMeta.receivedIntHeader = intHdr;
+      
+    m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta, cp);
   }  
   else if (hdrFlag & HpccHeader::Flags_t::ACK)
   {
@@ -449,7 +451,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       uint16_t newCreditPkts = std::min((m_msgStates[txMsgId].ackNo + winSizePkts),
                                         (uint16_t)BITMAP_SIZE);
       
-      NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+      NS_LOG_WARN(Simulator::Now ().GetNanoSeconds () <<
                    " Credit (" << m_msgStates[txMsgId].credit << 
                    ") to be updated to " << newCreditPkts <<
                    " (ackNo: " << m_msgStates[txMsgId].ackNo <<

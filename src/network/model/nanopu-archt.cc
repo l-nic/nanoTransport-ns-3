@@ -758,9 +758,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       {
         uint32_t msgSize = (meta.msgLen-1) * m_nanoPuArcht->GetPayloadSize ();
         msgSize += m_lastPktSize [meta.rxMsgId];
-//         msg =  Create<Packet> (msgSize);
-        pkt->AddPaddingAtEnd(msgSize - pkt->GetSize());
-        msg = pkt; // Avoids creating a new packet from scratch
+        msg =  Create<Packet> (msgSize);
       }
       else
       {
