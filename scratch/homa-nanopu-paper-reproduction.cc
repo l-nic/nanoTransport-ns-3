@@ -188,11 +188,16 @@ main (int argc, char *argv[])
     
   /******** Create NetDevices ********/
   NS_LOG_UNCOND("Creating NetDevices...");
+  PointerValue ptr;
+    
   NetDeviceContainer hostTorDevices[nHosts];
   for (int i = 0; i < nHosts; i++)
   {
     hostTorDevices[i] = hostLinks.Install (hostNodes.Get(i), 
                                            torNodes.Get(i/(nHosts/nTors)));
+    // The queue on the end hosts should not be 1 packet large
+    hostTorDevices[i].Get (0)->GetAttribute ("TxQueue", ptr);
+    ptr.Get<Queue<Packet> > ()->SetAttribute ("MaxSize", StringValue ("500p"));
   }
     
   NetDeviceContainer torSpineDevices[nTors*nSpines];

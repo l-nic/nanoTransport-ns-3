@@ -159,9 +159,10 @@ void NanoPuArchtArbiter::EmitAfterPktOfSize (uint32_t size)
       
     m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
      
-    NS_LOG_DEBUG(" Arbiter delay = " << delay.GetNanoSeconds() <<
-               " PacketSize = " << size <<
-               " NicRate = " << m_nanoPuArcht->GetNicRate ());
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () <<
+                 " Arbiter delay = " << delay.GetNanoSeconds() <<
+                 " PacketSize = " << size <<
+                 " NicRate = " << m_nanoPuArcht->GetNicRate ());
   }
 }
     
@@ -730,7 +731,7 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
     
   NS_ASSERT(meta.pktOffset <= meta.msgLen);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
-                " Processing pkt "<< meta.pktOffset 
+                " NanoPU Reassembly Buffer processing pkt "<< meta.pktOffset 
                 << " for msg " << meta.rxMsgId);
     
   if (m_receivedBitmap.find(meta.rxMsgId) != m_receivedBitmap.end ())

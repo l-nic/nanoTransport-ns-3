@@ -259,7 +259,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       pendingInfo.msgLen = msgLen;
       pendingInfo.ackNo = ackNo;
       pendingInfo.grantedIdx = m_nanoPuArcht->GetInitialCredit ();
-      pendingInfo.grantableIdx = m_nanoPuArcht->GetInitialCredit () + 1;
+      pendingInfo.grantableIdx = m_nanoPuArcht->GetInitialCredit ()+1;
       pendingInfo.remainingSize = msgLen -1;
         
       m_pendingMsgInfo[rxMsgInfo.rxMsgId] = pendingInfo;
@@ -290,6 +290,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     ctrlMeta.priority = priority;
         
     m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
+    m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx = ctrlMeta.grantOffset;
         
     // TODO: Homa keeps a timer per granted inbound messages and send
     //       a RESEND packet once the timer expires.
@@ -313,6 +314,8 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     
     if (rxFlag & HomaHeader::Flags_t::GRANT)
     {
+      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
+        
       m_nanoPuArcht->GetPacketizationBuffer ()
                    ->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(pktOffset));
         
@@ -320,11 +323,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                    ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                        NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                        std::greater<int>());
-      
-      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
     }
     else if (rxFlag & HomaHeader::Flags_t::RESEND)
     {   
+      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
+        
       rtxPkt = pktOffset;
       m_nanoPuArcht->GetPacketizationBuffer ()
                    ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
@@ -341,8 +344,6 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       ctrlMeta.msgLen = msgLen;
       ctrlMeta.pktOffset = pktOffset;
       ctrlMeta.grantOffset = credit;
-        
-      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
     }
     else if (rxFlag & HomaHeader::Flags_t::ACK)
     {
@@ -440,7 +441,10 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
       m_priorities[meta.txMsgId] = homah.GetPrio();
         
       if (ctrlFlag & HomaHeader::Flags_t::BOGUS)
+      {
+        m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (1);
         return;
+      }
     }
       
     if (ctrlFlag & HomaHeader::Flags_t::BUSY &&
@@ -449,6 +453,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU Homa EgressPipe dropping the BUSY packet"
                    " because it belongs to the most recent (active) msg.");
+      m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (1);
       return;
     }
       
