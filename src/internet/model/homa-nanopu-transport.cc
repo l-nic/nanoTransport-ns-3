@@ -79,11 +79,12 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
   egressMeta_t egressMeta = {};
   egressMeta.containsData = false;
   egressMeta.rank = 0; // High Rank for control packets
+  egressMeta.remoteIp = ctrlMeta.remoteIp;
+  egressMeta.remotePort = ctrlMeta.remotePort;
+  egressMeta.localPort = ctrlMeta.localPort;
     
   if (ctrlMeta.shouldGenCtrlPkt)
-  {
-    egressMeta.remoteIp = ctrlMeta.remoteIp;
-      
+  {   
     homah.SetSrcPort (ctrlMeta.localPort);
     homah.SetDstPort (ctrlMeta.remotePort);
     homah.SetTxMsgId (ctrlMeta.txMsgId);
@@ -425,6 +426,10 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     // Priority of Data packets are determined by the packet tags
     priority = m_priorities[meta.txMsgId];
       
+    m_nanoPuArcht->DataSendTrace(cp, m_nanoPuArcht->GetLocalIp (), meta.remoteIp,
+                                 meta.localPort, meta.remotePort, meta.txMsgId, 
+                                 meta.pktOffset, meta.rank);
+      
     cp-> AddHeader (homah);
       
     m_activeOutboundMsgId = meta.txMsgId;
@@ -569,6 +574,11 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                      "to the receiver NanoPuArcht layer.",
                      MakeTraceSourceAccessor (&HomaNanoPuArcht::m_dataRecvTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("DataPktDeparture",
+                     "Trace source indicating a DATA packet has departed "
+                     "from the sender NanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&HomaNanoPuArcht::m_dataSendTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -640,6 +650,16 @@ void HomaNanoPuArcht::DataRecvTrace (Ptr<const Packet> p,
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
     
   m_dataRecvTrace(p, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio);
+}
+    
+void HomaNanoPuArcht::DataSendTrace (Ptr<const Packet> p, 
+                                     Ipv4Address srcIp, Ipv4Address dstIp,
+                                     uint16_t srcPort, uint16_t dstPort, 
+                                     int txMsgId, uint16_t pktOffset, uint8_t prio)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
+    
+  m_dataSendTrace(p, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio);
 }
     
 } // namespace ns3

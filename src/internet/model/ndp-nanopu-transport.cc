@@ -88,6 +88,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
   meta.containsData = false;
   meta.rank = 0; // High Rank for control packets
   meta.remoteIp = dstIp;
+  meta.remotePort = dstPort;
+  meta.localPort = srcPort;
     
   NdpHeader ndph;
   ndph.SetSrcPort (srcPort);

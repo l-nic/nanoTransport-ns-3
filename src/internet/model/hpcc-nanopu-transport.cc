@@ -75,6 +75,8 @@ void HpccNanoPuArchtPktGen::CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta,
   meta.containsData = false;
   meta.rank = 0; // High Rank for control packets
   meta.remoteIp = ctrlMeta.remoteIp;
+  meta.remotePort = ctrlMeta.remotePort;
+  meta.localPort = ctrlMeta.localPort;
     
   ctrlMeta.receivedIntHeader.SetProtocol(0); // Nothing else will exist after this in an ACK packet.
     

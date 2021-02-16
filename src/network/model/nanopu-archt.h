@@ -127,8 +127,18 @@ struct HighRankFirst
 {
   bool operator()(const arbiterMeta_t& lhs, const arbiterMeta_t& rhs) const
   {
-    return lhs.egressMeta.rank > rhs.egressMeta.rank ||
-           (lhs.egressMeta.rank == rhs.egressMeta.rank && lhs.insertionOrder > rhs.insertionOrder);
+    if (lhs.egressMeta.remoteIp == rhs.egressMeta.remoteIp &&
+        lhs.egressMeta.remotePort == rhs.egressMeta.remotePort &&
+        lhs.egressMeta.localPort == rhs.egressMeta.localPort)
+    {
+      return lhs.insertionOrder > rhs.insertionOrder;
+    }
+    else
+    {
+      return lhs.egressMeta.rank > rhs.egressMeta.rank ||
+             (lhs.egressMeta.rank == rhs.egressMeta.rank && 
+              lhs.insertionOrder > rhs.insertionOrder);
+    }
   }
 };
     

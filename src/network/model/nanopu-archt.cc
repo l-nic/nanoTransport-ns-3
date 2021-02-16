@@ -132,6 +132,11 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
     arbiterMeta.egressMeta = meta;
     arbiterMeta.insertionOrder = m_pqInsertionOrder;
       
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+                 " NanoPuArchtArbiter + RemoteIp: " << meta.remoteIp << 
+                 " RemotePort: " << meta.remotePort << " PktOffset: " << 
+                 meta.pktOffset << " Rank: " << meta.rank);
+      
     m_pq.push(arbiterMeta);
     m_pqInsertionOrder++;
       
@@ -178,6 +183,13 @@ void NanoPuArchtArbiter::TxPkt()
     
   arbiterMeta_t arbiterMeta = m_pq.top();
   m_pq.pop();
+    
+  NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+               " NanoPuArchtArbiter - RemoteIp: " << 
+               arbiterMeta.egressMeta.remoteIp << " RemotePort: " << 
+               arbiterMeta.egressMeta.remotePort << " PktOffset: " << 
+               arbiterMeta.egressMeta.pktOffset << " Rank: " << 
+               arbiterMeta.egressMeta.rank);
     
   m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()-1);
   m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () 

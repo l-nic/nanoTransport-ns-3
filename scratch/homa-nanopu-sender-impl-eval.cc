@@ -105,7 +105,7 @@ void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
 void SendMsg (Ptr<HomaNanoPuArcht> homaNanoPu, Ipv4Address dstIp, 
               uint16_t dstPort, uint32_t msgSize, uint16_t payloadSize)
 {
-  NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+  NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                " Sending a message of "<< msgSize << 
                " Bytes through Homa NanoPU Archt (" <<
                homaNanoPu << ") to " << dstIp <<
@@ -260,7 +260,7 @@ main (int argc, char *argv[])
     
   Ptr<OutputStreamWrapper> pktStream;
   pktStream = asciiTraceHelper.CreateFileStream (pktTracesFileName);
-  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::HomaNanoPuArcht/DataPktArrival", 
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::HomaNanoPuArcht/DataPktDeparture", 
                                 MakeBoundCallback(&TraceDataPktArrival, pktStream));
   
   Ptr<OutputStreamWrapper> qStream = asciiTraceHelper.CreateFileStream (qStreamName);
