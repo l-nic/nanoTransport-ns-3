@@ -20,14 +20,15 @@
 #ifndef NANOPU_ARCHT_H
 #define NANOPU_ARCHT_H
 
+#include <functional>
 #include <unordered_map>
 #include <tuple>
 #include <vector>
 #include <list>
 #include <math.h>
-#include <functional>
 #include <bitset>
 #include <queue>
+#include <deque>
 
 #include "ns3/object.h"
 #include "ns3/traced-value.h"
@@ -53,7 +54,7 @@ typedef std::bitset<10240> bitmap_t ;
 uint16_t getFirstSetBitPos(bitmap_t n);
     
 bitmap_t setBitMapUntil(uint16_t n);
-    
+ 
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIp;
@@ -63,6 +64,7 @@ typedef struct reassembleMeta_t {
     uint16_t msgLen;
     uint16_t pktOffset;
 }reassembleMeta_t;
+    
 typedef struct rxMsgInfoMeta_t {
     uint16_t rxMsgId;
     uint16_t ackNo; //!< Next expected packet
@@ -71,6 +73,7 @@ typedef struct rxMsgInfoMeta_t {
     bool isNewPkt;
     bool success;
 }rxMsgInfoMeta_t;
+    
 typedef struct egressMeta_t {
     bool containsData;
     bool isNewMsg;
@@ -83,12 +86,112 @@ typedef struct egressMeta_t {
     uint16_t pktOffset;
     uint16_t rank;
 }egressMeta_t;
+    
 typedef struct arbiterMeta_t {
     Ptr<Packet> p;
     egressMeta_t egressMeta;
     uint32_t insertionOrder;
 }arbiterMeta_t;   
+    
+template <typename T> 
+struct nanoPuArchtSchedObj_t {
+    uint16_t id;
+    uint16_t rank;
+    T metaData;
+}; 
 
+/******************************************************************************/
+    
+template<typename MetaType>
+class NanoPuArchtScheduler : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void)
+  {
+    static TypeId tid = TypeId ("ns3::NanoPuArchtScheduler")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+    ;
+    return tid;
+  }
+
+  NanoPuArchtScheduler
+    (Callback<bool, nanoPuArchtSchedObj_t<MetaType>> predicateCheck)
+    : m_predicateCheck (predicateCheck){}
+  ~NanoPuArchtScheduler (void){ }
+  
+  std::tuple<bool, uint16_t, uint8_t> UpdateAndSchedule (uint16_t id, 
+                                                         uint16_t rank,
+                                                         bool removeObj, 
+                                                         MetaType metaData)
+  {
+    bool isNewObj = true;
+    // NOTE: The for loop below is used to find and modify the object 
+    //       entry within the scheduler. However in an actual hardware
+    //       prototype, there would be a separate table to match id of
+    //       object of interest to a pointer to where its data is stored
+    //       on memory. This would ensure constant time lookup.
+    for(uint16_t i=0; i < m_objs.size(); i++)
+    {
+      if(m_objs[i].id == id)
+      {
+        isNewObj = false;
+        if (removeObj)
+        {
+          m_objs.erase(m_objs.begin()+i);
+          break;
+        }
+        
+        m_objs[i].rank = rank;
+        m_objs[i].metaData = metaData;
+        break;
+      }
+    }
+    if(isNewObj && !removeObj)
+    {
+      nanoPuArchtSchedObj_t<MetaType> obj = {.id = id, .rank = rank, 
+                                             .metaData = metaData};
+      m_objs.push_back(obj);
+    }
+    
+    // NOTE: The operations below would normally be performed in
+    //       parallel with flip-flops on hardware given N_ACTIVE_MSGS.
+    bool objIsScheduled = false;
+    nanoPuArchtSchedObj_t<MetaType> scheduledObj;
+    uint8_t scheduledOrder = 0;
+    uint16_t minRankSoFar = 0xffff;
+    for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
+    {
+      if (m_objs[i].rank < minRankSoFar && m_predicateCheck(m_objs[i]))
+      {
+        scheduledObj = m_objs[i];
+        minRankSoFar = scheduledObj.rank;
+        objIsScheduled = true;
+      }
+    }
+    if (objIsScheduled)
+    { // Figure out the number of objects that had smaller rank 
+      for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
+      {
+        if (m_objs[i].rank < scheduledObj.rank)
+          scheduledOrder++;
+      }
+    }
+
+    return std::make_tuple(objIsScheduled, scheduledObj.id, scheduledOrder); 
+  }
+  
+protected:
+
+  std::deque<nanoPuArchtSchedObj_t<MetaType>> m_objs;
+  
+  static const uint16_t N_ACTIVE_MSGS = 16;
+  Callback<bool, nanoPuArchtSchedObj_t<MetaType>> m_predicateCheck; 
+};
 
 /******************************************************************************/
 

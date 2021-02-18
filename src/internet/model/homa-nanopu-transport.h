@@ -21,6 +21,7 @@
 #ifndef HOMA_NANOPU_TRANSPORT_H
 #define HOMA_NANOPU_TRANSPORT_H
 
+#include <functional>
 #include <unordered_map>
 #include <tuple>
 
@@ -36,8 +37,6 @@ namespace ns3 {
 class HomaNanoPuArcht;
     
 typedef struct homaNanoPuCtrlMeta_t {
-    bool shouldUpdateState;
-    bool shouldGenCtrlPkt;
     uint8_t flag;
     Ipv4Address remoteIp;
     uint16_t remotePort;
@@ -60,6 +59,11 @@ typedef struct homaNanoPuPendingMsg_t {
     uint16_t grantableIdx;
     uint16_t remainingSize;
 }homaNanoPuPendingMsg_t;
+    
+typedef struct homaSchedMeta_t {
+    uint16_t grantableIdx;
+    uint16_t grantedIdx;
+}homaSchedMeta_t; 
     
 /******************************************************************************/
     
@@ -109,17 +113,18 @@ public:
   
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
-  
-protected:
+                    
   /**
-   * \brief Chooses a pending msg and determines a priority to GRANT it
-   * \return the corresponding rxMsgId and the priority
+   * \brief Performs the predicate check for the NanoPuArchtScheduler extern
+   * \param obj The scheduled object on which the predicate is being evaluated
+   * \return the result of the predicate check
    */
-  std::tuple<uint16_t, uint8_t> GetNextMsgIdToGrant (uint16_t mostRecentRxMsgId);
+  bool SchedPredicate (nanoPuArchtSchedObj_t<homaSchedMeta_t> obj);
 
 private:
 
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself
+  Ptr<NanoPuArchtScheduler<homaSchedMeta_t>> m_nanoPuArchtScheduler; //!< the scheduler
   
   std::unordered_map<uint16_t, bool> m_busyMsgs; //!< state to mark BUSY messages {rxMsgId => BUSY mark}
   std::unordered_map<uint16_t, homaNanoPuPendingMsg_t> m_pendingMsgInfo; //!< pending msg state {rxMsgId => pending msg info}

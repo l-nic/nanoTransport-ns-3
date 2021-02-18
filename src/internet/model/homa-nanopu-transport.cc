@@ -69,8 +69,6 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU Homa PktGen processing CtrlPktEvent." <<
-               " ShouldUpdateState: " << ctrlMeta.shouldUpdateState <<
-               " ShouldGenCtrlPkt: " << ctrlMeta.shouldGenCtrlPkt <<
                " (" << HomaHeader::FlagsToString (ctrlMeta.flag) << ")");
   
   Ptr<Packet> p = Create<Packet> ();
@@ -82,29 +80,19 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
   egressMeta.remoteIp = ctrlMeta.remoteIp;
   egressMeta.remotePort = ctrlMeta.remotePort;
   egressMeta.localPort = ctrlMeta.localPort;
-    
-  if (ctrlMeta.shouldGenCtrlPkt)
-  {   
-    homah.SetSrcPort (ctrlMeta.localPort);
-    homah.SetDstPort (ctrlMeta.remotePort);
-    homah.SetTxMsgId (ctrlMeta.txMsgId);
-    homah.SetMsgSize (ctrlMeta.msgLen);
-    homah.SetPktOffset (ctrlMeta.pktOffset);
-    homah.SetGrantOffset (ctrlMeta.grantOffset);
-    homah.SetPrio (ctrlMeta.priority);
-    homah.SetPayloadSize (0);
-    homah.SetFlags (ctrlMeta.flag);
-  }
-    
-  if (ctrlMeta.shouldUpdateState)
-  {
-    egressMeta.txMsgId = ctrlMeta.txMsgId;
-      
-    homah.SetFlags(HomaHeader::Flags_t::BOGUS);
-    homah.SetPrio (ctrlMeta.priority);
-  }
-    
+  egressMeta.txMsgId = ctrlMeta.txMsgId;
+  
+  homah.SetSrcPort (ctrlMeta.localPort);
+  homah.SetDstPort (ctrlMeta.remotePort);
+  homah.SetTxMsgId (ctrlMeta.txMsgId);
+  homah.SetMsgSize (ctrlMeta.msgLen);
+  homah.SetPktOffset (ctrlMeta.pktOffset);
+  homah.SetGrantOffset (ctrlMeta.grantOffset);
+  homah.SetPrio (ctrlMeta.priority);
+  homah.SetPayloadSize (0);
+  homah.SetFlags (ctrlMeta.flag);
   p-> AddHeader (homah);
+    
   m_nanoPuArcht->GetArbiter ()->Receive(p, egressMeta);
 }
 
@@ -124,6 +112,11 @@ HomaNanoPuArchtIngressPipe::HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nan
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
+   
+  Callback<bool, nanoPuArchtSchedObj_t<homaSchedMeta_t>> homaSchedPredicate;
+  homaSchedPredicate = MakeCallback (&HomaNanoPuArchtIngressPipe::SchedPredicate, this);
+    
+  m_nanoPuArchtScheduler = CreateObject<NanoPuArchtScheduler<homaSchedMeta_t>>(homaSchedPredicate);
 }
 
 HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
@@ -131,17 +124,10 @@ HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
 }
     
-std::tuple<uint16_t, uint8_t> 
-HomaNanoPuArchtIngressPipe::GetNextMsgIdToGrant (uint16_t mostRecentRxMsgId)
+bool HomaNanoPuArchtIngressPipe::SchedPredicate (nanoPuArchtSchedObj_t<homaSchedMeta_t> obj) 
 {
-  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () 
-                   << this << mostRecentRxMsgId);
-    
-  // TODO: Implement an extern that chooses the next msg
-  //       to GRANT and determine its priority.
-    
-  return std::make_tuple(mostRecentRxMsgId, m_nanoPuArcht->GetNumTotalPrioBands ()-1);
-}
+  return obj.metaData.grantableIdx > obj.metaData.grantedIdx;
+};
     
 bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                              uint16_t protocol, const Address &from)
@@ -164,6 +150,9 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
   HomaHeader homah;
   cp->RemoveHeader (homah);
     
+  Ipv4Address srcIp = iph.GetSource ();
+  uint16_t srcPort = homah.GetSrcPort ();
+  uint16_t dstPort = homah.GetDstPort ();
   uint16_t txMsgId = homah.GetTxMsgId ();
   uint16_t pktOffset = homah.GetPktOffset ();
   uint16_t msgLen = (uint16_t)homah.GetMsgSize ();
@@ -172,9 +161,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
   if (rxFlag & HomaHeader::Flags_t::DATA ||
       rxFlag & HomaHeader::Flags_t::BUSY )
   {   
-    Ipv4Address srcIp = iph.GetSource ();
-    uint16_t srcPort = homah.GetSrcPort ();
-    uint16_t dstPort = homah.GetDstPort ();
+    
       
     rxMsgInfoMeta_t rxMsgInfo = m_nanoPuArcht->GetReassemblyBuffer ()
                                              ->GetRxMsgInfo (srcIp, 
@@ -206,15 +193,15 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     if (!rxMsgInfo.isNewPkt)
         return true;
       
-    reassembleMeta_t metaData = {};
-    metaData.rxMsgId = rxMsgInfo.rxMsgId;
-    metaData.srcIp = srcIp;
-    metaData.srcPort = srcPort;
-    metaData.dstPort = dstPort;
-    metaData.txMsgId = txMsgId;
-    metaData.msgLen = msgLen;
-    metaData.pktOffset = pktOffset;
-
+    reassembleMeta_t metaData = { 
+      .rxMsgId = rxMsgInfo.rxMsgId,
+      .srcIp = srcIp,
+      .srcPort = srcPort,
+      .dstPort = dstPort,
+      .txMsgId = txMsgId,
+      .msgLen = msgLen,
+      .pktOffset = pktOffset
+    };
     m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
 //     Simulator::Schedule (NanoSeconds(HOMA_INGRESS_PIPE_DELAY), 
 //                          &NanoPuArchtReassemble::ProcessNewPacket, 
@@ -225,21 +212,19 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     if (rxMsgInfo.ackNo == pktOffset)
       ackNo++;
       
-    if (ackNo == msgLen)
+    if (ackNo >= msgLen)
     {
-      homaNanoPuCtrlMeta_t ctrlMeta = {};
-      ctrlMeta.shouldUpdateState = false;
-      ctrlMeta.shouldGenCtrlPkt = true;
-      ctrlMeta.flag = HomaHeader::Flags_t::ACK;
-      ctrlMeta.remoteIp = srcIp;
-      ctrlMeta.remotePort = srcPort;
-      ctrlMeta.localPort = dstPort;
-      ctrlMeta.txMsgId = txMsgId;
-      ctrlMeta.msgLen = msgLen;
-      ctrlMeta.pktOffset = msgLen;
-      ctrlMeta.grantOffset = msgLen;
-      ctrlMeta.priority = 0;
-        
+      homaNanoPuCtrlMeta_t ctrlMeta = {
+        .flag = HomaHeader::Flags_t::ACK,
+        .remoteIp = srcIp,
+        .remotePort = srcPort,
+        .localPort = dstPort,
+        .txMsgId = txMsgId,
+        .msgLen = msgLen,
+        .pktOffset = msgLen,
+        .grantOffset = msgLen,
+        .priority = 0
+      }; 
       m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
         
       // Clear the state of this message for simulation performance
@@ -252,17 +237,17 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     // Update the state of the current msg
     if (rxMsgInfo.isNewMsg)
     {        
-      homaNanoPuPendingMsg_t pendingInfo = {};
-      pendingInfo.remoteIp = srcIp;
-      pendingInfo.remotePort = srcPort;
-      pendingInfo.localPort = dstPort;
-      pendingInfo.txMsgId = txMsgId;
-      pendingInfo.msgLen = msgLen;
-      pendingInfo.ackNo = ackNo;
-      pendingInfo.grantedIdx = m_nanoPuArcht->GetInitialCredit ();
-      pendingInfo.grantableIdx = m_nanoPuArcht->GetInitialCredit ()+1;
-      pendingInfo.remainingSize = msgLen -1;
-        
+      homaNanoPuPendingMsg_t pendingInfo = {
+        .remoteIp = srcIp,
+        .remotePort = srcPort,
+        .localPort = dstPort,
+        .txMsgId = txMsgId,
+        .msgLen = msgLen,
+        .ackNo = ackNo,
+        .grantedIdx = m_nanoPuArcht->GetInitialCredit (),
+        .grantableIdx = (uint16_t)(m_nanoPuArcht->GetInitialCredit ()+1),
+        .remainingSize = (uint16_t)(msgLen-1)
+      };
       m_pendingMsgInfo[rxMsgInfo.rxMsgId] = pendingInfo;
     }
     else
@@ -272,26 +257,38 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       m_pendingMsgInfo[rxMsgInfo.rxMsgId].ackNo = ackNo;
     }
       
-    // Choose a msg to GRANT and fire CtrlPktEvent with given priority
-    uint16_t rxMsgIdToGrant;
-    uint8_t priority;
-    std::tie(rxMsgIdToGrant, priority) = this->GetNextMsgIdToGrant (rxMsgInfo.rxMsgId);
+    bool msgIsFullyGranted = m_pendingMsgInfo[rxMsgInfo.rxMsgId].grantedIdx >= msgLen;
+    homaSchedMeta_t schedulerMeta = {
+      .grantableIdx = m_pendingMsgInfo[rxMsgInfo.rxMsgId].grantableIdx,
+      .grantedIdx = m_pendingMsgInfo[rxMsgInfo.rxMsgId].grantedIdx
+    };
       
-    homaNanoPuCtrlMeta_t ctrlMeta = {};
-    ctrlMeta.shouldUpdateState = false;
-    ctrlMeta.shouldGenCtrlPkt = true;
-    ctrlMeta.flag = HomaHeader::Flags_t::GRANT;
-    ctrlMeta.remoteIp = m_pendingMsgInfo[rxMsgIdToGrant].remoteIp;
-    ctrlMeta.remotePort = m_pendingMsgInfo[rxMsgIdToGrant].remotePort;
-    ctrlMeta.localPort = m_pendingMsgInfo[rxMsgIdToGrant].localPort;
-    ctrlMeta.txMsgId = m_pendingMsgInfo[rxMsgIdToGrant].txMsgId;
-    ctrlMeta.msgLen = m_pendingMsgInfo[rxMsgIdToGrant].msgLen;
-    ctrlMeta.pktOffset = m_pendingMsgInfo[rxMsgIdToGrant].ackNo;
-    ctrlMeta.grantOffset = m_pendingMsgInfo[rxMsgIdToGrant].grantableIdx;
-    ctrlMeta.priority = priority;
-        
-    m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
-    m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx = ctrlMeta.grantOffset;
+    // Choose a msg to GRANT and fire CtrlPktEvent with given priority
+    bool schedulingIsSuccessful;
+    uint16_t rxMsgIdToGrant;
+    uint8_t prioBand;
+    std::tie(schedulingIsSuccessful, rxMsgIdToGrant, prioBand) 
+        = m_nanoPuArchtScheduler->UpdateAndSchedule (rxMsgInfo.rxMsgId,
+                     m_pendingMsgInfo[rxMsgInfo.rxMsgId].remainingSize,
+                                      msgIsFullyGranted, schedulerMeta);
+    prioBand += m_nanoPuArcht->GetNumUnschedPrioBands();
+      
+    if (schedulingIsSuccessful && prioBand < m_nanoPuArcht->GetNumTotalPrioBands())
+    {
+      homaNanoPuCtrlMeta_t ctrlMeta = {
+        .flag = HomaHeader::Flags_t::GRANT,
+        .remoteIp = m_pendingMsgInfo[rxMsgIdToGrant].remoteIp,
+        .remotePort = m_pendingMsgInfo[rxMsgIdToGrant].remotePort,
+        .localPort = m_pendingMsgInfo[rxMsgIdToGrant].localPort,
+        .txMsgId = m_pendingMsgInfo[rxMsgIdToGrant].txMsgId,
+        .msgLen = m_pendingMsgInfo[rxMsgIdToGrant].msgLen,
+        .pktOffset = m_pendingMsgInfo[rxMsgIdToGrant].ackNo,
+        .grantOffset = m_pendingMsgInfo[rxMsgIdToGrant].grantableIdx,
+        .priority = prioBand
+      };
+      m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta);
+      m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx = ctrlMeta.grantOffset;
+    }
         
     // TODO: Homa keeps a timer per granted inbound messages and send
     //       a RESEND packet once the timer expires.
@@ -304,18 +301,41 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa IngressPipe processing a "
                  << homah.FlagsToString(rxFlag) << " packet.");
-      
-    int rtxPkt = -1;
-    int credit = homah.GetGrantOffset ();
-      
-    homaNanoPuCtrlMeta_t ctrlMeta = {};
-    ctrlMeta.txMsgId = txMsgId;
-    ctrlMeta.priority = homah.GetPrio ();
-    ctrlMeta.shouldUpdateState = true;
     
-    if (rxFlag & HomaHeader::Flags_t::GRANT)
+    if (rxFlag & HomaHeader::Flags_t::ACK)
     {
-      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
+      m_nanoPuArcht->GetPacketizationBuffer ()
+                   ->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(msgLen));
+    }
+    else
+    {
+      int rtxPkt = -1;
+      int credit = homah.GetGrantOffset ();
+      
+      homaNanoPuCtrlMeta_t ctrlMeta = {};
+      ctrlMeta.remoteIp = srcIp;
+      ctrlMeta.remotePort = srcPort;
+      ctrlMeta.localPort = dstPort;
+      ctrlMeta.txMsgId = txMsgId;
+      ctrlMeta.priority = homah.GetPrio ();
+        
+      if (rxFlag & HomaHeader::Flags_t::GRANT)
+      {
+        ctrlMeta.flag = HomaHeader::Flags_t::BOGUS;
+      }
+      else if (rxFlag & HomaHeader::Flags_t::RESEND)
+      {   
+        // Generate a BUSY packet anyway. This packet will be dropped 
+        // in the egress pipeline if the message is the active one.
+        ctrlMeta.flag = HomaHeader::Flags_t::BUSY;
+        ctrlMeta.msgLen = msgLen;
+        ctrlMeta.pktOffset = pktOffset;
+        ctrlMeta.grantOffset = credit;
+          
+        rtxPkt = pktOffset;
+      }
+        
+      m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta);
         
       m_nanoPuArcht->GetPacketizationBuffer ()
                    ->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(pktOffset));
@@ -324,32 +344,6 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                    ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
                                        NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
                                        std::greater<int>());
-    }
-    else if (rxFlag & HomaHeader::Flags_t::RESEND)
-    {   
-      m_nanoPuArcht->GetPktGen () ->CtrlPktEvent (ctrlMeta);
-        
-      rtxPkt = pktOffset;
-      m_nanoPuArcht->GetPacketizationBuffer ()
-                   ->CreditToBtxEvent (txMsgId, rtxPkt, credit, credit,
-                                       NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
-                                       std::greater<int>());
-        
-      // Generate a BUSY packet anyway. This packet will be dropped 
-      // in the egress pipeline if the message is the active one.
-      ctrlMeta.shouldGenCtrlPkt = true;
-      ctrlMeta.flag = HomaHeader::Flags_t::BUSY;
-      ctrlMeta.remoteIp = iph.GetSource ();
-      ctrlMeta.remotePort = homah.GetDstPort ();
-      ctrlMeta.localPort = homah.GetSrcPort ();
-      ctrlMeta.msgLen = msgLen;
-      ctrlMeta.pktOffset = pktOffset;
-      ctrlMeta.grantOffset = credit;
-    }
-    else if (rxFlag & HomaHeader::Flags_t::ACK)
-    {
-      m_nanoPuArcht->GetPacketizationBuffer ()
-                   ->DeliveredEvent (txMsgId, msgLen, setBitMapUntil(msgLen));
     }
   }
   else
