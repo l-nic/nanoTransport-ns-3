@@ -112,11 +112,18 @@ HomaNanoPuArchtIngressPipe::HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nan
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
+    
+  uint8_t acceptedSchedOrder = m_nanoPuArcht->GetNumTotalPrioBands()
+                               - m_nanoPuArcht->GetNumUnschedPrioBands();
    
   Callback<bool, nanoPuArchtSchedObj_t<homaSchedMeta_t>> homaSchedPredicate;
   homaSchedPredicate = MakeCallback (&HomaNanoPuArchtIngressPipe::SchedPredicate, this);
     
-  m_nanoPuArchtScheduler = CreateObject<NanoPuArchtScheduler<homaSchedMeta_t>>(homaSchedPredicate);
+  Callback<void, nanoPuArchtSchedObj_t<homaSchedMeta_t>&> homaPostSchedOp;
+  homaPostSchedOp = MakeCallback (&HomaNanoPuArchtIngressPipe::PostSchedOp, this);
+    
+  m_nanoPuArchtScheduler = CreateObject<NanoPuArchtScheduler<homaSchedMeta_t>>
+                             (acceptedSchedOrder, homaSchedPredicate, homaPostSchedOp);
 }
 
 HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
@@ -126,8 +133,25 @@ HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
     
 bool HomaNanoPuArchtIngressPipe::SchedPredicate (nanoPuArchtSchedObj_t<homaSchedMeta_t> obj) 
 {
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << obj.id << obj.rank
+                    << obj.metaData.grantableIdx << obj.metaData.grantedIdx);
+  NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
+               " Homa SchedPredicate id: " << obj.id << " rank: " << obj.rank << " meta: " <<
+               obj.metaData.grantableIdx << ", " << obj.metaData.grantedIdx);
+    
   return obj.metaData.grantableIdx > obj.metaData.grantedIdx;
 };
+    
+void HomaNanoPuArchtIngressPipe::PostSchedOp (nanoPuArchtSchedObj_t<homaSchedMeta_t>& obj)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << obj.id << obj.rank
+                    << obj.metaData.grantableIdx << obj.metaData.grantedIdx);
+  NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
+               " Homa PostSchedOp id: " << obj.id << " rank: " << obj.rank << " meta: " <<
+               obj.metaData.grantableIdx << ", " << obj.metaData.grantedIdx);
+    
+  obj.metaData.grantedIdx = obj.metaData.grantableIdx;
+}
     
 bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
                                              uint16_t protocol, const Address &from)
@@ -170,14 +194,14 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                                                              msgLen, 
                                                              pktOffset);
       
+    SocketIpTosTag priorityTag;
+    p-> PeekPacketTag (priorityTag);
+    uint8_t priority = priorityTag.GetTos();
     if (rxFlag & HomaHeader::Flags_t::DATA)
-    {
-      SocketIpTosTag priorityTag;
-      p-> PeekPacketTag (priorityTag);
-        
+    {   
       m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
                                    srcPort, dstPort, txMsgId, 
-                                   pktOffset, priorityTag.GetTos()); 
+                                   pktOffset, priority); 
     }
       
     if (!rxMsgInfo.success)
@@ -211,6 +235,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     uint16_t ackNo = rxMsgInfo.ackNo;
     if (rxMsgInfo.ackNo == pktOffset)
       ackNo++;
+      
+    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU Homa received msg: " << rxMsgInfo.rxMsgId <<
+                " pktOffset: " << pktOffset << 
+                " prio: " << (uint16_t)priority);
       
     if (ackNo >= msgLen)
     {
@@ -263,6 +292,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       .grantedIdx = m_pendingMsgInfo[rxMsgInfo.rxMsgId].grantedIdx
     };
       
+    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
+                " NanoPU Homa called Scheduler for id: " << rxMsgInfo.rxMsgId <<
+                " rank: " << m_pendingMsgInfo[rxMsgInfo.rxMsgId].remainingSize << 
+                " removeFlag: " << msgIsFullyGranted);
+      
     // Choose a msg to GRANT and fire CtrlPktEvent with given priority
     bool schedulingIsSuccessful;
     uint16_t rxMsgIdToGrant;
@@ -274,7 +308,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     prioBand += m_nanoPuArcht->GetNumUnschedPrioBands();
       
     if (schedulingIsSuccessful && prioBand < m_nanoPuArcht->GetNumTotalPrioBands())
-    {
+    {       
       homaNanoPuCtrlMeta_t ctrlMeta = {
         .flag = HomaHeader::Flags_t::GRANT,
         .remoteIp = m_pendingMsgInfo[rxMsgIdToGrant].remoteIp,
@@ -288,6 +322,11 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       };
       m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta);
       m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx = ctrlMeta.grantOffset;
+        
+      NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<  
+                  " NanoPU Homa GRANTed msg: " << rxMsgIdToGrant <<
+                  " grantOffset: " << m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx << 
+                  " with prio: " << (uint16_t)prioBand);
     }
         
     // TODO: Homa keeps a timer per granted inbound messages and send
@@ -298,7 +337,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
            rxFlag & HomaHeader::Flags_t::RESEND ||
            rxFlag & HomaHeader::Flags_t::ACK)
   {
-    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+    NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU Homa IngressPipe processing a "
                  << homah.FlagsToString(rxFlag) << " packet.");
     

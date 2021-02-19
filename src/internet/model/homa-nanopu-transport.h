@@ -111,16 +111,22 @@ public:
   HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nanoPuArcht);
   ~HomaNanoPuArchtIngressPipe (void);
   
-  bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
-                    uint16_t protocol, const Address &from);
-                    
   /**
    * \brief Performs the predicate check for the NanoPuArchtScheduler extern
    * \param obj The scheduled object on which the predicate is being evaluated
    * \return the result of the predicate check
    */
   bool SchedPredicate (nanoPuArchtSchedObj_t<homaSchedMeta_t> obj);
+  
+  /**
+   * \brief Performs the post scheduling operation for the NanoPuArchtScheduler extern
+   * \param obj The scheduled object on which the operation should be performed
+   */
+  void PostSchedOp (nanoPuArchtSchedObj_t<homaSchedMeta_t>& obj);
 
+  bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
+                    uint16_t protocol, const Address &from);
+                    
 private:
 
   Ptr<HomaNanoPuArcht> m_nanoPuArcht; //!< the archt itself

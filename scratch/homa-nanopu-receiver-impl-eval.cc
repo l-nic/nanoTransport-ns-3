@@ -106,7 +106,7 @@ void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
 void SendMsg (Ptr<HomaNanoPuArcht> homaNanoPu, Ipv4Address dstIp, 
               uint16_t dstPort, uint32_t msgSize, uint16_t payloadSize)
 {
-  NS_LOG_DEBUG(Simulator::Now ().GetNanoSeconds () <<
+  NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () <<
                " Sending a message of "<< msgSize << 
                " Bytes through Homa NanoPU Archt (" <<
                homaNanoPu << ") to " << dstIp <<
@@ -141,8 +141,8 @@ main (int argc, char *argv[])
   Time::SetResolution (Time::NS);
   Packet::EnablePrinting ();
   LogComponentEnable ("HomaNanoPuReceiverEval", LOG_LEVEL_DEBUG);
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_ALL);
-//   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_WARN);
 //   LogComponentEnable ("PfifoHomaQueueDisc", LOG_LEVEL_ALL);
     
   std::string tracesFileName ("outputs/homa-nanopu-impl-eval/ReceiverEval");
@@ -152,7 +152,7 @@ main (int argc, char *argv[])
 
   /******** Create Nodes ********/
   NS_LOG_UNCOND("Creating Nodes...");
-  uint16_t nHosts = 5; // 1 Receiver + 4 Senders
+  uint16_t nHosts = 7; // 1 Receiver + n-1 Senders
     
   NodeContainer endHosts;
   endHosts.Create (nHosts);
@@ -283,7 +283,7 @@ main (int argc, char *argv[])
     
   Simulator::Schedule (Seconds (startTime + rtt), &SendMsg, 
                        nanoPuArchts[2], nanoPuArchts[0]->GetLocalIp (), 
-                       102, 5*initialCredit*payloadSize, payloadSize);
+                       102, 4*initialCredit*payloadSize, payloadSize);
     
   Simulator::Schedule (Seconds (startTime + 2*rtt), &SendMsg, 
                        nanoPuArchts[3], nanoPuArchts[0]->GetLocalIp (), 
@@ -292,6 +292,14 @@ main (int argc, char *argv[])
   Simulator::Schedule (Seconds (startTime + 3*rtt), &SendMsg, 
                        nanoPuArchts[4], nanoPuArchts[0]->GetLocalIp (), 
                        104, initialCredit*payloadSize, payloadSize);
+    
+  Simulator::Schedule (Seconds (startTime + 4*rtt), &SendMsg, 
+                       nanoPuArchts[5], nanoPuArchts[0]->GetLocalIp (), 
+                       105, 13*initialCredit*payloadSize, payloadSize);
+    
+  Simulator::Schedule (Seconds (startTime + 5*rtt), &SendMsg, 
+                       nanoPuArchts[6], nanoPuArchts[0]->GetLocalIp (), 
+                       106, 6*initialCredit*payloadSize, payloadSize);
     
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");

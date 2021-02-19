@@ -119,9 +119,12 @@ public:
     return tid;
   }
 
-  NanoPuArchtScheduler
-    (Callback<bool, nanoPuArchtSchedObj_t<MetaType>> predicateCheck)
-    : m_predicateCheck (predicateCheck){}
+  NanoPuArchtScheduler (uint8_t maxSchedOrder,
+     Callback<bool, nanoPuArchtSchedObj_t<MetaType>> predicateCheck,
+     Callback<void, nanoPuArchtSchedObj_t<MetaType>&> postSchedOp)
+    : m_maxSchedOrder (maxSchedOrder),
+      m_predicateCheck (predicateCheck),
+      m_postSchedOp (postSchedOp){}
   ~NanoPuArchtScheduler (void){ }
   
   std::tuple<bool, uint16_t, uint8_t> UpdateAndSchedule (uint16_t id, 
@@ -161,15 +164,15 @@ public:
     // NOTE: The operations below would normally be performed in
     //       parallel with flip-flops on hardware given N_ACTIVE_MSGS.
     bool objIsScheduled = false;
-    nanoPuArchtSchedObj_t<MetaType> scheduledObj;
+    uint16_t scheduledObjIdx = 0;
     uint8_t scheduledOrder = 0;
     uint16_t minRankSoFar = 0xffff;
     for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
     {
       if (m_objs[i].rank < minRankSoFar && m_predicateCheck(m_objs[i]))
       {
-        scheduledObj = m_objs[i];
-        minRankSoFar = scheduledObj.rank;
+        scheduledObjIdx = i;
+        minRankSoFar = m_objs[scheduledObjIdx].rank;
         objIsScheduled = true;
       }
     }
@@ -177,12 +180,17 @@ public:
     { // Figure out the number of objects that had smaller rank 
       for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
       {
-        if (m_objs[i].rank < scheduledObj.rank)
+        if (m_objs[i].rank < m_objs[scheduledObjIdx].rank)
           scheduledOrder++;
       }
+      
+      if (scheduledOrder < m_maxSchedOrder)
+        m_postSchedOp(m_objs[scheduledObjIdx]);
+      else
+        objIsScheduled = false;
     }
 
-    return std::make_tuple(objIsScheduled, scheduledObj.id, scheduledOrder); 
+    return std::make_tuple(objIsScheduled, m_objs[scheduledObjIdx].id, scheduledOrder); 
   }
   
 protected:
@@ -190,7 +198,10 @@ protected:
   std::deque<nanoPuArchtSchedObj_t<MetaType>> m_objs;
   
   static const uint16_t N_ACTIVE_MSGS = 16;
-  Callback<bool, nanoPuArchtSchedObj_t<MetaType>> m_predicateCheck; 
+  
+  uint8_t m_maxSchedOrder; //!< Highest scheduling (exclusive) order accepted as success
+  Callback<bool, nanoPuArchtSchedObj_t<MetaType>> m_predicateCheck;
+  Callback<void, nanoPuArchtSchedObj_t<MetaType>&> m_postSchedOp;
 };
 
 /******************************************************************************/
