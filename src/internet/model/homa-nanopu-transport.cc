@@ -306,6 +306,9 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                      m_pendingMsgInfo[rxMsgInfo.rxMsgId].remainingSize,
                                       msgIsFullyGranted, schedulerMeta);
     prioBand += m_nanoPuArcht->GetNumUnschedPrioBands();
+    // TODO: If an inbound messages expires on Reassembly buffer, its entry 
+    //       will still exist inside the scheduler. It will unnecessarily 
+    //       occupy flip-flop structure.
       
     if (schedulingIsSuccessful && prioBand < m_nanoPuArcht->GetNumTotalPrioBands())
     {       
