@@ -335,12 +335,13 @@ void MsgGeneratorApp::ReceiveMessage (Ptr<Socket> socket)
 void MsgGeneratorApp::ReceiveMessageFromNanoPu (Ptr<Packet> msg)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  Ptr<Packet> cmsg = msg->Copy();
     
   NanoPuAppHeader appHdr;
-  msg->RemoveHeader(appHdr);
+  cmsg->RemoveHeader(appHdr);
     
   NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
-              " client received " << msg->GetSize () << " bytes from " <<
+              " client received " << cmsg->GetSize () << " bytes from " <<
               appHdr.GetRemoteIp () << ":" << appHdr.GetRemotePort ());
 }
     
