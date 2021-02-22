@@ -46,7 +46,7 @@
 
 namespace ns3 {
     
-typedef std::bitset<10240> bitmap_t ;
+typedef std::bitset<20480> bitmap_t ;
 #define BITMAP_SIZE sizeof(bitmap_t)*8
 // TODO: When most messages are small, a bitmap of 
 //       this size consumes a lot of memory.

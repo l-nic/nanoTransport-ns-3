@@ -130,7 +130,7 @@ main (int argc, char *argv[])
   uint32_t simIdx = 0;
   bool traceQueues = false;
   bool disableRtx = false;
-  uint64_t inboundRtxTimeout = 10000; // in microseconds
+  uint64_t outboundRtxTimeout = 10000; // in microseconds
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("duration", "The duration of the simulation in seconds.", duration);
@@ -138,15 +138,15 @@ main (int argc, char *argv[])
   cmd.AddValue ("simIdx", "The index of the simulation used to identify parallel runs.", simIdx);
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
-  cmd.AddValue ("inboundRtxTimeout", "Number of microseconds before an inbound msg expires.", inboundRtxTimeout);
+  cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
   cmd.Parse (argc, argv);
     
   SeedManager::SetRun (simIdx);
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
 //   LogComponentEnable ("HomaNanoPuPaperReproduction", LOG_LEVEL_DEBUG);
-//   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-//   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_ALL);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_WARN);
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);
 //   LogComponentEnable ("PfifoHomaQueueDisc", LOG_LEVEL_ALL);
     
@@ -283,12 +283,12 @@ main (int argc, char *argv[])
                      UintegerValue(payloadSize));
   if (disableRtx)
   {
-    inboundRtxTimeout *= 1e9;
+    outboundRtxTimeout *= 1e9;
   }
   Config::SetDefault("ns3::HomaNanoPuArcht::TimeoutInterval", 
-                     TimeValue(MicroSeconds(inboundRtxTimeout)));
+                     TimeValue(MicroSeconds(outboundRtxTimeout)));
   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNTimeouts", 
-                     UintegerValue(5));
+                     UintegerValue(10));
   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNMessages", 
                      UintegerValue(1000));
   Config::SetDefault("ns3::HomaNanoPuArcht::InitialCredit", 
