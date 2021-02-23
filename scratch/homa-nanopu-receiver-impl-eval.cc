@@ -134,8 +134,12 @@ main (int argc, char *argv[])
     
   double startTime = 3.0; // Seconds
   double rtt = 6.0e-6; // Seconds
+
+  uint16_t msgSizes[] = {10, 4, 8, 1, 13, 6, 13}; // Times initial credit in packets
+  uint8_t nActiveMsgsInSched = 16;
     
   CommandLine cmd (__FILE__);
+  cmd.AddValue ("nActiveMsgs", "The number of active messages in the scheduler extern.", nActiveMsgsInSched);
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::NS);
@@ -152,7 +156,7 @@ main (int argc, char *argv[])
 
   /******** Create Nodes ********/
   NS_LOG_UNCOND("Creating Nodes...");
-  uint16_t nHosts = 7; // 1 Receiver + n-1 Senders
+  uint16_t nHosts = sizeof(msgSizes)/sizeof(msgSizes[0]) + 1; // 1 Receiver + n-1 Senders
     
   NodeContainer endHosts;
   endHosts.Create (nHosts);
@@ -253,6 +257,8 @@ main (int argc, char *argv[])
                      UintegerValue(numUnschedPrioBands));
   Config::SetDefault("ns3::HomaNanoPuArcht::OvercommitLevel", 
                      UintegerValue(numTotalPrioBands-numUnschedPrioBands));
+  Config::SetDefault("ns3::HomaNanoPuArcht::NumActiveMsgsInSched", 
+                     UintegerValue(nActiveMsgsInSched));
     
   std::vector<Ptr<HomaNanoPuArcht>> nanoPuArchts;
   for(int i = 0 ; i < nHosts ; i++)
@@ -276,30 +282,12 @@ main (int argc, char *argv[])
                                 MakeBoundCallback(&TraceDataPktArrival, pktStream));
     
   /******** Schedule Messages ********/
-    
-  Simulator::Schedule (Seconds (startTime), &SendMsg, 
-                       nanoPuArchts[1], nanoPuArchts[0]->GetLocalIp (), 
-                       101, 10*initialCredit*payloadSize, payloadSize);
-    
-  Simulator::Schedule (Seconds (startTime + rtt), &SendMsg, 
-                       nanoPuArchts[2], nanoPuArchts[0]->GetLocalIp (), 
-                       102, 4*initialCredit*payloadSize, payloadSize);
-    
-  Simulator::Schedule (Seconds (startTime + 2*rtt), &SendMsg, 
-                       nanoPuArchts[3], nanoPuArchts[0]->GetLocalIp (), 
-                       103, 8*initialCredit*payloadSize, payloadSize);
-    
-  Simulator::Schedule (Seconds (startTime + 3*rtt), &SendMsg, 
-                       nanoPuArchts[4], nanoPuArchts[0]->GetLocalIp (), 
-                       104, initialCredit*payloadSize, payloadSize);
-    
-  Simulator::Schedule (Seconds (startTime + 4*rtt), &SendMsg, 
-                       nanoPuArchts[5], nanoPuArchts[0]->GetLocalIp (), 
-                       105, 13*initialCredit*payloadSize, payloadSize);
-    
-  Simulator::Schedule (Seconds (startTime + 5*rtt), &SendMsg, 
-                       nanoPuArchts[6], nanoPuArchts[0]->GetLocalIp (), 
-                       106, 6*initialCredit*payloadSize, payloadSize);
+  for (uint16_t i = 0; i < nHosts-1; i++)
+  {
+    Simulator::Schedule (Seconds (startTime + i*rtt), &SendMsg, 
+                         nanoPuArchts[i+1], nanoPuArchts[0]->GetLocalIp (), 
+                         101+i, msgSizes[i]*initialCredit*payloadSize, payloadSize);
+  }
     
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");

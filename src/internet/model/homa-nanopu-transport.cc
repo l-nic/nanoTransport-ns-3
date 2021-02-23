@@ -124,6 +124,8 @@ HomaNanoPuArchtIngressPipe::HomaNanoPuArchtIngressPipe (Ptr<HomaNanoPuArcht> nan
     
   m_nanoPuArchtScheduler = CreateObject<NanoPuArchtScheduler<homaSchedMeta_t>>
                              (acceptedSchedOrder, homaSchedPredicate, homaPostSchedOp);
+    
+  m_nanoPuArchtScheduler->SetNumActiveMsgs(m_nanoPuArcht->GetNumActiveMsgsInSched());
 }
 
 HomaNanoPuArchtIngressPipe::~HomaNanoPuArchtIngressPipe ()
@@ -146,11 +148,13 @@ void HomaNanoPuArchtIngressPipe::PostSchedOp (nanoPuArchtSchedObj_t<homaSchedMet
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << obj.id << obj.rank
                     << obj.metaData.grantableIdx << obj.metaData.grantedIdx);
+    
+  obj.metaData.grantedIdx = obj.metaData.grantableIdx;
+    
   NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
                " Homa PostSchedOp id: " << obj.id << " rank: " << obj.rank << " meta: " <<
                obj.metaData.grantableIdx << ", " << obj.metaData.grantedIdx);
     
-  obj.metaData.grantedIdx = obj.metaData.grantableIdx;
 }
     
 bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
@@ -232,15 +236,12 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
 //                          m_nanoPuArcht->GetReassemblyBuffer (),
 //                          cp, metaData);
       
-    uint16_t ackNo = rxMsgInfo.ackNo;
-    if (rxMsgInfo.ackNo == pktOffset)
-      ackNo++;
-      
     NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
                 " NanoPU Homa received msg: " << rxMsgInfo.rxMsgId <<
                 " pktOffset: " << pktOffset << 
                 " prio: " << (uint16_t)priority);
       
+    uint16_t ackNo = rxMsgInfo.ackNo;
     if (ackNo >= msgLen)
     {
       homaNanoPuCtrlMeta_t ctrlMeta = {
@@ -259,6 +260,9 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       // Clear the state of this message for simulation performance
       m_busyMsgs.erase(rxMsgInfo.rxMsgId);
       m_pendingMsgInfo.erase(rxMsgInfo.rxMsgId);
+        
+      NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << " NanoPU Homa ACKed msg: " << 
+                  txMsgId << " pktOffset: " << ackNo << " (Completed!)");
         
       return true;
     }
@@ -310,7 +314,9 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     //       will still exist inside the scheduler. It will unnecessarily 
     //       occupy flip-flop structure.
       
-    if (schedulingIsSuccessful && prioBand < m_nanoPuArcht->GetNumTotalPrioBands())
+    if (schedulingIsSuccessful && 
+        prioBand < m_nanoPuArcht->GetNumTotalPrioBands() &&
+        !m_busyMsgs[rxMsgIdToGrant])
     {       
       homaNanoPuCtrlMeta_t ctrlMeta = {
         .flag = HomaHeader::Flags_t::GRANT,
@@ -353,7 +359,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
       m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta);
         
       NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << " NanoPU Homa ACKed msg: " << 
-                  txMsgId << " pktOffset: " << ackNo);
+                  rxMsgInfo.rxMsgId << " pktOffset: " << ackNo);
     }
         
     // TODO: Homa keeps a timer per granted inbound messages and send
@@ -611,6 +617,10 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                    UintegerValue (6),
                    MakeUintegerAccessor (&HomaNanoPuArcht::m_overcommitLevel),
                    MakeUintegerChecker<uint8_t> ())
+    .AddAttribute ("NumActiveMsgsInSched", "Number of active messages to be configured in the scheduler extern",
+                   UintegerValue (16),
+                   MakeUintegerAccessor (&HomaNanoPuArcht::m_nActiveMsgsInScheduler),
+                   MakeUintegerChecker<uint8_t> ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the the NanoPuArcht by the sender application layer.",
@@ -690,6 +700,12 @@ uint8_t
 HomaNanoPuArcht::GetOvercommitLevel (void) const
 {
   return m_overcommitLevel;
+}
+    
+uint8_t
+HomaNanoPuArcht::GetNumActiveMsgsInSched (void) const
+{
+  return m_nActiveMsgsInScheduler;
 }
     
 bool HomaNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 

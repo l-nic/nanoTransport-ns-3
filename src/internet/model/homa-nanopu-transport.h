@@ -226,6 +226,8 @@ public:
    */
   uint8_t GetOvercommitLevel (void) const;
   
+  uint8_t GetNumActiveMsgsInSched (void) const;
+  
   /**
    * \brief Implements programmable ingress pipeline architecture.
    *
@@ -260,6 +262,8 @@ private:
   uint8_t m_numTotalPrioBands;   //!< Total number of priority levels used within the network
   uint8_t m_numUnschedPrioBands; //!< Number of priority bands dedicated for unscheduled packets
   uint8_t m_overcommitLevel;     //!< Minimum number of messages to Grant at the same time
+  
+  uint8_t m_nActiveMsgsInScheduler; //!< Allows configurability for Scheduler experiments
   
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, 
                  uint16_t, uint16_t, int, 
