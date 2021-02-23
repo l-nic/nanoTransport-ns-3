@@ -691,13 +691,12 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
   if (entry != m_rxMsgIdTable.end())
   {
     rxMsgInfo.rxMsgId = entry->second;
+    
+    rxMsgInfo.isNewPkt = !m_rxInfoBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
       
-    // compute the beginning of the inflight window
-    rxMsgInfo.ackNo = getFirstSetBitPos(~(m_receivedBitmap[rxMsgInfo.rxMsgId]));
-      
-    rxMsgInfo.numPkts = m_receivedBitmap[rxMsgInfo.rxMsgId].count();
-      
-    rxMsgInfo.isNewPkt = !m_receivedBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
+    m_rxInfoBitmap[rxMsgInfo.rxMsgId].set(pktOffset);
+    rxMsgInfo.ackNo = getFirstSetBitPos(~(m_rxInfoBitmap[rxMsgInfo.rxMsgId]));
+    rxMsgInfo.numPkts = m_rxInfoBitmap[rxMsgInfo.rxMsgId].count();
       
     rxMsgInfo.success = true;
     NS_LOG_INFO("NanoPU Reassembly Buffer Found rxMsgId: " << entry->second <<
@@ -715,6 +714,7 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
     m_receivedBitmap.insert({rxMsgInfo.rxMsgId,0});
+    m_rxInfoBitmap.insert({rxMsgInfo.rxMsgId,(bitmap_t)1<<pktOffset});
       
     if (m_nanoPuArcht->MemIsOptimized ())
     {
@@ -726,8 +726,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
       m_buffers.insert({rxMsgInfo.rxMsgId,buffer});
     }
     
-    rxMsgInfo.ackNo = 0;
-    rxMsgInfo.numPkts = 0;
+    rxMsgInfo.ackNo = getFirstSetBitPos(~(m_rxInfoBitmap[rxMsgInfo.rxMsgId]));
+    rxMsgInfo.numPkts = m_rxInfoBitmap[rxMsgInfo.rxMsgId].count();
     rxMsgInfo.isNewMsg = true;
     rxMsgInfo.isNewPkt = true;
     rxMsgInfo.success = true;
@@ -757,7 +757,6 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
       m_buffers[meta.rxMsgId][meta.pktOffset] = pkt;
     
     /* Mark the packet as received*/
-    // NOTE: received_bitmap must have 2 write ports: here and in getRxMsgInfo()
     m_receivedBitmap [meta.rxMsgId].set(meta.pktOffset);
     
     /* Check if all pkts have been received*/
@@ -858,6 +857,7 @@ void NanoPuArchtReassemble::ClearStateForMsg (uint16_t rxMsgId)
       
   /* Clear the stored state for simulation performance */
   m_receivedBitmap.erase(rxMsgId);
+  m_rxInfoBitmap.erase(rxMsgId);
   
   if (m_nanoPuArcht->MemIsOptimized ())
   {

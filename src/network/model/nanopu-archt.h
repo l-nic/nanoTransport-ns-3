@@ -25,7 +25,6 @@
 #include <tuple>
 #include <vector>
 #include <list>
-#include <math.h>
 #include <bitset>
 #include <queue>
 #include <deque>
@@ -122,10 +121,16 @@ public:
   NanoPuArchtScheduler (uint8_t maxSchedOrder,
      Callback<bool, nanoPuArchtSchedObj_t<MetaType>> predicateCheck,
      Callback<void, nanoPuArchtSchedObj_t<MetaType>&> postSchedOp)
-    : m_maxSchedOrder (maxSchedOrder),
+    : m_nActiveMsgs (16),
+      m_maxSchedOrder (maxSchedOrder),
       m_predicateCheck (predicateCheck),
       m_postSchedOp (postSchedOp){}
   ~NanoPuArchtScheduler (void){ }
+  
+  /* The function below would not exists on hardware. 
+   * Implemented for experimental reasons here.
+   */
+  void SetNumActiveMsgs (uint8_t nActiveMsgs) {m_nActiveMsgs = nActiveMsgs;}
   
   std::tuple<bool, uint16_t, uint8_t> UpdateAndSchedule (uint16_t id, 
                                                          uint16_t rank,
@@ -162,14 +167,14 @@ public:
     }
     
     // NOTE: The operations below would normally be performed in
-    //       parallel with flip-flops on hardware given N_ACTIVE_MSGS.
+    //       parallel with flip-flops on hardware given m_nActiveMsgs.
     bool objIsScheduled = false;
     uint16_t scheduledObjIdx = 0;
     uint8_t scheduledOrder = 0;
     uint16_t minRankSoFar = 0xffff;
-    for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
+    for(uint16_t i=0; i < m_objs.size() && i < m_nActiveMsgs; i++)
     {
-      if (m_objs[i].rank < minRankSoFar && m_predicateCheck(m_objs[i]))
+      if (m_predicateCheck(m_objs[i]) && m_objs[i].rank < minRankSoFar)
       {
         scheduledObjIdx = i;
         minRankSoFar = m_objs[scheduledObjIdx].rank;
@@ -178,9 +183,10 @@ public:
     }
     if (objIsScheduled)
     { // Figure out the number of objects that had smaller rank 
-      for(uint16_t i=0; i < m_objs.size() && i < N_ACTIVE_MSGS; i++)
+      for(uint16_t i=0; i < m_objs.size() && i < m_nActiveMsgs; i++)
       {
-        if (m_objs[i].rank < m_objs[scheduledObjIdx].rank)
+        if (m_objs[i].rank < m_objs[scheduledObjIdx].rank ||
+            (m_objs[i].rank == m_objs[scheduledObjIdx].rank && i < scheduledObjIdx))
           scheduledOrder++;
       }
       
@@ -197,7 +203,7 @@ protected:
 
   std::deque<nanoPuArchtSchedObj_t<MetaType>> m_objs;
   
-  static const uint16_t N_ACTIVE_MSGS = 16;
+  uint8_t m_nActiveMsgs;
   
   uint8_t m_maxSchedOrder; //!< Highest scheduling (exclusive) order accepted as success
   Callback<bool, nanoPuArchtSchedObj_t<MetaType>> m_predicateCheck;
@@ -502,6 +508,8 @@ protected:
                      
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+  std::unordered_map<uint16_t, 
+                     bitmap_t> m_rxInfoBitmap; //!< bitmap to determine which packets called rxMsgInfo, {rx_msg_id => bitmap}
 };
     
 /******************************************************************************/
