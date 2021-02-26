@@ -335,6 +335,11 @@ private:
     
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
+    
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int, 
+                 uint16_t, uint8_t> m_dataRecvTrace; //!< Trace of {pkt, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio} for arriving DATA packets
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int, 
+                 uint16_t, uint16_t> m_dataSendTrace; //!< Trace of {pkt, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio} for departing DATA packets
 };
     
 /******************************************************************************/
@@ -404,6 +409,11 @@ public:
    * \return The port number of the receiver
    */
   uint16_t GetDstPort (void);
+  /**
+   * \brief Get the highest granted packet offset for this message.
+   * \return The highest granted packet offset
+   */
+  uint16_t GetMaxGrantedIdx (void);
   
   /**
    * \return Whether this message has expired and to be cleared upon rtx timeouts

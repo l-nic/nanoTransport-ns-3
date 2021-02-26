@@ -101,6 +101,16 @@ HomaL4Protocol::GetTypeId (void)
                      "the receiver application by the HomaL4Protocol layer.",
                      MakeTraceSourceAccessor (&HomaL4Protocol::m_msgFinishTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("DataPktArrival",
+                     "Trace source indicating a DATA packet has arrived "
+                     "to the HomaL4Protocol layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_dataRecvTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("DataPktDeparture",
+                     "Trace source indicating a DATA packet has departed "
+                     "from the HomaL4Protocol layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_dataSendTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -376,6 +386,19 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
   {
     m_nextTimeTxQueWillBeEmpty = Simulator::Now() + timeToSerialize;
   }
+    
+  HomaHeader homaHeader;
+  packet->PeekHeader(homaHeader);
+  if (homaHeader.GetFlags () & HomaHeader::Flags_t::DATA)
+  {
+    uint32_t payloadSize = m_mtu - iph.GetSerializedSize () - homaHeader.GetSerializedSize ();
+    uint32_t msgSizeBytes = homaHeader.GetMsgSize ();
+    uint16_t msgSizePkts = msgSizeBytes / payloadSize + (msgSizeBytes % payloadSize != 0);
+    uint16_t remainingPkts = msgSizePkts - homaHeader.GetGrantOffset () - (uint16_t)1 + m_bdp; 
+    m_dataSendTrace(packet, saddr, daddr, homaHeader.GetSrcPort (), 
+                    homaHeader.GetDstPort (), homaHeader.GetTxMsgId (), 
+                    homaHeader.GetPktOffset (), remainingPkts);
+  }
    
   m_downTarget (packet, saddr, daddr, PROT_NUMBER, route);
 }
@@ -435,6 +458,12 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
       rxFlag & HomaHeader::Flags_t::BUSY)
   {
     m_recvScheduler->ReceivePacket(cp, header, homaHeader, interface);
+      
+    if (rxFlag & HomaHeader::Flags_t::DATA)
+      m_dataRecvTrace(cp, header.GetSource (), header.GetDestination (), 
+                      homaHeader.GetSrcPort (), homaHeader.GetDstPort (), 
+                      homaHeader.GetTxMsgId (), homaHeader.GetPktOffset (), 
+                      homaHeader.GetPrio ());
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND) ||
@@ -666,6 +695,11 @@ uint16_t HomaOutboundMsg::GetDstPort ()
   return m_dport;
 }
     
+uint16_t HomaOutboundMsg::GetMaxGrantedIdx ()
+{
+  return m_maxGrantedIdx;
+}
+    
 bool HomaOutboundMsg::IsExpired ()
 {
   return m_isExpired;
@@ -772,7 +806,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
      * Homa grants messages in a way that there is always exactly 1 BDP worth of 
      * packets on flight. Then we can calculate the remaining bytes as the following.
      */
-    m_remainingBytes = m_msgSizeBytes - (m_maxGrantedIdx - m_homa->GetBdp ()) * m_maxPayloadSize;
+    m_remainingBytes = m_msgSizeBytes - (m_maxGrantedIdx+1 - m_homa->GetBdp ()) * m_maxPayloadSize;
   }
   else
   {
@@ -1011,6 +1045,7 @@ bool HomaSendScheduler::GetNextPktOfMsg (uint16_t txMsgId, Ptr<Packet> &p)
     homaHeader.SetFlags (HomaHeader::Flags_t::DATA); 
     homaHeader.SetMsgSize (candidateMsg->GetMsgSizeBytes ());
     homaHeader.SetPktOffset (pktOffset);
+    homaHeader.SetGrantOffset (candidateMsg->GetMaxGrantedIdx ()); // For monitoring purposes
     homaHeader.SetPayloadSize (p->GetSize ());
     
     // NOTE: Use the following SocketIpTosTag append strategy when 

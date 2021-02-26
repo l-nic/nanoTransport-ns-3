@@ -395,9 +395,9 @@ main (int argc, char *argv[])
     std::string pktTraceFileName ("outputs/homa-paper-reproduction/nanopu-impl/debug-pktTrace.tr"); 
     pktStream = asciiTraceHelper.CreateFileStream (pktTraceFileName);
       
-    Config::ConnectWithoutContext("/NodeList/70/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
+    Config::ConnectWithoutContext("/NodeList/48/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
                                 MakeBoundCallback(&TraceDataPktDeparture,pktStream));
-    Config::ConnectWithoutContext("/NodeList/16/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
+    Config::ConnectWithoutContext("/NodeList/115/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
                                 MakeBoundCallback(&TraceDataPktArrival,pktStream));
   
 //     std::string pcapFileName ("outputs/homa-paper-reproduction/nanopu-impl/pcaps/tor-spine");
