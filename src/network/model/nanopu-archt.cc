@@ -247,7 +247,7 @@ void NanoPuArchtPacketize::DeliveredEvent (uint16_t txMsgId, uint16_t msgLen,
       && std::find(m_txMsgIdFreeList.begin(),m_txMsgIdFreeList.end(),txMsgId) == m_txMsgIdFreeList.end())
   {
     m_deliveredBitmap[txMsgId] |= ackPkts;
-    m_ranks[txMsgId] = msgLen -  m_deliveredBitmap[txMsgId].count();
+    m_ranks[txMsgId] = msgLen - m_deliveredBitmap[txMsgId].count();
       
 //     if (m_deliveredBitmap[txMsgId] == (((bitmap_t)1)<<msgLen)-1)
 //     if (m_ranks[txMsgId] == 0) // More efficient, but bug prone

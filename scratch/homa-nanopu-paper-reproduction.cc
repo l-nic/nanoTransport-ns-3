@@ -121,6 +121,33 @@ std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &a
   return msgSizeCDF;
 }
 
+void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
+                          Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                          uint16_t sport, uint16_t dport, int txMsgId,
+                          uint16_t pktOffset, uint8_t prio)
+{
+  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "- "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+}
+void TraceDataPktDeparture (Ptr<OutputStreamWrapper> stream,
+                            Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                            uint16_t sport, uint16_t dport, int txMsgId,
+                            uint16_t pktOffset, uint16_t prio)
+{
+  NS_LOG_DEBUG("+ " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "+ "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -130,6 +157,7 @@ main (int argc, char *argv[])
   uint32_t simIdx = 0;
   bool traceQueues = false;
   bool disableRtx = false;
+  bool debugMode = false;
   uint64_t outboundRtxTimeout = 10000; // in microseconds
     
   CommandLine cmd (__FILE__);
@@ -139,12 +167,20 @@ main (int argc, char *argv[])
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
   cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
+  cmd.AddValue ("debugMode", "Whether to enable detailed pkt traces for debugging", debugMode);
   cmd.Parse (argc, argv);
     
-  SeedManager::SetRun (simIdx);
+  if (debugMode)
+  {
+    NS_LOG_UNCOND("Running in DEBUG Mode!");
+    SeedManager::SetRun (0);
+  }
+  else
+    SeedManager::SetRun (simIdx);
+    
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
-//   LogComponentEnable ("HomaNanoPuPaperReproduction", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("HomaNanoPuPaperReproduction", LOG_LEVEL_WARN);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_WARN);
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);
@@ -154,7 +190,10 @@ main (int argc, char *argv[])
   std::string tracesFileName ("outputs/homa-paper-reproduction/nanopu-impl/MsgTraces");
   tracesFileName += "_W5";
   tracesFileName += "_load-" + std::to_string((int)(networkLoad*100)) + "p";
-  tracesFileName += "_" + std::to_string(simIdx);
+  if (debugMode)
+    tracesFileName += "_debug";
+  else
+    tracesFileName += "_" + std::to_string(simIdx);
     
   std::string qStreamName = tracesFileName + ".qlen";
   std::string msgTracesFileName = tracesFileName + ".tr";
@@ -349,8 +388,21 @@ main (int argc, char *argv[])
     app->Start(Seconds (3.0));
     app->Stop(Seconds (3.0 + duration));
   }
+    
+  if (debugMode)
+  {
+    Ptr<OutputStreamWrapper> pktStream;
+    std::string pktTraceFileName ("outputs/homa-paper-reproduction/nanopu-impl/debug-pktTrace.tr"); 
+    pktStream = asciiTraceHelper.CreateFileStream (pktTraceFileName);
+      
+    Config::ConnectWithoutContext("/NodeList/98/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
+                                MakeBoundCallback(&TraceDataPktDeparture,pktStream));
+    Config::ConnectWithoutContext("/NodeList/52/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
+                                MakeBoundCallback(&TraceDataPktArrival,pktStream));
   
-//   aggregationLinks.EnablePcapAll ("outputs/homa-paper-reproduction/nanopu-impl/pcaps/tor-spine", false);
+//     std::string pcapFileName ("outputs/homa-paper-reproduction/nanopu-impl/pcaps/tor-spine");
+//     aggregationLinks.EnablePcapAll (pcapFileName, false);
+  }
 
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");

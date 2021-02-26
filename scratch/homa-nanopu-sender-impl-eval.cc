@@ -88,10 +88,10 @@ BytesInArbiterQueueTrace (Ptr<OutputStreamWrapper> stream,
       << " " << newval << std::endl;
 }
 
-void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
+void TraceDataPktDeparture (Ptr<OutputStreamWrapper> stream,
                           Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
                           uint16_t sport, uint16_t dport, int txMsgId,
-                          uint16_t pktOffset, uint8_t prio)
+                          uint16_t pktOffset, uint16_t prio)
 {
   NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () 
       << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
@@ -261,7 +261,7 @@ main (int argc, char *argv[])
   Ptr<OutputStreamWrapper> pktStream;
   pktStream = asciiTraceHelper.CreateFileStream (pktTracesFileName);
   Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::HomaNanoPuArcht/DataPktDeparture", 
-                                MakeBoundCallback(&TraceDataPktArrival, pktStream));
+                                MakeBoundCallback(&TraceDataPktDeparture, pktStream));
   
   Ptr<OutputStreamWrapper> qStream = asciiTraceHelper.CreateFileStream (qStreamName);
   nanoPuArchts[0]->TraceConnectWithoutContext ("BytesInArbiterQueue", 

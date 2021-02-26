@@ -288,6 +288,10 @@ main (int argc, char *argv[])
                          nanoPuArchts[i+1], nanoPuArchts[0]->GetLocalIp (), 
                          101+i, msgSizes[i]*initialCredit*payloadSize, payloadSize);
   }
+  
+  Simulator::Schedule (Seconds (startTime + 1.5*(double)rtt), &SendMsg, 
+                       nanoPuArchts[2], nanoPuArchts[0]->GetLocalIp (), 
+                       101+nHosts-1, 15*initialCredit*payloadSize, payloadSize);
     
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");
