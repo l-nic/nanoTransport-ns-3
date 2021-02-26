@@ -32,6 +32,7 @@
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/ipv4.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/ppp-header.h"
 #include "nanopu-archt.h"
 #include "ns3/nanopu-app-header.h"
 
@@ -165,8 +166,9 @@ void NanoPuArchtArbiter::EmitAfterPktOfSize (uint32_t size)
         return;
     }
       
-    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (size+1);
-//     delay -= NanoSeconds(1); // Accounts for rounding errors
+    PppHeader pph;
+    Time delay = m_nanoPuArcht->GetNicRate ()
+                   .CalculateBytesTxTime (size + pph.GetSerializedSize ());
       
     m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
      

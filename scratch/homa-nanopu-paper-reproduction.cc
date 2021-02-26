@@ -158,6 +158,7 @@ main (int argc, char *argv[])
   bool traceQueues = false;
   bool disableRtx = false;
   bool debugMode = false;
+  uint32_t initialCredit = 7; // in packets
   uint64_t outboundRtxTimeout = 10000; // in microseconds
     
   CommandLine cmd (__FILE__);
@@ -167,6 +168,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
   cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
+  cmd.AddValue ("bdpPkts", "RttBytes to use in the simulation.", initialCredit);
   cmd.AddValue ("debugMode", "Whether to enable detailed pkt traces for debugging", debugMode);
   cmd.Parse (argc, argv);
     
@@ -331,7 +333,7 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HomaNanoPuArcht::MaxNMessages", 
                      UintegerValue(1000));
   Config::SetDefault("ns3::HomaNanoPuArcht::InitialCredit", 
-                     UintegerValue(7));
+                     UintegerValue(initialCredit));
   Config::SetDefault("ns3::HomaNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
   Config::SetDefault("ns3::HomaNanoPuArcht::EnableArbiterQueueing", 
@@ -395,9 +397,9 @@ main (int argc, char *argv[])
     std::string pktTraceFileName ("outputs/homa-paper-reproduction/nanopu-impl/debug-pktTrace.tr"); 
     pktStream = asciiTraceHelper.CreateFileStream (pktTraceFileName);
       
-    Config::ConnectWithoutContext("/NodeList/70/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
+    Config::ConnectWithoutContext("/NodeList/48/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
                                 MakeBoundCallback(&TraceDataPktDeparture,pktStream));
-    Config::ConnectWithoutContext("/NodeList/16/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
+    Config::ConnectWithoutContext("/NodeList/115/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
                                 MakeBoundCallback(&TraceDataPktArrival,pktStream));
   
 //     std::string pcapFileName ("outputs/homa-paper-reproduction/nanopu-impl/pcaps/tor-spine");
