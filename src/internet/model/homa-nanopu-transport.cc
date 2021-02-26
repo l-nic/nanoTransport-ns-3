@@ -249,7 +249,7 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
         .localPort = dstPort,
         .txMsgId = txMsgId,
         .msgLen = msgLen,
-        .pktOffset = msgLen,
+        .pktOffset = rxMsgInfo.ackNo,
         .grantOffset = msgLen,
         .priority = 0
       }; 
@@ -519,7 +519,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
         NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                      " NanoPU Homa EgressPipe dropping the " << 
                      homah.FlagsToString (ctrlFlag) << " packet.");
-        m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (1);
+        m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (0);
         return;
       }
     }
@@ -551,7 +551,7 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
                " NanoPU Homa EgressPipe sending: " << 
                 cp->ToString ());
     
-  m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (cp->GetSize ()+1);
+  m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (cp->GetSize ());
     
   m_nanoPuArcht->SendToNetwork(cp);
 //   Simulator::Schedule (NanoSeconds(HOMA_EGRESS_PIPE_DELAY), 

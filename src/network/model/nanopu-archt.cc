@@ -159,7 +159,13 @@ void NanoPuArchtArbiter::EmitAfterPktOfSize (uint32_t size)
    
   if (m_nextTxEvent.IsExpired())
   {
-    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (size);
+    if (size == 0)
+    {
+        this->TxPkt ();
+        return;
+    }
+      
+    Time delay = m_nanoPuArcht->GetNicRate ().CalculateBytesTxTime (size+1);
 //     delay -= NanoSeconds(1); // Accounts for rounding errors
       
     m_nextTxEvent = Simulator::Schedule (delay, &NanoPuArchtArbiter::TxPkt, this);
