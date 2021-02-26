@@ -29,11 +29,13 @@ namespace ns3 {
 NS_LOG_COMPONENT_DEFINE ("IntHeader");
     
 NS_OBJECT_ENSURE_REGISTERED (IntHeader);
-
+    
+const uint64_t IntHeader::LINE_RATE_VALS[8] = {25000000000lu,50000000000lu,100000000000lu,200000000000lu,400000000000lu,0,0,0};
 
 IntHeader::IntHeader ()
   : m_protocol (0),
-    m_nHops (0)
+    m_nHops (0),
+    m_payloadSize (0)
 {
 }
 
@@ -60,15 +62,16 @@ IntHeader::GetInstanceTypeId (void) const
 void 
 IntHeader::Print (std::ostream &os) const
 {   
-  os << "nHops: " << m_nHops;
+  os << "length: " << m_payloadSize + GetSerializedSize ()
+     << " nHops: " << (uint16_t)m_nHops;
     
-  for (uint16_t i=0; i < m_nHops; i++)
+  for (uint8_t i=0; i < m_nHops; i++)
   {
-    os << " [Hop " << i << " -"
-       << " ts: " << m_intHops[i].time
-       << " txBytes: " << m_intHops[i].txBytes
-       << " qlen: " << m_intHops[i].qlen
-       << " bitRate: " << m_intHops[i].bitRate
+    os << " [Hop " << (uint16_t)i << " -"
+       << " ts: " << (uint64_t)(m_intHops[i].time)
+       << " txBytes: " << (uint32_t)(m_intHops[i].txBytes * BYTE_UNIT)
+       << " qlen: " << (uint32_t)(m_intHops[i].qlen * QLEN_UNIT)
+       << " bitRate: " << LINE_RATE_VALS[m_intHops[i].bitRate]
        << " ]";
   }
   os << " nextProt: " << (uint32_t)m_protocol;
@@ -77,13 +80,13 @@ IntHeader::Print (std::ostream &os) const
 uint32_t 
 IntHeader::GetSerializedSize (void) const
 {
-  return m_nHops * sizeof(intHop_t) + 5; 
+  return m_nHops * sizeof(intHopHdr_t) + 4; 
 }
     
 uint32_t 
 IntHeader::GetMaxSerializedSize (void) const
 {
-  return MAX_INT_HOPS * sizeof(intHop_t) + 5; 
+  return MAX_INT_HOPS * sizeof(intHopHdr_t) + 4; 
 }
     
 void
@@ -92,13 +95,15 @@ IntHeader::Serialize (Buffer::Iterator start) const
   Buffer::Iterator i = start;
 
   i.WriteU8 (m_protocol);
-  i.WriteHtonU16 (m_nHops);
-  for (uint16_t j=0; j < m_nHops; j++)
+  i.WriteU8 (m_nHops);
+  for (uint8_t j=0; j < m_nHops; j++)
   {
-    i.WriteHtonU64 (m_intHops[j].time);
-    i.WriteHtonU32 (m_intHops[j].txBytes);
-    i.WriteHtonU32 (m_intHops[j].qlen);
-    i.WriteHtonU64 (m_intHops[j].bitRate);
+//     i.WriteHtonU64 (m_intHops[j].time);
+//     i.WriteHtonU32 (m_intHops[j].txBytes);
+//     i.WriteHtonU32 (m_intHops[j].qlen);
+//     i.WriteHtonU64 (m_intHops[j].bitRate);
+    i.WriteHtonU32(m_intHops[j].buf[0]);
+    i.WriteHtonU32(m_intHops[j].buf[1]);
   }
   i.WriteHtonU16 (m_payloadSize);
 }
@@ -108,13 +113,15 @@ IntHeader::Deserialize (Buffer::Iterator start)
   Buffer::Iterator i = start;
   
   m_protocol = i.ReadU8();
-  m_nHops = i.ReadNtohU16 ();
-  for (uint16_t j=0; j < m_nHops; j++)
+  m_nHops = i.ReadU8 ();
+  for (uint8_t j=0; j < m_nHops; j++)
   {
-    m_intHops[j].time = i.ReadNtohU64 ();
-    m_intHops[j].txBytes = i.ReadNtohU32 ();
-    m_intHops[j].qlen = i.ReadNtohU32 ();
-    m_intHops[j].bitRate = i.ReadNtohU64 ();
+//     m_intHops[j].time = i.ReadNtohU64 ();
+//     m_intHops[j].txBytes = i.ReadNtohU32 ();
+//     m_intHops[j].qlen = i.ReadNtohU32 ();
+//     m_intHops[j].bitRate = i.ReadNtohU64 ();
+    m_intHops[j].buf[0] = i.ReadNtohU32();
+    m_intHops[j].buf[1] = i.ReadNtohU32();
   }
   m_payloadSize = i.ReadNtohU16 ();
 
@@ -132,7 +139,7 @@ void IntHeader::SetProtocol (uint8_t protocol)
   m_protocol = protocol;
 }
       
-uint16_t 
+uint8_t 
 IntHeader::GetNHops (void) const
 {
   return m_nHops;
@@ -144,11 +151,25 @@ IntHeader::PushHop (uint64_t time, uint32_t bytes, uint32_t qlen, uint64_t rate)
   NS_LOG_FUNCTION(this);
     
   if (m_nHops < MAX_INT_HOPS)
-  {
+  { 
     m_intHops[m_nHops].time = time;
-    m_intHops[m_nHops].txBytes = bytes;
-    m_intHops[m_nHops].qlen = qlen;
-    m_intHops[m_nHops].bitRate = rate;
+    m_intHops[m_nHops].txBytes = bytes / BYTE_UNIT;
+    m_intHops[m_nHops].qlen = qlen / QLEN_UNIT;
+    switch (rate){
+      case 25000000000lu:
+        m_intHops[m_nHops].bitRate = 0; break;
+      case 50000000000lu:
+        m_intHops[m_nHops].bitRate = 1; break;
+      case 100000000000lu:
+        m_intHops[m_nHops].bitRate = 2; break;
+      case 200000000000lu:
+        m_intHops[m_nHops].bitRate = 3; break;
+      case 400000000000lu:
+        m_intHops[m_nHops].bitRate = 4; break;
+      default:
+        NS_FATAL_ERROR("Error: IntHeader unknown BitRate: " << rate);
+        break;
+    }
     
     m_nHops++;
     return true;
@@ -157,7 +178,7 @@ IntHeader::PushHop (uint64_t time, uint32_t bytes, uint32_t qlen, uint64_t rate)
 }
     
 intHop_t 
-IntHeader::PeekHopN (uint16_t hopNo)
+IntHeader::PeekHopN (uint8_t hopNo)
 {
   NS_LOG_FUNCTION(this);
     
@@ -165,9 +186,9 @@ IntHeader::PeekHopN (uint16_t hopNo)
   if (hopNo < m_nHops)
   {
     hopInfo.time = m_intHops[hopNo].time;
-    hopInfo.txBytes = m_intHops[hopNo].txBytes;
-    hopInfo.qlen = m_intHops[hopNo].qlen;
-    hopInfo.bitRate = m_intHops[hopNo].bitRate;
+    hopInfo.txBytes = m_intHops[hopNo].txBytes * BYTE_UNIT;
+    hopInfo.qlen = m_intHops[hopNo].qlen * QLEN_UNIT;
+    hopInfo.bitRate = LINE_RATE_VALS[m_intHops[hopNo].bitRate];
   }
   else
   {

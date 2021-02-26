@@ -28,6 +28,7 @@
 
 #include <iostream>
 #include <stdlib.h>
+#include <chrono>
 
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
@@ -41,6 +42,15 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("HpccNanoPuSimpleTest");
 
+static void
+BytesInArbiterQueueTrace (Ipv4Address saddr, 
+                          uint32_t oldval, uint32_t newval)
+{
+  NS_LOG_INFO ("**** " << Simulator::Now ().GetNanoSeconds () <<
+               " Arbiter Queue size from " << oldval << " to " << newval <<
+               " ("<< saddr << ") ****");
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -48,40 +58,89 @@ main (int argc, char *argv[])
   cmd.Parse (argc, argv);
   
   Time::SetResolution (Time::NS);
-  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_FUNCTION);
-  LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_ALL);
-  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_ALL);
-//   LogComponentEnableAll (LOG_LEVEL_ALL);
   Packet::EnablePrinting ();
+  LogComponentEnable ("HpccNanoPuSimpleTest", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("HpccNanoPuArcht", LOG_LEVEL_WARN);
+  LogComponentEnable ("NanoPuTrafficGenerator", LOG_LEVEL_DEBUG);
+//   LogComponentEnableAll (LOG_LEVEL_ALL);
+    
+  HpccHeader hpcch;
+  IntHeader inth;
+  Ipv4Header ipv4h;
+  uint16_t payloadSize = 1000;
+  uint16_t mtuBytes = payloadSize + ipv4h.GetSerializedSize () 
+                      + inth.GetMaxSerializedSize () + hpcch.GetSerializedSize ();
+  NS_LOG_DEBUG("MaxPayloadSize for HpccNanoPuArcht: " << payloadSize <<
+               " and MTU: " << mtuBytes);
 
   /******** Create Nodes ********/
-  NodeContainer switches;
-  switches.Create (2);
+  NodeContainer tor2Agg;
+  tor2Agg.Create (2);
     
-  NodeContainer sender2switch;
-  sender2switch.Add (switches.Get (0));
-  sender2switch.Create (1);
+  NodeContainer agg2Core;
+  agg2Core.Add (tor2Agg.Get (1));
+  agg2Core.Create (1);
     
-  NodeContainer receiver2switch;
-  receiver2switch.Add (switches.Get (1));
-  receiver2switch.Create (1);
+  NodeContainer core2Agg;
+  core2Agg.Add (agg2Core.Get (1));
+  core2Agg.Create (1);
+    
+  NodeContainer agg2Tor;
+  agg2Tor.Add (core2Agg.Get (1));
+  agg2Tor.Create (1);
+    
+  NodeContainer tor2Sender;
+  tor2Sender.Add (tor2Agg.Get (0));
+  tor2Sender.Create (1);
+    
+  NodeContainer tor2Receiver;
+  tor2Receiver.Add (agg2Tor.Get (1));
+  tor2Receiver.Create (1);
     
   /******** Create Channels ********/
-  PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("EnableInt", BooleanValue (true));
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
-  pointToPoint.SetChannelAttribute ("Delay", StringValue ("1us"));
-  pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("50p"));
+  PointToPointHelper hostChannel;
+  hostChannel.SetDeviceAttribute ("EnableInt", BooleanValue (true));
+  hostChannel.SetDeviceAttribute ("DataRate", StringValue ("100Gbps"));
+  hostChannel.SetChannelAttribute ("Delay", StringValue ("1us"));
+  hostChannel.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("32MB"));
+    
+  PointToPointHelper coreChannel;
+  coreChannel.SetDeviceAttribute ("EnableInt", BooleanValue (true));
+  coreChannel.SetDeviceAttribute ("DataRate", StringValue ("400Gbps"));
+  coreChannel.SetChannelAttribute ("Delay", StringValue ("1us"));
+  coreChannel.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("32MB"));
 
   /******** Create NetDevices ********/
-  NetDeviceContainer switchDevices;
-  switchDevices = pointToPoint.Install (switches);
+  NetDeviceContainer tor2AggDevices;
+  tor2AggDevices = coreChannel.Install (tor2Agg);
+  tor2AggDevices.Get(0)->SetMtu (mtuBytes);
+  tor2AggDevices.Get(1)->SetMtu (mtuBytes);
     
-  NetDeviceContainer senderDevices;
-  senderDevices = pointToPoint.Install (sender2switch);
+  NetDeviceContainer agg2CoreDevices;
+  agg2CoreDevices = coreChannel.Install (agg2Core);
+  agg2CoreDevices.Get(0)->SetMtu (mtuBytes);
+  agg2CoreDevices.Get(1)->SetMtu (mtuBytes);
     
-  NetDeviceContainer receiveDevices;
-  receiveDevices = pointToPoint.Install (receiver2switch);
+  NetDeviceContainer core2AggDevices;
+  core2AggDevices = coreChannel.Install (core2Agg);
+  core2AggDevices.Get(0)->SetMtu (mtuBytes);
+  core2AggDevices.Get(1)->SetMtu (mtuBytes);
+    
+  NetDeviceContainer agg2TorDevices;
+  agg2TorDevices = coreChannel.Install (agg2Tor);
+  agg2TorDevices.Get(0)->SetMtu (mtuBytes);
+  agg2TorDevices.Get(1)->SetMtu (mtuBytes);
+    
+  NetDeviceContainer tor2SenderDevices;
+  tor2SenderDevices = hostChannel.Install (tor2Sender);
+  tor2SenderDevices.Get(0)->SetMtu (mtuBytes);
+  tor2SenderDevices.Get(1)->SetMtu (mtuBytes);
+    
+  NetDeviceContainer tor2ReceiverDevices;
+  tor2ReceiverDevices = hostChannel.Install (tor2Receiver);
+  tor2ReceiverDevices.Get(0)->SetMtu (mtuBytes);
+  tor2ReceiverDevices.Get(1)->SetMtu (mtuBytes);
   
   /******** Install Internet Stack ********/
     
@@ -92,32 +151,45 @@ main (int argc, char *argv[])
   InternetStackHelper stack;
   stack.InstallAll ();
     
+  /* Enable and configure traffic control layers */
+  TrafficControlHelper tchPfifoFast;
+  tchPfifoFast.SetRootQueueDisc ("ns3::PfifoFastQueueDisc", 
+                                 "MaxSize", StringValue("1p"));
+    
+  tchPfifoFast.Install (tor2AggDevices);
+  tchPfifoFast.Install (agg2CoreDevices);
+  tchPfifoFast.Install (core2AggDevices);
+  tchPfifoFast.Install (agg2TorDevices);
+  tchPfifoFast.Install (tor2SenderDevices);
+  tchPfifoFast.Install (tor2ReceiverDevices);
+    
   Ipv4AddressHelper address;
   address.SetBase ("10.0.0.0", "255.255.255.0");
-  Ipv4InterfaceContainer switchIf = address.Assign (switchDevices);
+  Ipv4InterfaceContainer tor2SenderIf = address.Assign (tor2SenderDevices);
   address.NewNetwork ();
-  Ipv4InterfaceContainer senderIf = address.Assign (senderDevices);
+  Ipv4InterfaceContainer tor2ReceiverIf = address.Assign (tor2ReceiverDevices);
   address.NewNetwork ();
-  Ipv4InterfaceContainer receiverIf = address.Assign (receiveDevices);
+  Ipv4InterfaceContainer tor2AggIf = address.Assign (tor2AggDevices);
+  address.NewNetwork ();
+  Ipv4InterfaceContainer agg2CoreIf = address.Assign (agg2CoreDevices);
+  address.NewNetwork ();
+  Ipv4InterfaceContainer core2AggIf = address.Assign (core2AggDevices);
+  address.NewNetwork ();
+  Ipv4InterfaceContainer agg2TorIf = address.Assign (agg2TorDevices);
     
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
   /* Define an optional/default parameters for modules*/
-  HpccHeader hpcch;
-  IntHeader inth;
-  Ipv4Header ipv4h;
-  uint16_t payloadSize = switchDevices.Get (1)->GetMtu () - ipv4h.GetSerializedSize () 
-                         - inth.GetMaxSerializedSize () - hpcch.GetSerializedSize ();
-  Config::SetDefault("ns3::NanoPuArcht::PayloadSize", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
-  Config::SetDefault("ns3::NanoPuArcht::TimeoutInterval", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
                      TimeValue(MilliSeconds(10)));
-  Config::SetDefault("ns3::NanoPuArcht::MaxNTimeouts", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNTimeouts", 
                      UintegerValue(5));
-  Config::SetDefault("ns3::NanoPuArcht::MaxNMessages", 
+  Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
                      UintegerValue(100));
-  Config::SetDefault("ns3::NanoPuArcht::InitialCredit", 
-                     UintegerValue(10));
+  Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
+                     UintegerValue(142));
   Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
                      DoubleValue(MicroSeconds (13).GetSeconds ()));
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
@@ -128,30 +200,24 @@ main (int argc, char *argv[])
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(false));
    
   Ptr<HpccNanoPuArcht> srcArcht =  CreateObject<HpccNanoPuArcht>();
-  srcArcht->AggregateIntoDevice(senderDevices.Get (1));
-  NS_ASSERT(srcArcht->MemIsOptimized());
+  srcArcht->AggregateIntoDevice(tor2SenderDevices.Get (1));
   Ptr<HpccNanoPuArcht> dstArcht =  CreateObject<HpccNanoPuArcht>();
-  dstArcht->AggregateIntoDevice(receiveDevices.Get (1));
-  NS_ASSERT(dstArcht->MemIsOptimized());
+  dstArcht->AggregateIntoDevice(tor2ReceiverDevices.Get (1));
     
-  /* Currently each nanopu is able to connect to a single application only.
-   *
-   * Also note that every application on the same nanoPu (if there are multiple)
-   * will bind to the exact same RecvCallback. This means all the applications
-   * will be notified when a msg for a single application is received.
-   * Applications should process the NanoPuAppHeader first to make sure
-   * the incoming msg belongs to them.
-   * TODO: implement a msg dispatching logic so that nanoPu delivers
-   *       each msg only to the owner of the msg.
-   */
-  Ipv4Address senderIp = senderIf.GetAddress(1);
-  Ipv4Address receiverIp = receiverIf.GetAddress(1);
+  srcArcht->TraceConnectWithoutContext ("PacketsInArbiterQueue", 
+                                        MakeBoundCallback (&BytesInArbiterQueueTrace, 
+                                                           tor2SenderIf.GetAddress (1)));
+    
+  Ipv4Address senderIp = tor2SenderIf.GetAddress(1);
+  Ipv4Address receiverIp = tor2ReceiverIf.GetAddress(1);
     
   NanoPuTrafficGenerator senderApp = NanoPuTrafficGenerator(srcArcht, receiverIp, 222);
   senderApp.SetLocalPort(111);
-  senderApp.SetMsgSize(1,1); // Deterministically set the message size
+  senderApp.SetMsgSize(BITMAP_SIZE,BITMAP_SIZE); // Deterministically set the message size
   senderApp.SetMaxMsg(1);
   senderApp.StartImmediately();
   senderApp.Start(Seconds (3.0));
@@ -161,7 +227,15 @@ main (int argc, char *argv[])
     
 // //   pointToPoint.EnablePcapAll ("tmp.pcap", true);
 
+  auto start = std::chrono::high_resolution_clock::now();
+    
   Simulator::Run ();
+    
+  auto stop = std::chrono::high_resolution_clock::now(); 
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  NS_LOG_DEBUG("*** Time taken by simulation: "
+                << duration.count() << " microseconds ***");
+    
   Simulator::Destroy ();
   return 0;
 }

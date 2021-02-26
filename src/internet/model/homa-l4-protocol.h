@@ -152,6 +152,12 @@ public:
   uint8_t GetOvercommitLevel (void) const;
     
   /**
+   * \brief Return whether the memory optimizations are enabled
+   * \returns the m_memIsOptimized
+   */
+  bool MemIsOptimized (void);
+    
+  /**
    * \brief Create a HomaSocket and associate it with this Homa Protocol instance.
    * \return A smart Socket pointer to a HomaSocket, allocated by the HOMA Protocol.
    */
@@ -307,6 +313,8 @@ private:
   std::vector<Ptr<HomaSocket> > m_sockets;      //!< list of sockets
   IpL4Protocol::DownTargetCallback m_downTarget;   //!< Callback to send packets over IPv4
   IpL4Protocol::DownTargetCallback6 m_downTarget6; //!< Callback to send packets over IPv6 (Not supported)
+    
+  bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
   
   uint32_t m_mtu; //!< The MTU of the bounded NetDevice
   uint16_t m_bdp; //!< The number of packets required for full utilization, ie. BDP.
@@ -468,7 +476,10 @@ private:
   Ptr<Ipv4Route> m_route;    //!< Route of the message determined by the sender socket 
   Ptr<HomaL4Protocol> m_homa;//!< the protocol instance itself that creates/sends/receives messages
   
+  // Only one of the two below are used depending on the memory optimizations enabled
   std::vector<Ptr<Packet>> m_packets;   //!< Packet buffer for the message
+  std::vector<uint32_t> m_pktSizes;     //!< Optimized packet buffer that keeps only the packet sizes instead of contents
+  
   std::priority_queue<uint16_t, std::vector<uint16_t>, std::greater<uint16_t> > m_pktTxQ; //!< The sorted queue of pkt offsets for tx
   
   uint32_t m_msgSizeBytes;   //!< Number of bytes this message occupies
@@ -574,7 +585,7 @@ public:
   static TypeId GetTypeId (void);
 
   HomaInboundMsg (Ptr<Packet> p, Ipv4Header const &ipv4Header, HomaHeader const &homaHeader, 
-                  Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets);
+                  Ptr<Ipv4Interface> iface, uint32_t mtuBytes, uint16_t rttPackets, bool memIsOptimized);
   ~HomaInboundMsg (void);
   
   /**
@@ -716,7 +727,10 @@ private:
   uint16_t m_dport;           //!< Destination port of this message
   uint16_t m_txMsgId;         //!< TX msg ID of the message determined by the sender
   
+  // Only one of the two below are used depending on the memory optimizations enabled
   std::vector<Ptr<Packet>> m_packets;  //!< Packet buffer for the message
+  std::vector<uint32_t> m_pktSizes;    //!< Optimized packet buffer that keeps only the packet sizes instead of contents
+  
   std::vector<bool> m_receivedPackets; //!< State to store which packets are delivered to the receiver
    
   uint32_t m_remainingBytes; //!< Remaining number of bytes that are not received yet

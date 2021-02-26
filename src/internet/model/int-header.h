@@ -25,9 +25,6 @@
 
 namespace ns3 {
     
-// TODO: The original INT implementation advertised by the HPCC uses only 64
-//       bits to represent the whole hop information. Should compress the struct
-//       below 3 times to be compatible.
 typedef struct intHop_t {
     uint64_t time;
     uint32_t txBytes;
@@ -80,7 +77,7 @@ public:
   /**
    * \return the number of hops travelled by the packet.
    */
-  uint16_t GetNHops (void) const;
+  uint8_t GetNHops (void) const;
   
   /**
    * Add information from a hop into the INT header if there is space in the header
@@ -92,7 +89,7 @@ public:
   /**
    * \return the INT hop information for hop hopNo
    */
-  intHop_t PeekHopN (uint16_t hopNo);
+  intHop_t PeekHopN (uint8_t hopNo);
   
   /**
    * \param payloadSize The payload size for the packet in bytes
@@ -106,11 +103,29 @@ public:
   static const uint8_t PROT_NUMBER = 196; //!< Protocol number of INT
   static const uint16_t MAX_INT_HOPS = 6; //!< Max number hops this INT header can store data of
   
+  static const uint32_t TIME_WIDTH = 24;
+  static const uint32_t BYTE_WIDTH = 20;
+  static const uint32_t QLEN_WIDTH = 17;
+  static const uint64_t LINE_RATE_VALS[8];
+  
+  static const uint32_t BYTE_UNIT = 128;
+  static const uint32_t QLEN_UNIT = 80;
+  
+  typedef union intHopHdr_t{
+    struct {
+      uint64_t bitRate: 64-TIME_WIDTH-BYTE_WIDTH-QLEN_WIDTH,
+                  time: TIME_WIDTH,
+               txBytes: BYTE_WIDTH,
+                  qlen: QLEN_WIDTH;
+    };
+    uint32_t buf[2];
+  }intHopHdr_t; //!< INT Hop info is compressed and stored as intHopHdr_t inside when carried on a packet
+  
 private:
 
   uint8_t m_protocol; //!< The protocol number of the next header after INT.
-  uint16_t m_nHops;   //!< Number of hops that are currently allocated on the header
-  intHop_t m_intHops[MAX_INT_HOPS]; //!< The set of all INT information from each hop
+  uint8_t m_nHops;   //!< Number of hops that are currently allocated on the header
+  intHopHdr_t m_intHops[MAX_INT_HOPS]; //!< The set of all INT information from each hop
   
   uint16_t m_payloadSize; //!< Payload size in bytes
   

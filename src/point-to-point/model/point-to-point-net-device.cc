@@ -271,23 +271,29 @@ PointToPointNetDevice::TransmitStart (Ptr<Packet> p)
     
     Ipv4Header iph;
     p->RemoveHeader(iph);
+    uint16_t oldIpPayloadSize = iph.GetPayloadSize();
     
     if(iph.GetProtocol() == IntHeader::PROT_NUMBER)
     {
       IntHeader inth;
       p->RemoveHeader(inth);
+      uint16_t oldIntSize = inth.GetSerializedSize();
       
       uint64_t time = Simulator::Now ().GetNanoSeconds ();
       uint32_t qlen = m_queue->GetNBytes ();
       uint32_t bytes = m_queue->GetTotalReceivedBytes () 
                        - m_queue->GetTotalDroppedBytes() - qlen;
       uint64_t rate = m_bps.GetBitRate();
+      NS_LOG_DEBUG("*** INT_INFO for queue (" << m_queue <<
+                    ") -> time: " << time << " qlen: " << qlen << 
+                    " bytes: " << bytes << " rate: " << rate);
       if (!inth.PushHop(time, bytes, qlen,rate))
         NS_LOG_WARN("New INT info cannot be appended onto the packet (" << p << ").");
       else
       {
-        NS_LOG_LOGIC("INT info appended onto the packet (" << p << ").");  
-        iph.SetPayloadSize(iph.GetPayloadSize() + sizeof(intHop_t));
+        NS_LOG_LOGIC("INT info appended onto the packet (" << p << ").");
+        uint16_t newIntSize = inth.GetSerializedSize();
+        iph.SetPayloadSize(oldIpPayloadSize - oldIntSize + newIntSize);
       }
         
       p->AddHeader(inth);

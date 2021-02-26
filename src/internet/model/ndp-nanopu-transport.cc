@@ -29,7 +29,6 @@
 #include "ns3/node.h"
 #include "ns3/ipv4.h"
 #include "ns3/data-rate.h"
-#include "ns3/point-to-point-net-device.h"
 #include "ns3/nanopu-archt.h"
 #include "ndp-nanopu-transport.h"
 #include "ns3/ipv4-header.h"
@@ -58,10 +57,7 @@ NdpNanoPuArchtPktGen::NdpNanoPuArchtPktGen (Ptr<NdpNanoPuArcht> nanoPuArcht)
     
   m_nanoPuArcht = nanoPuArcht;
     
-  Ptr<NetDevice> netDevice = m_nanoPuArcht->GetBoundNetDevice ();
-  PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
-  
-  DataRate dataRate = p2pNetDevice->GetDataRate ();
+  DataRate dataRate = m_nanoPuArcht->GetNicRate ();
   uint16_t mtuBytes = m_nanoPuArcht->GetBoundNetDevice ()->GetMtu ();
   m_packetTxTime = dataRate.CalculateBytesTxTime ((uint32_t) mtuBytes);
     
@@ -88,9 +84,12 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
     
   Time delay = Time(0);
     
-  egressMeta_t meta;
-  meta.isData = false;
-  meta.dstIP = dstIp;
+  egressMeta_t meta = {};
+  meta.containsData = false;
+  meta.rank = 0; // High Rank for control packets
+  meta.remoteIp = dstIp;
+  meta.remotePort = dstPort;
+  meta.localPort = srcPort;
     
   NdpHeader ndph;
   ndph.SetSrcPort (srcPort);
@@ -223,29 +222,35 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
                                                              msgLen, 
                                                              pktOffset);
       
+    if (!rxMsgInfo.success)
+      return false;
+      
     // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
     //       before processing this incoming data packet because this
     //       packet has not updated the receivedBitmap in the reassembly
     //       buffer yet.
-    uint16_t pullOffsetDiff;
+    uint16_t pullOffsetDiff = 0;
     if (ndph.GetFlags () & NdpHeader::Flags_t::CHOP)
     {
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing chopped data packet.");
       genNACK = true;
       genPULL = true;
-      pullOffsetDiff = 0;
     } 
     else 
     {
+      if (!rxMsgInfo.isNewPkt)
+        return true;
+        
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing data packet.");
+      
       genACK = true;
     
       if (pktOffset + m_nanoPuArcht->GetInitialCredit () <= msgLen )
           genPULL = true;
         
-      reassembleMeta_t metaData;
+      reassembleMeta_t metaData = {};
       metaData.rxMsgId = rxMsgInfo.rxMsgId;
       metaData.srcIp = srcIp;
       metaData.srcPort = srcPort;
@@ -353,14 +358,14 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   Ptr<Packet> cp = p->Copy ();
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << cp);
   
-  if (meta.isData)
+  if (meta.containsData)
   {
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPU NDP EgressPipe processing data packet.");
       
     NdpHeader ndph;
-    ndph.SetSrcPort (meta.srcPort);
-    ndph.SetDstPort (meta.dstPort);
+    ndph.SetSrcPort (meta.localPort);
+    ndph.SetDstPort (meta.remotePort);
     ndph.SetTxMsgId (meta.txMsgId);
     ndph.SetMsgLen (meta.msgLen);
     ndph.SetPktOffset (meta.pktOffset);
@@ -383,7 +388,7 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
 //   Ipv4Address srcIP = ipv4proto->SourceAddressSelection (ifIndex, meta.dstIP);
   Ipv4Address srcIP = m_nanoPuArcht->GetLocalIp ();
   iph.SetSource (srcIP);
-  iph.SetDestination (meta.dstIP);
+  iph.SetDestination (meta.remoteIp);
   iph.SetPayloadSize (cp->GetSize ());
   iph.SetTtl (64);
   iph.SetProtocol (NdpHeader::PROT_NUMBER);
@@ -392,6 +397,8 @@ void NdpNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t met
   NS_LOG_DEBUG (Simulator::Now ().GetNanoSeconds () << 
                " NanoPU NDP EgressPipe sending: " << 
                 cp->ToString ());
+    
+  m_nanoPuArcht->GetArbiter ()->EmitAfterPktOfSize (cp->GetSize ());
     
   m_nanoPuArcht->SendToNetwork(cp);
 //   Simulator::Schedule (NanoSeconds(NDP_EGRESS_PIPE_DELAY), 
@@ -436,6 +443,11 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
                    BooleanValue (true),
                    MakeBooleanAccessor (&NdpNanoPuArcht::m_memIsOptimized),
                    MakeBooleanChecker ())
+    .AddAttribute ("EnableArbiterQueueing", 
+                   "Enables priority queuing on Arbiter.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&NdpNanoPuArcht::m_enableArbiterQueueing),
+                   MakeBooleanChecker ())
     .AddTraceSource ("MsgBegin",
                      "Trace source indicating a message has been delivered to "
                      "the the NanoPuArcht by the sender application layer.",
@@ -446,6 +458,14 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
                      "the receiver application by the NanoPuArcht layer.",
                      MakeTraceSourceAccessor (&NdpNanoPuArcht::m_msgFinishTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("PacketsInArbiterQueue",
+                     "Number of packets currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&NdpNanoPuArcht::m_nArbiterPackets),
+                     "ns3::TracedValueCallback::Uint32")
+    .AddTraceSource ("BytesInArbiterQueue",
+                     "Number of bytes (without metadata) currently stored in the arbiter queue",
+                     MakeTraceSourceAccessor (&NdpNanoPuArcht::m_nArbiterBytes),
+                     "ns3::TracedValueCallback::Uint32")
   ;
   return tid;
 }

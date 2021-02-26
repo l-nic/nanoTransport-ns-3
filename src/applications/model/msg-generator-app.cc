@@ -18,17 +18,20 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
+#include "msg-generator-app.h"
+
 #include "ns3/log.h"
-#include "ns3/random-variable-stream.h"
 #include "ns3/simulator.h"
 #include "ns3/callback.h"
 #include "ns3/uinteger.h"
+#include "ns3/boolean.h"
 #include "ns3/string.h"
 #include "ns3/double.h"
+
 #include "ns3/homa-socket-factory.h"
 #include "ns3/packet.h"
 #include "ns3/point-to-point-net-device.h"
-#include "msg-generator-app.h"
+#include "ns3/nanopu-app-header.h"
 
 namespace ns3 {
 
@@ -61,24 +64,32 @@ MsgGeneratorApp::GetTypeId (void)
                    "that there is no limit.",
                    UintegerValue (0),
                    MakeUintegerAccessor (&MsgGeneratorApp::m_maxMsgs),
-                   MakeUintegerChecker<uint16_t> ()) 
+                   MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("PayloadSize", 
+                   "MTU for the network interface excluding the header sizes",
+                   UintegerValue (1400),
+                   MakeUintegerAccessor (&MsgGeneratorApp::m_maxPayloadSize),
+                   MakeUintegerChecker<uint32_t> ())
+    .AddAttribute ("EnableNanoPuArcht", 
+                   "Messages are forwarded directly to the NanoPU Architecture instead of protocol sockets.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&MsgGeneratorApp::m_enableNanoPuArcht),
+                   MakeBooleanChecker ())
   ;
   return tid;
 }
     
-MsgGeneratorApp::MsgGeneratorApp(Ipv4Address localIp, uint16_t localPort,
-                                 uint32_t maxPayloadSize)
+MsgGeneratorApp::MsgGeneratorApp(Ipv4Address localIp, uint16_t localPort)
   : m_socket (0),
     m_interMsgTime (0),
     m_msgSizePkts (0),
     m_remoteClient (0),
     m_totMsgCnt (0)
 {
-  NS_LOG_FUNCTION (this << localIp << localPort << maxPayloadSize);
+  NS_LOG_FUNCTION (this << localIp << localPort);
    
   m_localIp = localIp;
   m_localPort = localPort;
-  m_maxPayloadSize = maxPayloadSize;
 }
     
 MsgGeneratorApp::~MsgGeneratorApp()
@@ -90,13 +101,28 @@ void MsgGeneratorApp::Install (Ptr<Node> node,
                                std::vector<InetSocketAddress> remoteClients)
 {
   NS_LOG_FUNCTION(this << node);
-    
+   
   node->AddApplication (this);
+  if (!m_enableNanoPuArcht)
+  { 
+    
   
-  m_socket = Socket::CreateSocket (node, m_tid);
-  m_socket->Bind (InetSocketAddress(m_localIp, m_localPort));
-  m_socket->SetRecvCallback (MakeCallback (&MsgGeneratorApp::ReceiveMessage,
-                                           this));
+    m_socket = Socket::CreateSocket (node, m_tid);
+    m_socket->Bind (InetSocketAddress(m_localIp, m_localPort));
+    m_socket->SetRecvCallback (MakeCallback (&MsgGeneratorApp::ReceiveMessage,
+                                             this));
+  }
+  else //NanoPuArcht Mode is enabled
+  {
+    m_nanoPuArcht = GetNode ()->GetDevice (0)->GetObject <NanoPuArcht> ();
+    NS_ASSERT_MSG(m_nanoPuArcht,"MsgGeneratorApp can not find the NanoPuArcht!");
+    NS_ASSERT_MSG(m_nanoPuArcht->GetLocalIp () == m_localIp,
+                  "The local address of the MsgGeneratorApp doesn't match the NanoPuArcht!");
+      
+    m_nanoPuArcht->SetRecvCallback (MakeCallback (&MsgGeneratorApp::ReceiveMessageFromNanoPu, 
+                                                  this));
+    NS_LOG_LOGIC("NanoPuArcht Mode is configured.");
+  }
     
   for (std::size_t i = 0; i < remoteClients.size(); i++)
   {
@@ -128,7 +154,7 @@ void MsgGeneratorApp::SetWorkload (double load,
     
   load = std::max(0.0, std::min(load, 1.0));
     
-  Ptr<NetDevice> netDevice = GetNode ()->GetDevice (0);  
+  Ptr<NetDevice> netDevice = GetNode ()->GetDevice (0); 
   uint32_t mtu = netDevice->GetMtu ();
     
   PointToPointNetDevice* p2pNetDevice = dynamic_cast<PointToPointNetDevice*>(&(*(netDevice))); 
@@ -255,19 +281,30 @@ void MsgGeneratorApp::SendMessage ()
   uint32_t msgSizeBytes = GetNextMsgSizeFromDist (); 
   
   /* Create the message to send */
-  Ptr<Packet> msg;
-  msg = Create<Packet> (msgSizeBytes);   
-//   std::string payload = "Custom Payload";
-//   uint32_t msgSizeBytes = payload.size () + 1; 
-//   uint8_t *buffer;
-//   buffer = new uint8_t [msgSizeBytes];
-//   memcpy (buffer, payload.c_str (), msgSizeBytes);
-//   msg = Create<Packet> (buffer, msgSizeBytes);
-    
+  Ptr<Packet> msg = Create<Packet> (msgSizeBytes);
   NS_LOG_LOGIC ("MsgGeneratorApp {" << this << ") generates a message of size: "
                 << msgSizeBytes << " Bytes.");
+    
+  int sentBytes = 0;
+  if (!m_enableNanoPuArcht)
+  {
+    sentBytes = m_socket->SendTo (msg, 0, receiverAddr);
+  }
+  else
+  {
+    NanoPuAppHeader appHdr;
+    appHdr.SetHeaderType((uint16_t) NANOPU_APP_HEADER_TYPE);
+    appHdr.SetRemoteIp(receiverAddr.GetIpv4());
+    appHdr.SetRemotePort(receiverAddr.GetPort());
+    appHdr.SetLocalPort(m_localPort);
+    appHdr.SetMsgLen(msgSizeBytes / m_maxPayloadSize + (msgSizeBytes % m_maxPayloadSize !=0));
+    appHdr.SetPayloadSize(msgSizeBytes);
+    msg->AddHeader(appHdr);
+      
+    if (m_nanoPuArcht->Send (msg))
+      sentBytes = msgSizeBytes;
+  }
    
-  int sentBytes = m_socket->SendTo (msg, 0, receiverAddr);
   if (sentBytes > 0)
   {
     NS_LOG_INFO(sentBytes << " Bytes sent to " << receiverAddr);
@@ -290,9 +327,22 @@ void MsgGeneratorApp::ReceiveMessage (Ptr<Socket> socket)
   {
     NS_LOG_INFO (Simulator::Now ().GetNanoSeconds () << 
                  " client received " << message->GetSize () << " bytes from " <<
-                 InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port " <<
+                 InetSocketAddress::ConvertFrom (from).GetIpv4 () << ":" <<
                  InetSocketAddress::ConvertFrom (from).GetPort ());
   }
+}
+    
+void MsgGeneratorApp::ReceiveMessageFromNanoPu (Ptr<Packet> msg)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+  Ptr<Packet> cmsg = msg->Copy();
+    
+  NanoPuAppHeader appHdr;
+  cmsg->RemoveHeader(appHdr);
+    
+  NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
+              " client received " << cmsg->GetSize () << " bytes from " <<
+              appHdr.GetRemoteIp () << ":" << appHdr.GetRemotePort ());
 }
     
 } // Namespace ns3

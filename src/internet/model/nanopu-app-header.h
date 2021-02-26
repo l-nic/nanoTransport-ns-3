@@ -111,11 +111,11 @@ public:
   /**
    * \param payloadSize The payload size for the message in bytes
    */
-  void SetPayloadSize (uint16_t payloadSize);
+  void SetPayloadSize (uint32_t payloadSize);
   /**
    * \return The payload size for the message in bytes
    */
-  uint16_t GetPayloadSize (void) const;
+  uint32_t GetPayloadSize (void) const;
   
 private:
 
@@ -125,7 +125,7 @@ private:
   uint16_t m_localPort;    //!< Local port
   uint16_t m_msgLen;       //!< Length of the message in packets
   uint16_t m_initWinSize;  //!< The initial cwnd size requested by the application
-  uint16_t m_payloadSize;  //!< Payload size in bytes
+  uint32_t m_payloadSize;  //!< Payload size in bytes
   
 };
 } // namespace ns3

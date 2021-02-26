@@ -114,11 +114,11 @@ main (int argc, char *argv[])
   bool traceQueues = false;
   std::string workloadName ("FbHdp");
     
-  
   HpccHeader hpcch;
   IntHeader inth;
   Ipv4Header ipv4h;
-  uint16_t mtuBytes = 1000 + ipv4h.GetSerializedSize () 
+  uint16_t payloadSize = 1000;
+  uint16_t mtuBytes = payloadSize + ipv4h.GetSerializedSize () 
                       + inth.GetMaxSerializedSize () + hpcch.GetSerializedSize ();
     
   CommandLine cmd (__FILE__);
@@ -274,10 +274,6 @@ main (int argc, char *argv[])
   /* Define an optional/default parameters for nanoPU modules*/
   NS_LOG_UNCOND("Deploying NanoPU Architectures...");
     
-  uint16_t payloadSize = hostTorDevices[0].Get (0)->GetMtu () 
-                         - ipv4h.GetSerializedSize () 
-                         - inth.GetMaxSerializedSize () 
-                         - hpcch.GetSerializedSize ();
   Config::SetDefault("ns3::HpccNanoPuArcht::PayloadSize", 
                      UintegerValue(payloadSize));
   Config::SetDefault("ns3::HpccNanoPuArcht::TimeoutInterval", 
@@ -286,8 +282,9 @@ main (int argc, char *argv[])
                      UintegerValue(5));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxNMessages", 
                      UintegerValue(1000));
+  uint16_t initialCredit = 142;
   Config::SetDefault("ns3::HpccNanoPuArcht::InitialCredit", 
-                     UintegerValue(160));
+                     UintegerValue(initialCredit));
   Config::SetDefault("ns3::HpccNanoPuArcht::BaseRTT", 
                      DoubleValue(MicroSeconds (13).GetSeconds ()));
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
@@ -296,9 +293,10 @@ main (int argc, char *argv[])
                      DoubleValue(0.95));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
                      UintegerValue(5));
-    
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
+  Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 
+                     BooleanValue(false));
    
 //   LogComponentEnable ("Config", LOG_LEVEL_ALL);
   std::vector<Ptr<HpccNanoPuArcht>> nanoPuArchts;
@@ -354,13 +352,14 @@ main (int argc, char *argv[])
     Simulator::Schedule (Seconds (startTime), &SendMsg, 
                          nanoPuArchts[srcHost], hostAddresses[dstHost], 
                          dstPort, flowSize, payloadSize);
-     nScheduledMsgs++;
+    nScheduledMsgs++;
   }
   inputTraceFile.close();
   NS_LOG_DEBUG (nScheduledMsgs << " messages are scheduled.");
 
   /******** Run the Actual Simulation ********/
   NS_LOG_UNCOND("Running the Simulation...");
+//   Simulator::Stop(Seconds(2.001)); // Used for unit tests without running everything
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;

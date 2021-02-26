@@ -34,6 +34,29 @@
 namespace ns3 {
     
 class HpccNanoPuArcht;
+    
+typedef struct hpccNanoPuCtrlMeta_t {
+    Ipv4Address remoteIp;
+    uint16_t remotePort;
+    uint16_t localPort;
+    uint16_t txMsgId;
+    uint16_t ackNo;
+    uint16_t msgLen;
+    IntHeader receivedIntHeader;
+}hpccNanoPuCtrlMeta_t;
+    
+typedef struct hpccNanoPuIngState_t {
+    uint16_t credit;
+    uint16_t ackNo;
+    uint32_t curWinSize;
+    uint16_t lastUpdateSeq;
+    uint16_t incStage;
+    uint16_t nDupAck;
+    double util;
+    IntHeader prevIntHeader;
+}hpccNanoPuIngState_t;
+    
+/******************************************************************************/
 
 /**
  * \ingroup nanopu-archt
@@ -53,11 +76,10 @@ public:
   HpccNanoPuArchtPktGen (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtPktGen (void);
   
-  void CtrlPktEvent (Ipv4Address dstIp, uint16_t dstPort, uint16_t srcPort,
-                     uint16_t txMsgId, uint16_t ackNo, uint16_t msgLen,
-                     IntHeader receivedIntHeader);
+  void CtrlPktEvent (hpccNanoPuCtrlMeta_t ctrlMeta, Ptr<Packet> p);
   
-protected:
+private:
+
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
 };
  
@@ -81,28 +103,23 @@ public:
   HpccNanoPuArchtIngressPipe (Ptr<HpccNanoPuArcht> nanoPuArcht);
   ~HpccNanoPuArchtIngressPipe (void);
   
-  uint16_t ComputeNumPkts (uint32_t winSizeBytes);
-  
-  double MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
-  
-  uint32_t ComputeWind (uint16_t txMsgId, double utilization, bool updateWc);
-  
   bool IngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                     uint16_t protocol, const Address &from);
   
 protected:
 
+  uint16_t ComputeNumPkts (uint32_t bytes);
+  
+  void MeasureInflight (uint16_t txMsgId, IntHeader intHdr);
+  
+  uint32_t ComputeWind (uint16_t txMsgId, bool fastReact);
+
+private:
+
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send generated packets
+  uint32_t m_maxWinSize;  //!< Window size in bytes for state initialization
     
-//   std::unordered_map<uint16_t, bool> m_validStates;        //!< State to track validity {txMsgId => state valid or not}
-  std::unordered_map<uint16_t, uint16_t> m_credits;        //!< State to track credit {txMsgId => max seqNo for TX}
-  std::unordered_map<uint16_t, uint16_t> m_ackNos;         //!< State to track ackNo {txMsgId => ack No}
-  std::unordered_map<uint16_t, uint32_t> m_winSizes;       //!< State to track W^c {txMsgId => Window Size in Bytes}
-  std::unordered_map<uint16_t, uint16_t> m_lastUpdateSeqs; //!< State to track seqNo {txMsgId => Last Update Seq}
-  std::unordered_map<uint16_t, uint16_t> m_incStages;      //!< State to track incStage {txMsgId => inc Stage}
-  std::unordered_map<uint16_t, IntHeader> m_prevIntHdrs;   //!< State to track INT vector {txMsgId => Prev INT hdr}
-  std::unordered_map<uint16_t, double> m_utilizations;     //!< State to track utilization {txMsgId => U}
-  std::unordered_map<uint16_t, uint16_t> m_nDupAcks;       //!< State to track duplicate acks {txMsgId => number of duplicate acks}
+  std::unordered_map<uint16_t, hpccNanoPuIngState_t> m_msgStates; //!< State of each msg {txMsgId => state}
 };
  
 /******************************************************************************/
@@ -127,7 +144,7 @@ public:
   
   void EgressPipe (Ptr<const Packet> p, egressMeta_t meta);
   
-protected:
+private:
   Ptr<HpccNanoPuArcht> m_nanoPuArcht; //!< the archt itself to send packets
 };
  
@@ -186,6 +203,12 @@ public:
   uint32_t GetMaxStage (void);
   
   /**
+   * \brief Return the minimum number of packets to keep in flight
+   * \returns the minCredit
+   */
+  uint16_t GetMinCredit (void);
+  
+  /**
    * \brief Implements programmable ingress pipeline architecture.
    *
    * \param device Pointer to NetDevice of desired interface
@@ -197,7 +220,7 @@ public:
   bool EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                          uint16_t protocol, const Address &from);
 
-protected:
+private:
 
   Ptr<HpccNanoPuArchtIngressPipe> m_ingresspipe; //!< the programmable ingress pipeline for the archt
   Ptr<HpccNanoPuArchtEgressPipe> m_egresspipe; //!< the programmable egress pipeline for the archt
@@ -207,6 +230,7 @@ protected:
   uint32_t m_winAi;      //!< Additive increase factor in Bytes
   double m_utilFac;      //!< Utilization Factor (defined as \eta in HPCC paper)
   uint16_t m_maxStage;   //!< Maximum number of stages before window is updated wrt. utilization
+  uint16_t m_minCredit;  //!< Minimum number of packets to keep in flight
 };   
 
 } // namespace ns3

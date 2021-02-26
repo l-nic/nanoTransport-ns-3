@@ -20,17 +20,21 @@
 #ifndef NANOPU_ARCHT_H
 #define NANOPU_ARCHT_H
 
+#include <functional>
 #include <unordered_map>
 #include <tuple>
+#include <vector>
 #include <list>
-#include <math.h>
-#include <functional>
 #include <bitset>
+#include <queue>
+#include <deque>
 
 #include "ns3/object.h"
+#include "ns3/traced-value.h"
 #include "ns3/traced-callback.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-header.h"
+#include "ns3/data-rate.h"
 #include "ns3/nanopu-app-header.h"
 
 // Define module delay in nano seconds
@@ -41,7 +45,7 @@
 
 namespace ns3 {
     
-typedef std::bitset<10240> bitmap_t ;
+typedef std::bitset<20480> bitmap_t ;
 #define BITMAP_SIZE sizeof(bitmap_t)*8
 // TODO: When most messages are small, a bitmap of 
 //       this size consumes a lot of memory.
@@ -49,7 +53,7 @@ typedef std::bitset<10240> bitmap_t ;
 uint16_t getFirstSetBitPos(bitmap_t n);
     
 bitmap_t setBitMapUntil(uint16_t n);
-    
+ 
 typedef struct reassembleMeta_t {
     uint16_t rxMsgId;
     Ipv4Address srcIp;
@@ -59,6 +63,7 @@ typedef struct reassembleMeta_t {
     uint16_t msgLen;
     uint16_t pktOffset;
 }reassembleMeta_t;
+    
 typedef struct rxMsgInfoMeta_t {
     uint16_t rxMsgId;
     uint16_t ackNo; //!< Next expected packet
@@ -67,18 +72,143 @@ typedef struct rxMsgInfoMeta_t {
     bool isNewPkt;
     bool success;
 }rxMsgInfoMeta_t;
+    
 typedef struct egressMeta_t {
+    bool containsData;
     bool isNewMsg;
-    bool isData;
     bool isRtx;
-    Ipv4Address dstIP;
-    uint16_t srcPort;
-    uint16_t dstPort;
+    Ipv4Address remoteIp;
+    uint16_t localPort;
+    uint16_t remotePort;
     uint16_t txMsgId;
     uint16_t msgLen;
     uint16_t pktOffset;
-    uint16_t pullOffset;
+    uint16_t rank;
 }egressMeta_t;
+    
+typedef struct arbiterMeta_t {
+    Ptr<Packet> p;
+    egressMeta_t egressMeta;
+    uint32_t insertionOrder;
+}arbiterMeta_t;   
+    
+template <typename T> 
+struct nanoPuArchtSchedObj_t {
+    uint16_t id;
+    uint16_t rank;
+    T metaData;
+}; 
+
+/******************************************************************************/
+    
+template<typename MetaType>
+class NanoPuArchtScheduler : public Object
+{
+public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void)
+  {
+    static TypeId tid = TypeId ("ns3::NanoPuArchtScheduler")
+    .SetParent<Object> ()
+    .SetGroupName("Network")
+    ;
+    return tid;
+  }
+
+  NanoPuArchtScheduler (uint8_t maxSchedOrder,
+     Callback<bool, nanoPuArchtSchedObj_t<MetaType>> predicateCheck,
+     Callback<void, nanoPuArchtSchedObj_t<MetaType>&> postSchedOp)
+    : m_nActiveMsgs (16),
+      m_maxSchedOrder (maxSchedOrder),
+      m_predicateCheck (predicateCheck),
+      m_postSchedOp (postSchedOp){}
+  ~NanoPuArchtScheduler (void){ }
+  
+  /* The function below would not exists on hardware. 
+   * Implemented for experimental reasons here.
+   */
+  void SetNumActiveMsgs (uint8_t nActiveMsgs) {m_nActiveMsgs = nActiveMsgs;}
+  
+  std::tuple<bool, uint16_t, uint8_t> UpdateAndSchedule (uint16_t id, 
+                                                         uint16_t rank,
+                                                         bool removeObj, 
+                                                         MetaType metaData)
+  {
+    bool isNewObj = true;
+    // NOTE: The for loop below is used to find and modify the object 
+    //       entry within the scheduler. However in an actual hardware
+    //       prototype, there would be a separate table to match id of
+    //       object of interest to a pointer to where its data is stored
+    //       on memory. This would ensure constant time lookup.
+    for(uint16_t i=0; i < m_objs.size(); i++)
+    {
+      if(m_objs[i].id == id)
+      {
+        isNewObj = false;
+        if (removeObj)
+        {
+          m_objs.erase(m_objs.begin()+i);
+          break;
+        }
+        
+        m_objs[i].rank = rank;
+        m_objs[i].metaData = metaData;
+        break;
+      }
+    }
+    if(isNewObj && !removeObj)
+    {
+      nanoPuArchtSchedObj_t<MetaType> obj = {.id = id, .rank = rank, 
+                                             .metaData = metaData};
+      m_objs.push_back(obj);
+    }
+    
+    // NOTE: The operations below would normally be performed in
+    //       parallel with flip-flops on hardware given m_nActiveMsgs.
+    bool objIsScheduled = false;
+    uint16_t scheduledObjIdx = 0;
+    uint8_t scheduledOrder = 0;
+    uint16_t minRankSoFar = 0xffff;
+    for(uint16_t i=0; i < m_objs.size() && i < m_nActiveMsgs; i++)
+    {
+      if (m_predicateCheck(m_objs[i]) && m_objs[i].rank < minRankSoFar)
+      {
+        scheduledObjIdx = i;
+        minRankSoFar = m_objs[scheduledObjIdx].rank;
+        objIsScheduled = true;
+      }
+    }
+    if (objIsScheduled)
+    { // Figure out the number of objects that had smaller rank 
+      for(uint16_t i=0; i < m_objs.size() && i < m_nActiveMsgs; i++)
+      {
+        if (m_objs[i].rank < m_objs[scheduledObjIdx].rank ||
+            (m_objs[i].rank == m_objs[scheduledObjIdx].rank && i < scheduledObjIdx))
+          scheduledOrder++;
+      }
+      
+      if (scheduledOrder < m_maxSchedOrder)
+        m_postSchedOp(m_objs[scheduledObjIdx]);
+      else
+        objIsScheduled = false;
+    }
+
+    return std::make_tuple(objIsScheduled, m_objs[scheduledObjIdx].id, scheduledOrder); 
+  }
+  
+protected:
+
+  std::deque<nanoPuArchtSchedObj_t<MetaType>> m_objs;
+  
+  uint8_t m_nActiveMsgs;
+  
+  uint8_t m_maxSchedOrder; //!< Highest scheduling (exclusive) order accepted as success
+  Callback<bool, nanoPuArchtSchedObj_t<MetaType>> m_predicateCheck;
+  Callback<void, nanoPuArchtSchedObj_t<MetaType>&> m_postSchedOp;
+};
 
 /******************************************************************************/
 
@@ -110,8 +240,27 @@ public:
   
 protected:
 };
- 
+    
 /******************************************************************************/
+
+struct HighRankFirst
+{
+  bool operator()(const arbiterMeta_t& lhs, const arbiterMeta_t& rhs) const
+  {
+    if (lhs.egressMeta.remoteIp == rhs.egressMeta.remoteIp &&
+        lhs.egressMeta.remotePort == rhs.egressMeta.remotePort &&
+        lhs.egressMeta.localPort == rhs.egressMeta.localPort)
+    {
+      return lhs.insertionOrder > rhs.insertionOrder;
+    }
+    else
+    {
+      return lhs.egressMeta.rank > rhs.egressMeta.rank ||
+             (lhs.egressMeta.rank == rhs.egressMeta.rank && 
+              lhs.insertionOrder > rhs.insertionOrder);
+    }
+  }
+};
     
 /**
  * \ingroup nanopu-archt
@@ -128,16 +277,25 @@ public:
    */
   static TypeId GetTypeId (void);
 
-  NanoPuArchtArbiter (void);
+  NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht);
   ~NanoPuArchtArbiter (void);
   
   void SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe);
   
   void Receive(Ptr<Packet> p, egressMeta_t meta);
   
+  void EmitAfterPktOfSize (uint32_t size);
+  
+  void TxPkt (void);
+  
 protected:
   
+  Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtEgressPipe> m_egressPipe;
+  
+  std::priority_queue<arbiterMeta_t, std::vector<arbiterMeta_t>, HighRankFirst> m_pq;
+  uint32_t m_pqInsertionOrder;  //!< virtual timestamp of insertion into prio queue
+  EventId m_nextTxEvent;        //!< The EventID for the next transmission
 };
     
 /******************************************************************************/
@@ -216,22 +374,22 @@ protected:
   
   std::list<uint16_t> m_txMsgIdFreeList; //!< List of free TX msg IDs
   std::unordered_map<uint16_t, 
-                     NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {tx_msg_id => appHeader}
+                     NanoPuAppHeader> m_appHeaders; //!< table to store app headers, {txMsgId => appHeader}
                      
-  // Only one of the buffers below are used
+  // Either the buffer or the lastPktSize below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
-                              Ptr<Packet>>> m_buffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet}}
-  std::unordered_map<uint16_t,
-                     std::map<uint16_t,uint32_t>> m_optBuffers; //!< message packetization buffers, {tx_msg_id => {pktOffset => Packet Size}}
+                              Ptr<Packet>>> m_buffers; //!< message packetization buffers, {txMsgId => {pktOffset => Packet}}
+  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {txMsgId => Last Packet Size}
                      
   std::unordered_map<uint16_t, 
-                       bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {tx_msg_id => bitmap}
-  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {tx_msg_id => credit} 
+                       bitmap_t> m_deliveredBitmap; //!< bitmap to determine when all pkts are delivered, {txMsgId => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_credits; //!< State to track credit for each msg {txMsgId => credit} 
   std::unordered_map<uint16_t, 
-                       bitmap_t> m_toBeTxBitmap; //!< bitmap to determine which packet to send, {tx_msg_id => bitmap}
-  std::unordered_map<uint16_t, uint16_t> m_maxTxPktOffset; //!< State to track max pktOffset sent so far {tx_msg_id => offset}
-  std::unordered_map<uint16_t, uint16_t> m_timeoutCnt; //!< State to track number of timeouts {tx_msg_id => timeout count}
+                       bitmap_t> m_toBeTxBitmap; //!< bitmap to determine which packet to send, {txMsgId => bitmap}
+  std::unordered_map<uint16_t, uint16_t> m_maxTxPktOffset; //!< State to track max pktOffset sent so far {txMsgId => offset}
+  std::unordered_map<uint16_t, uint16_t> m_timeoutCnt; //!< State to track number of timeouts {txMsgId => timeout count}
+  std::unordered_map<uint16_t, uint16_t> m_ranks; //!< State to track rank {txMsgId => rank}
 };
     
 /******************************************************************************/
@@ -342,15 +500,16 @@ protected:
                      rxMsgIdTable_hash, 
                      rxMsgIdTable_key_equal> m_rxMsgIdTable; //!< table that maps {src_ip, src_port, tx_msg_id => rx_msg_id}
                      
-  // Only one of the buffers below are used
+  // Either the buffer or the lastPktSize below are used
   std::unordered_map<uint16_t,
                      std::map<uint16_t, 
                               Ptr<Packet>>> m_buffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet}}
-  std::unordered_map<uint16_t,
-                     std::map<uint16_t,uint32_t>> m_optBuffers; //!< message reassembly buffers, {rx_msg_id => {pktOffset => Packet Size}}
+  std::unordered_map<uint16_t,uint32_t> m_lastPktSize; //!< message reassembly buffers, {rx_msg_id => Last Packet Size}
                      
   std::unordered_map<uint16_t, 
                      bitmap_t> m_receivedBitmap; //!< bitmap to determine when all pkts have arrived, {rx_msg_id => bitmap}
+  std::unordered_map<uint16_t, 
+                     bitmap_t> m_rxInfoBitmap; //!< bitmap to determine which packets called rxMsgInfo, {rx_msg_id => bitmap}
 };
     
 /******************************************************************************/
@@ -476,12 +635,27 @@ public:
    */
   Ptr<NanoPuArchtArbiter> GetArbiter (void);
   
+  uint32_t GetNArbiterPackets (void) const;
+  
+  uint32_t GetNArbiterBytes (void) const;
+  
+  void SetNArbiterPackets (uint32_t nArbiterPackets);
+  
+  void SetNArbiterBytes (uint32_t nArbiterBytes);
+  
   /**
    * \brief Returns architecture's local IPv4 address.
    * 
    * \returns the local IPv4 Address.
    */
   Ipv4Address GetLocalIp (void);
+  
+  /**
+   * \brief Returns the associated NIC's line rate.
+   * 
+   * \returns the line rate.
+   */
+  DataRate GetNicRate (void);
   
   /**
    * \brief Return the MTU size without the header sizes
@@ -518,6 +692,12 @@ public:
    * \returns the m_memIsOptimized
    */
   bool MemIsOptimized (void);
+  
+  /**
+   * \brief Return whether the priority queueing on the Arbiter is enabled
+   * \returns the m_enableArbiterQueueing
+   */
+  bool ArbiterQueueEnabled (void);
 
   /**
    * \brief Allows applications to set a callback for every reassembled msg on RX
@@ -548,6 +728,7 @@ protected:
 
   Ptr<NetDevice> m_boundnetdevice; //!< the device this architecture is bound to (might be null).
   Ipv4Address    m_localIp; //!< the local IPv4 Address
+  DataRate       m_nicRate; //<! the line rate of the NIC
     
   uint16_t m_payloadSize;  //!< MTU for the network interface excluding the header sizes
   uint16_t m_initialCredit; //!< Initial window of packets to be sent
@@ -556,6 +737,7 @@ protected:
   uint16_t m_maxNMessages; //!< Maximum number of messages NanoPU can handle at a time
   
   bool m_memIsOptimized; //!< High performant mode (only packet sizes are stored to save from memory)
+  bool m_enableArbiterQueueing; //!< Enables priority queuing on Arbiter
     
   Ptr<NanoPuArchtReassemble> m_reassemble; //!< the reassembly buffer of the architecture
   Ptr<NanoPuArchtArbiter> m_arbiter; //!< the arbiter of the architecture
@@ -567,6 +749,9 @@ protected:
   
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgBeginTrace;
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, uint16_t, uint16_t, int> m_msgFinishTrace;
+  
+  TracedValue<uint32_t> m_nArbiterPackets; //<! Trace source to track occupancy of Arbiter
+  TracedValue<uint32_t> m_nArbiterBytes; //<! Trace source to track occupancy of Arbiter
 };
     
 } // namespace ns3
