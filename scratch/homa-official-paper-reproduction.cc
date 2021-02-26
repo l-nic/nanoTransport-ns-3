@@ -158,6 +158,7 @@ main (int argc, char *argv[])
   bool traceQueues = false;
   bool disableRtx = false;
   bool debugMode = false;
+  uint32_t initialCredit = 7; // in packets
   uint64_t inboundRtxTimeout = 1000; // in microseconds
   uint64_t outboundRtxTimeout = 10000; // in microseconds
     
@@ -168,6 +169,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
   cmd.AddValue ("debugMode", "Whether to enable detailed pkt traces for debugging", debugMode);
+  cmd.AddValue ("bdpPkts", "RttBytes to use in the simulation.", initialCredit);
   cmd.AddValue ("inboundRtxTimeout", "Number of microseconds before an inbound msg expires.", inboundRtxTimeout);
   cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
   cmd.Parse (argc, argv);
@@ -245,7 +247,8 @@ main (int argc, char *argv[])
   /******** Install Internet Stack ********/
     
   /* Set default BDP value in packets */
-  Config::SetDefault("ns3::HomaL4Protocol::RttPackets", UintegerValue(7));
+  Config::SetDefault("ns3::HomaL4Protocol::RttPackets", 
+                     UintegerValue(initialCredit));
     
   /* Set default number of priority bands in the network */
   uint8_t numTotalPrioBands = 8;
