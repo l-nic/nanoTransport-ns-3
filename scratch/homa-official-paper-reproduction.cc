@@ -111,11 +111,27 @@ void TraceDataPktDeparture (Ptr<OutputStreamWrapper> stream,
 {
   NS_LOG_DEBUG("+ " << Simulator::Now ().GetNanoSeconds () 
       << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
+      << " " << txMsgId << " " << pktOffset);// << " " << (uint16_t)prio);
     
   *stream->GetStream () << "+ "  <<Simulator::Now ().GetNanoSeconds () 
       << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+      << " " << txMsgId << " " << pktOffset << " " << std::endl;
+//       << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+}
+void TraceCtrlPktArrival (Ptr<OutputStreamWrapper> stream,
+                          Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                          uint16_t sport, uint16_t dport, uint8_t flag,
+                          uint16_t grantOffset, uint8_t prio)
+{
+  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << HomaHeader::FlagsToString(flag) << " " << grantOffset 
+      << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "- "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << HomaHeader::FlagsToString(flag) << " " << grantOffset 
+      << " " << (uint16_t)prio << std::endl;
 }
 
 std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &avgMsgSizePkts)
@@ -168,7 +184,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("simIdx", "The index of the simulation used to identify parallel runs.", simIdx);
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
-  cmd.AddValue ("debugMode", "Whether to enable detailed pkt traces for debugging", debugMode);
+  cmd.AddValue ("debug", "Whether to enable detailed pkt traces for debugging", debugMode);
   cmd.AddValue ("bdpPkts", "RttBytes to use in the simulation.", initialCredit);
   cmd.AddValue ("inboundRtxTimeout", "Number of microseconds before an inbound msg expires.", inboundRtxTimeout);
   cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
@@ -206,6 +222,7 @@ main (int argc, char *argv[])
   int nSpines = 4;
   
   /******** Create Nodes ********/
+  NS_LOG_UNCOND("Creating Nodes...");
   NodeContainer hostNodes;
   hostNodes.Create (nHosts);
     
@@ -216,6 +233,7 @@ main (int argc, char *argv[])
   spineNodes.Create (nSpines);
     
   /******** Create Channels ********/
+  NS_LOG_UNCOND("Configuring Channels...");
   PointToPointHelper hostLinks;
   hostLinks.SetDeviceAttribute ("DataRate", StringValue ("10Gbps"));
   hostLinks.SetChannelAttribute ("Delay", StringValue ("250ns"));
@@ -227,6 +245,7 @@ main (int argc, char *argv[])
   aggregationLinks.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("1p"));
     
   /******** Create NetDevices ********/
+  NS_LOG_UNCOND("Creating NetDevices...");
   NetDeviceContainer hostTorDevices[nHosts];
   for (int i = 0; i < nHosts; i++)
   {
@@ -245,6 +264,7 @@ main (int argc, char *argv[])
   }
     
   /******** Install Internet Stack ********/
+  NS_LOG_UNCOND("Installing Internet Stack...");
     
   /* Set default BDP value in packets */
   Config::SetDefault("ns3::HomaL4Protocol::RttPackets", 
@@ -258,6 +278,8 @@ main (int argc, char *argv[])
     inboundRtxTimeout *= 1e9;
     outboundRtxTimeout *= 1e9;
   }
+    
+  NS_LOG_UNCOND("Deploying HomaL4Protocol Stack...");
   Config::SetDefault("ns3::HomaL4Protocol::NumTotalPrioBands", 
                      UintegerValue(numTotalPrioBands));
   Config::SetDefault("ns3::HomaL4Protocol::NumUnschedPrioBands", 
@@ -326,6 +348,7 @@ main (int argc, char *argv[])
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     
   /******** Read the Workload Distribution From File ********/
+  NS_LOG_UNCOND("Reading Msg Size Distribution...");
   double avgMsgSizePkts;
   std::map<double,int> msgSizeCDF = ReadMsgSizeDist(msgSizeDistFileName, avgMsgSizePkts);
     
@@ -337,6 +360,7 @@ main (int argc, char *argv[])
   NS_LOG_LOGIC("Average Message Size is: " << avgMsgSizePkts);
     
   /******** Create Message Generator Apps on End-hosts ********/
+  NS_LOG_UNCOND("Installing the Applications...");
   HomaHeader homah;
   Ipv4Header ipv4h;
   uint32_t payloadSize = hostTorDevices[0].Get (0)->GetMtu() 
@@ -370,16 +394,19 @@ main (int argc, char *argv[])
     std::string pktTraceFileName ("outputs/homa-paper-reproduction/official-impl/debug-pktTrace.tr"); 
     pktStream = asciiTraceHelper.CreateFileStream (pktTraceFileName);
       
-    Config::ConnectWithoutContext("/NodeList/48/$ns3::HomaL4Protocol/DataPktDeparture", 
+    Config::ConnectWithoutContext("/NodeList/45/$ns3::HomaL4Protocol/DataPktDeparture", 
                                 MakeBoundCallback(&TraceDataPktDeparture,pktStream));
-    Config::ConnectWithoutContext("/NodeList/115/$ns3::HomaL4Protocol/DataPktArrival", 
+    Config::ConnectWithoutContext("/NodeList/45/$ns3::HomaL4Protocol/DataPktArrival", 
                                 MakeBoundCallback(&TraceDataPktArrival,pktStream));
+    Config::ConnectWithoutContext("/NodeList/45/$ns3::HomaL4Protocol/CtrlPktArrival", 
+                                MakeBoundCallback(&TraceCtrlPktArrival,pktStream));
   
 //     std::string pcapFileName ("outputs/homa-paper-reproduction/official-impl/pcaps/tor-spine");
 //     aggregationLinks.EnablePcapAll (pcapFileName, false);
   }
 
   /******** Run the Actual Simulation ********/
+  NS_LOG_UNCOND("Running the Simulation...");
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;

@@ -89,7 +89,6 @@ typedef struct egressMeta_t {
 typedef struct arbiterMeta_t {
     Ptr<Packet> p;
     egressMeta_t egressMeta;
-    uint32_t insertionOrder;
 }arbiterMeta_t;   
     
 template <typename T> 
@@ -242,25 +241,6 @@ protected:
 };
     
 /******************************************************************************/
-
-struct HighRankFirst
-{
-  bool operator()(const arbiterMeta_t& lhs, const arbiterMeta_t& rhs) const
-  {
-    if (lhs.egressMeta.remoteIp == rhs.egressMeta.remoteIp &&
-        lhs.egressMeta.remotePort == rhs.egressMeta.remotePort &&
-        lhs.egressMeta.localPort == rhs.egressMeta.localPort)
-    {
-      return lhs.insertionOrder > rhs.insertionOrder;
-    }
-    else
-    {
-      return lhs.egressMeta.rank > rhs.egressMeta.rank ||
-             (lhs.egressMeta.rank == rhs.egressMeta.rank && 
-              lhs.insertionOrder > rhs.insertionOrder);
-    }
-  }
-};
     
 /**
  * \ingroup nanopu-archt
@@ -282,6 +262,10 @@ public:
   
   void SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe);
   
+  void PushIntoPq (arbiterMeta_t arbiterMeta);
+  
+  bool PopFromPq (arbiterMeta_t &arbiterMeta);
+  
   void Receive(Ptr<Packet> p, egressMeta_t meta);
   
   void EmitAfterPktOfSize (uint32_t size);
@@ -293,8 +277,9 @@ protected:
   Ptr<NanoPuArcht> m_nanoPuArcht;
   Ptr<NanoPuArchtEgressPipe> m_egressPipe;
   
-  std::priority_queue<arbiterMeta_t, std::vector<arbiterMeta_t>, HighRankFirst> m_pq;
-  uint32_t m_pqInsertionOrder;  //!< virtual timestamp of insertion into prio queue
+  std::vector<arbiterMeta_t> m_highPq;
+  std::vector<arbiterMeta_t> m_lowPq;
+
   EventId m_nextTxEvent;        //!< The EventID for the next transmission
 };
     

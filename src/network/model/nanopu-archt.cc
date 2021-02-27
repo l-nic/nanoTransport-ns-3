@@ -106,8 +106,6 @@ NanoPuArchtArbiter::NanoPuArchtArbiter (Ptr<NanoPuArcht> nanoPuArcht)
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
     
   m_nanoPuArcht = nanoPuArcht;
-  
-  m_pqInsertionOrder = 0;
 }
 
 NanoPuArchtArbiter::~NanoPuArchtArbiter ()
@@ -122,6 +120,49 @@ void NanoPuArchtArbiter::SetEgressPipe (Ptr<NanoPuArchtEgressPipe> egressPipe)
   m_egressPipe = egressPipe;
 }
     
+void NanoPuArchtArbiter::PushIntoPq (arbiterMeta_t arbiterMeta)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+    
+  if (arbiterMeta.egressMeta.rank == 0)
+    m_highPq.push_back(arbiterMeta);
+  else
+  {
+    for(std::size_t i = 0; i < m_lowPq.size(); ++i) 
+    {
+      if((arbiterMeta.egressMeta.remoteIp != m_lowPq[i].egressMeta.remoteIp ||
+          arbiterMeta.egressMeta.remotePort != m_lowPq[i].egressMeta.remotePort ||
+          arbiterMeta.egressMeta.localPort != m_lowPq[i].egressMeta.localPort) &&
+         arbiterMeta.egressMeta.rank < m_lowPq[i].egressMeta.rank)
+      {
+        m_lowPq.insert(m_lowPq.begin()+i, arbiterMeta);
+        return;
+      }
+    }
+    m_lowPq.push_back(arbiterMeta);
+  }
+}
+    
+bool NanoPuArchtArbiter::PopFromPq (arbiterMeta_t &arbiterMeta)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
+    
+  if (m_highPq.size() > 0)
+  {
+    arbiterMeta = m_highPq[0];
+    m_highPq.erase(m_highPq.begin());
+    return true;
+  }
+  else if (m_lowPq.size() > 0)
+  {
+    arbiterMeta = m_lowPq[0];
+    m_lowPq.erase(m_lowPq.begin());
+    return true;
+  }
+  else
+    return false;
+}
+    
 void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
@@ -131,15 +172,13 @@ void NanoPuArchtArbiter::Receive(Ptr<Packet> p, egressMeta_t meta)
     arbiterMeta_t arbiterMeta = {};
     arbiterMeta.p = p;
     arbiterMeta.egressMeta = meta;
-    arbiterMeta.insertionOrder = m_pqInsertionOrder;
       
     NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                  " NanoPuArchtArbiter + RemoteIp: " << meta.remoteIp << 
                  " RemotePort: " << meta.remotePort << " PktOffset: " << 
                  meta.pktOffset << " Rank: " << meta.rank);
       
-    m_pq.push(arbiterMeta);
-    m_pqInsertionOrder++;
+    this->PushIntoPq (arbiterMeta);
       
     m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()+1);
     m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () + p->GetSize());
@@ -182,28 +221,23 @@ void NanoPuArchtArbiter::EmitAfterPktOfSize (uint32_t size)
 void NanoPuArchtArbiter::TxPkt()
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  
-  if (m_pq.empty())
-  {
-    m_pqInsertionOrder = 0;
-    return;
-  }
     
-  arbiterMeta_t arbiterMeta = m_pq.top();
-  m_pq.pop();
-    
-  NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
+  arbiterMeta_t arbiterMeta;
+  if (this->PopFromPq(arbiterMeta))
+  { 
+    NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                " NanoPuArchtArbiter - RemoteIp: " << 
                arbiterMeta.egressMeta.remoteIp << " RemotePort: " << 
                arbiterMeta.egressMeta.remotePort << " PktOffset: " << 
                arbiterMeta.egressMeta.pktOffset << " Rank: " << 
                arbiterMeta.egressMeta.rank);
     
-  m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()-1);
-  m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () 
-                                   - arbiterMeta.p->GetSize());
+    m_nanoPuArcht->SetNArbiterPackets (m_nanoPuArcht->GetNArbiterPackets ()-1);
+    m_nanoPuArcht->SetNArbiterBytes (m_nanoPuArcht->GetNArbiterBytes () 
+                                     - arbiterMeta.p->GetSize());
     
-  m_egressPipe->EgressPipe(arbiterMeta.p, arbiterMeta.egressMeta);
+    m_egressPipe->EgressPipe(arbiterMeta.p, arbiterMeta.egressMeta);
+  }
 }
     
 /******************************************************************************/
@@ -499,6 +533,8 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
   meta.localPort = apphdr.GetLocalPort();
   meta.rank = m_ranks[txMsgId];
     
+  bool newMsgFlag = isNewMsg;
+    
   uint16_t pktOffset = getFirstSetBitPos(txPkts);
   while (pktOffset != BITMAP_SIZE)
   {
@@ -517,7 +553,9 @@ void NanoPuArchtPacketize::Dequeue (uint16_t txMsgId, bitmap_t txPkts,
     else
       p = m_buffers[txMsgId][pktOffset]->Copy ();
     
-    meta.isNewMsg = isNewMsg;
+    meta.isNewMsg = newMsgFlag;
+    newMsgFlag = false; // Only the very first packet can have newMsgFlag set
+      
     meta.isRtx = isRtx;
     meta.pktOffset = pktOffset;
       

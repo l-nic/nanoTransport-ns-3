@@ -111,6 +111,11 @@ HomaL4Protocol::GetTypeId (void)
                      "from the HomaL4Protocol layer.",
                      MakeTraceSourceAccessor (&HomaL4Protocol::m_dataSendTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("CtrlPktArrival",
+                     "Trace source indicating a control packet has arrived "
+                     "to the HomaL4Protocol layer.",
+                     MakeTraceSourceAccessor (&HomaL4Protocol::m_ctrlRecvTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -375,10 +380,13 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
     
   PppHeader pph;
   Ipv4Header iph;
+  HomaHeader homaHeader;
+  packet->PeekHeader(homaHeader);
+    
   uint32_t headerSize = iph.GetSerializedSize () + pph.GetSerializedSize ();  
   Time timeToSerialize = m_linkRate.CalculateBytesTxTime (packet->GetSize () + headerSize);
     
-  if(Simulator::Now() < m_nextTimeTxQueWillBeEmpty)
+  if(Simulator::Now() <= m_nextTimeTxQueWillBeEmpty)
   {
     m_nextTimeTxQueWillBeEmpty += timeToSerialize;
   }
@@ -387,8 +395,6 @@ HomaL4Protocol::SendDown (Ptr<Packet> packet,
     m_nextTimeTxQueWillBeEmpty = Simulator::Now() + timeToSerialize;
   }
     
-  HomaHeader homaHeader;
-  packet->PeekHeader(homaHeader);
   if (homaHeader.GetFlags () & HomaHeader::Flags_t::DATA)
   {
     uint32_t payloadSize = m_mtu - iph.GetSerializedSize () - homaHeader.GetSerializedSize ();
@@ -458,12 +464,6 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
       rxFlag & HomaHeader::Flags_t::BUSY)
   {
     m_recvScheduler->ReceivePacket(cp, header, homaHeader, interface);
-      
-    if (rxFlag & HomaHeader::Flags_t::DATA)
-      m_dataRecvTrace(cp, header.GetSource (), header.GetDestination (), 
-                      homaHeader.GetSrcPort (), homaHeader.GetDstPort (), 
-                      homaHeader.GetTxMsgId (), homaHeader.GetPktOffset (), 
-                      homaHeader.GetPrio ());
   }
   else if ((rxFlag & HomaHeader::Flags_t::GRANT) ||
            (rxFlag & HomaHeader::Flags_t::RESEND) ||
@@ -477,6 +477,18 @@ HomaL4Protocol::Receive (Ptr<Packet> packet,
                  << homaHeader.FlagsToString(rxFlag));
     return IpL4Protocol::RX_ENDPOINT_UNREACH;
   }
+    
+  if (rxFlag & HomaHeader::Flags_t::DATA)
+    m_dataRecvTrace(cp, header.GetSource (), header.GetDestination (), 
+                    homaHeader.GetSrcPort (), homaHeader.GetDstPort (), 
+                    homaHeader.GetTxMsgId (), homaHeader.GetPktOffset (), 
+                    homaHeader.GetPrio ());
+  else
+    m_ctrlRecvTrace(cp, header.GetSource (), header.GetDestination (), 
+                    homaHeader.GetSrcPort (), homaHeader.GetDstPort (), 
+                    homaHeader.GetFlags (), homaHeader.GetGrantOffset(), 
+                    homaHeader.GetPrio());
+    
   return IpL4Protocol::RX_OK;
 }
     
@@ -785,7 +797,7 @@ void HomaOutboundMsg::HandleGrantOffset (HomaHeader const &homaHeader)
   uint16_t grantOffset = homaHeader.GetGrantOffset();
   NS_ASSERT_MSG(grantOffset < this->GetMsgSizePkts (), 
                 "HomaOutboundMsg shouldn't be granted after it is already fully granted!");
-    
+  
   if (grantOffset > m_maxGrantedIdx)
   {
     NS_LOG_LOGIC("HomaOutboundMsg (" << this 

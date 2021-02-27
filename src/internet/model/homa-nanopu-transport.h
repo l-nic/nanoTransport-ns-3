@@ -252,6 +252,14 @@ public:
   void DataSendTrace (Ptr<const Packet> p, Ipv4Address srcIp, Ipv4Address dstIp,
                       uint16_t srcPort, uint16_t dstPort, int txMsgId, 
                       uint16_t pktOffset, uint16_t prio);
+  
+  /**
+   * \brief Calls the Control packet arrival trace source
+   */
+  void CtrlRecvTrace (Ptr<const Packet> p, 
+                      Ipv4Address srcIp, Ipv4Address dstIp,
+                      uint16_t srcPort, uint16_t dstPort, 
+                      uint8_t flags, uint16_t grantOffset, uint8_t prio);
 
 private:
 
@@ -271,6 +279,9 @@ private:
   TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, 
                  uint16_t, uint16_t, int, 
                  uint16_t, uint16_t> m_dataSendTrace; //!< Trace of {pkt, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio} for departing DATA packets
+  TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address, 
+                 uint16_t, uint16_t, uint8_t, 
+                 uint16_t, uint8_t> m_ctrlRecvTrace; //!< Trace of {pkt, srcIp, dstIp, srcPort, dstPort, txMsgId, grantOffset, prio} for arriving DATA packets
 };   
 
 } // namespace ns3

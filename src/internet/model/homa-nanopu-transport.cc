@@ -76,11 +76,14 @@ void HomaNanoPuArchtPktGen::CtrlPktEvent (homaNanoPuCtrlMeta_t ctrlMeta)
     
   egressMeta_t egressMeta = {};
   egressMeta.containsData = false;
-  egressMeta.rank = 0; // High Rank for control packets
+  egressMeta.isNewMsg = false;
   egressMeta.remoteIp = ctrlMeta.remoteIp;
-  egressMeta.remotePort = ctrlMeta.remotePort;
   egressMeta.localPort = ctrlMeta.localPort;
+  egressMeta.remotePort = ctrlMeta.remotePort;
   egressMeta.txMsgId = ctrlMeta.txMsgId;
+  egressMeta.msgLen = ctrlMeta.msgLen;
+  egressMeta.pktOffset = ctrlMeta.grantOffset; // For debugging purposes
+  egressMeta.rank = 0; // High Rank for control packets
   
   homah.SetSrcPort (ctrlMeta.localPort);
   homah.SetDstPort (ctrlMeta.remotePort);
@@ -185,6 +188,18 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
   uint16_t msgLen = homah.GetMsgSize ();
   uint8_t rxFlag = homah.GetFlags ();
     
+  SocketIpTosTag priorityTag;
+  p-> PeekPacketTag (priorityTag);
+  uint8_t priority = priorityTag.GetTos();
+  if (rxFlag & HomaHeader::Flags_t::DATA)  
+    m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
+                                 srcPort, dstPort, txMsgId, 
+                                 pktOffset, priority); 
+  else
+    m_nanoPuArcht->CtrlRecvTrace(p, srcIp, iph.GetDestination(),
+                                 srcPort, dstPort, rxFlag, 
+                                 homah.GetGrantOffset(), homah.GetPrio());
+    
   if (rxFlag & HomaHeader::Flags_t::DATA ||
       rxFlag & HomaHeader::Flags_t::BUSY )
   {   
@@ -196,16 +211,6 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                                                              txMsgId,
                                                              msgLen, 
                                                              pktOffset);
-      
-    SocketIpTosTag priorityTag;
-    p-> PeekPacketTag (priorityTag);
-    uint8_t priority = priorityTag.GetTos();
-    if (rxFlag & HomaHeader::Flags_t::DATA)
-    {   
-      m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
-                                   srcPort, dstPort, txMsgId, 
-                                   pktOffset, priority); 
-    }
       
     if (!rxMsgInfo.success)
       return false;
@@ -491,19 +496,20 @@ void HomaNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t me
     // TODO: Set generation information on the packet. (Not essential)
       
     // Priority of Data packets are determined by the packet tags
-    priority = m_priorities[meta.txMsgId];
+    priority = m_priorities[meta.txMsgId]; 
+      
+    cp-> AddHeader (homah);
       
     m_nanoPuArcht->DataSendTrace(cp, m_nanoPuArcht->GetLocalIp (), meta.remoteIp,
                                  meta.localPort, meta.remotePort, meta.txMsgId, 
                                  meta.pktOffset, meta.rank);
-      
-    cp-> AddHeader (homah);
       
     m_activeOutboundMsgId = meta.txMsgId;
   }
   else
   {
     cp-> PeekHeader (homah);
+      
     uint8_t ctrlFlag = homah.GetFlags ();
     if (ctrlFlag & HomaHeader::Flags_t::BOGUS ||
         ctrlFlag & HomaHeader::Flags_t::BUSY)
@@ -637,13 +643,18 @@ TypeId HomaNanoPuArcht::GetTypeId (void)
                      "ns3::TracedValueCallback::Uint32")
     .AddTraceSource ("DataPktArrival",
                      "Trace source indicating a DATA packet has arrived "
-                     "to the receiver NanoPuArcht layer.",
+                     "to the receiver HomaNanoPuArcht layer.",
                      MakeTraceSourceAccessor (&HomaNanoPuArcht::m_dataRecvTrace),
                      "ns3::Packet::TracedCallback")
     .AddTraceSource ("DataPktDeparture",
                      "Trace source indicating a DATA packet has departed "
-                     "from the sender NanoPuArcht layer.",
+                     "from the sender HomaNanoPuArcht layer.",
                      MakeTraceSourceAccessor (&HomaNanoPuArcht::m_dataSendTrace),
+                     "ns3::Packet::TracedCallback")
+    .AddTraceSource ("CtrlPktArrival",
+                     "Trace source indicating a control packet has arrived "
+                     "to the receiver HomaNanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&HomaNanoPuArcht::m_ctrlRecvTrace),
                      "ns3::Packet::TracedCallback")
   ;
   return tid;
@@ -732,6 +743,16 @@ void HomaNanoPuArcht::DataSendTrace (Ptr<const Packet> p,
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
     
   m_dataSendTrace(p, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio);
+}
+    
+void HomaNanoPuArcht::CtrlRecvTrace (Ptr<const Packet> p, 
+                                     Ipv4Address srcIp, Ipv4Address dstIp,
+                                     uint16_t srcPort, uint16_t dstPort, 
+                                     uint8_t flags, uint16_t grantOffset, uint8_t prio)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
+    
+  m_ctrlRecvTrace(p, srcIp, dstIp, srcPort, dstPort, flags, grantOffset, prio);
 }
     
 } // namespace ns3

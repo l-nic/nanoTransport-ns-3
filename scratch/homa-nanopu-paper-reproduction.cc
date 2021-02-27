@@ -91,6 +91,49 @@ BytesInQueueDiscTrace (Ptr<OutputStreamWrapper> stream, int hostIdx,
                         << " NewQueueSize=" << newval << std::endl;
 }
 
+void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
+                          Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                          uint16_t sport, uint16_t dport, int txMsgId,
+                          uint16_t pktOffset, uint8_t prio)
+{
+  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "- "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+}
+void TraceDataPktDeparture (Ptr<OutputStreamWrapper> stream,
+                            Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                            uint16_t sport, uint16_t dport, int txMsgId,
+                            uint16_t pktOffset, uint16_t prio)
+{
+  NS_LOG_DEBUG("+ " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset);// << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "+ "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << txMsgId << " " << pktOffset << " " << std::endl;
+//       << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
+}
+void TraceCtrlPktArrival (Ptr<OutputStreamWrapper> stream,
+                          Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
+                          uint16_t sport, uint16_t dport, uint8_t flag,
+                          uint16_t grantOffset, uint8_t prio)
+{
+  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << HomaHeader::FlagsToString(flag) << " " << grantOffset-1 
+      << " " << (uint16_t)prio);
+    
+  *stream->GetStream () << "- "  <<Simulator::Now ().GetNanoSeconds () 
+      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
+      << " " << HomaHeader::FlagsToString(flag) << " " << grantOffset-1 
+      << " " << (uint16_t)prio << std::endl;
+}
+
 std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &avgMsgSizePkts)
 {
   std::ifstream msgSizeDistFile;
@@ -121,33 +164,6 @@ std::map<double,int> ReadMsgSizeDist (std::string msgSizeDistFileName, double &a
   return msgSizeCDF;
 }
 
-void TraceDataPktArrival (Ptr<OutputStreamWrapper> stream,
-                          Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
-                          uint16_t sport, uint16_t dport, int txMsgId,
-                          uint16_t pktOffset, uint8_t prio)
-{
-  NS_LOG_DEBUG("- " << Simulator::Now ().GetNanoSeconds () 
-      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
-    
-  *stream->GetStream () << "- "  <<Simulator::Now ().GetNanoSeconds () 
-      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
-}
-void TraceDataPktDeparture (Ptr<OutputStreamWrapper> stream,
-                            Ptr<const Packet> msg, Ipv4Address saddr, Ipv4Address daddr, 
-                            uint16_t sport, uint16_t dport, int txMsgId,
-                            uint16_t pktOffset, uint16_t prio)
-{
-  NS_LOG_DEBUG("+ " << Simulator::Now ().GetNanoSeconds () 
-      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio);
-    
-  *stream->GetStream () << "+ "  <<Simulator::Now ().GetNanoSeconds () 
-      << " " << saddr << ":" << sport << " "  << daddr << ":" << dport 
-      << " " << txMsgId << " " << pktOffset << " " << (uint16_t)prio << std::endl;
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -169,7 +185,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("disableRtx", "Whether to disable rtx timers during the simulation.", disableRtx);
   cmd.AddValue ("outboundRtxTimeout", "Number of microseconds before an outbound msg expires.", outboundRtxTimeout);
   cmd.AddValue ("bdpPkts", "RttBytes to use in the simulation.", initialCredit);
-  cmd.AddValue ("debugMode", "Whether to enable detailed pkt traces for debugging", debugMode);
+  cmd.AddValue ("debug", "Whether to enable detailed pkt traces for debugging", debugMode);
   cmd.Parse (argc, argv);
     
   if (debugMode)
@@ -182,7 +198,7 @@ main (int argc, char *argv[])
     
   Time::SetResolution (Time::NS);
 //   Packet::EnablePrinting ();
-  LogComponentEnable ("HomaNanoPuPaperReproduction", LOG_LEVEL_WARN);
+//   LogComponentEnable ("HomaNanoPuPaperReproduction", LOG_LEVEL_DEBUG);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
   LogComponentEnable ("HomaNanoPuArcht", LOG_LEVEL_WARN);
 //   LogComponentEnable ("MsgGeneratorApp", LOG_LEVEL_ALL);
@@ -397,10 +413,12 @@ main (int argc, char *argv[])
     std::string pktTraceFileName ("outputs/homa-paper-reproduction/nanopu-impl/debug-pktTrace.tr"); 
     pktStream = asciiTraceHelper.CreateFileStream (pktTraceFileName);
       
-    Config::ConnectWithoutContext("/NodeList/48/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
+    Config::ConnectWithoutContext("/NodeList/45/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktDeparture", 
                                 MakeBoundCallback(&TraceDataPktDeparture,pktStream));
-    Config::ConnectWithoutContext("/NodeList/115/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
+    Config::ConnectWithoutContext("/NodeList/45/DeviceList/0/$ns3::HomaNanoPuArcht/DataPktArrival", 
                                 MakeBoundCallback(&TraceDataPktArrival,pktStream));
+    Config::ConnectWithoutContext("/NodeList/45/DeviceList/0/$ns3::HomaNanoPuArcht/CtrlPktArrival", 
+                                MakeBoundCallback(&TraceCtrlPktArrival,pktStream));
   
 //     std::string pcapFileName ("outputs/homa-paper-reproduction/nanopu-impl/pcaps/tor-spine");
 //     aggregationLinks.EnablePcapAll (pcapFileName, false);
