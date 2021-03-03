@@ -143,7 +143,7 @@ uint16_t HpccNanoPuArchtIngressPipe::ComputeNumPkts (uint32_t bytes)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << bytes);
     
-  // TODO: The division operation below can be handled with
+  // NOTE: The division operation below can be handled with
   //       a lookup table in a programmable hardware pipeline.
   uint32_t mtu = m_nanoPuArcht->GetPayloadSize ();
   uint32_t result = bytes / mtu + (bytes % mtu != 0);
@@ -158,14 +158,11 @@ void HpccNanoPuArchtIngressPipe::MeasureInflight (uint16_t txMsgId,
                                                     IntHeader intHdr)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this);
-  // TODO: A P4 programmable pipeline wouldn't have double type variables.
-  //       Maybe we can represent utilization as an integer from 0 to 100?
-    
-  // TODO: The code below uses cascaded if statements to prevent the use
-  //       of for loop. This design assumes a particular MAX_INT_HOPS value.
-    
-  // TODO: The code below uses relatively complex computations. We could 
-  //       probably use lookup tables for such computations?
+  // NOTE: A P4 programmable pipeline wouldn't have double type variables.
+  //       or complex computations such as division etc. Probabilistic INT
+  //       (SIGCOMM'20) decribes a way to run HPCC computations on PISA
+  //       pipelines. Mainly it requires lookup tables, fixed point arithmetic
+  //       and some aproximations to achieve similarly good performance results.
     
   double baseRtt = m_nanoPuArcht->GetBaseRtt ();
     
@@ -333,8 +330,6 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
                                                              pktOffset);
     if (!rxMsgInfo.success)
       return false;
-    
-    uint16_t ackNo = rxMsgInfo.ackNo;
       
     if (rxMsgInfo.isNewPkt)
     {
@@ -355,7 +350,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     ctrlMeta.remotePort = srcPort;
     ctrlMeta.localPort = dstPort;
     ctrlMeta.txMsgId = txMsgId;
-    ctrlMeta.ackNo = ackNo;
+    ctrlMeta.ackNo = rxMsgInfo.ackNo;
     ctrlMeta.msgLen = msgLen;
     ctrlMeta.receivedIntHeader = intHdr;
       
@@ -370,8 +365,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
     cp->RemoveHeader (intHdrOfData);
     
     if (m_msgStates.find(txMsgId) == m_msgStates.end())
-    {
-      // This is a new message
+    {// This is a new message
       NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
                   " NanoPU HPCC IngressPipe is creating a new message state!");
         
@@ -387,8 +381,7 @@ bool HpccNanoPuArchtIngressPipe::IngressPipe (Ptr<NetDevice> device,
       //       for new messages, but they are actually modified below.
     }
     else
-    {
-      // This is not a new message
+    {// This is not a new message
       if (pktOffset > m_msgStates[txMsgId].ackNo)
       {
         m_msgStates[txMsgId].ackNo = pktOffset;

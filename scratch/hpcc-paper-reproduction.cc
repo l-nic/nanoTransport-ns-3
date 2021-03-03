@@ -113,6 +113,8 @@ main (int argc, char *argv[])
   uint32_t simIdx = 0;
   bool traceQueues = false;
   std::string workloadName ("FbHdp");
+  double targetUtil = 0.95;
+  uint16_t nMaxStage = 5;
     
   HpccHeader hpcch;
   IntHeader inth;
@@ -126,6 +128,8 @@ main (int argc, char *argv[])
   cmd.AddValue ("load", "The network load to simulate the network at, ie 0.5 for 50%.", networkLoad);
   cmd.AddValue ("simIdx", "The index of the simulation used to identify parallel runs.", simIdx);
   cmd.AddValue ("traceQueues", "Whether to trace the queue lengths during the simulation.", traceQueues);
+  cmd.AddValue ("targetUtil", "The target bottleneck utilization (default: 0.95)", targetUtil);
+  cmd.AddValue ("nMaxStage", "The number of stages before multiplicative window update", nMaxStage);
   cmd.Parse (argc, argv);
     
   SeedManager::SetRun (simIdx);
@@ -290,9 +294,9 @@ main (int argc, char *argv[])
   Config::SetDefault("ns3::HpccNanoPuArcht::WinAI", 
                      UintegerValue(80));
   Config::SetDefault("ns3::HpccNanoPuArcht::UtilFactor", 
-                     DoubleValue(0.95));
+                     DoubleValue(targetUtil));
   Config::SetDefault("ns3::HpccNanoPuArcht::MaxStage", 
-                     UintegerValue(5));
+                     UintegerValue(nMaxStage));
   Config::SetDefault("ns3::HpccNanoPuArcht::OptimizeMemory", 
                      BooleanValue(true));
   Config::SetDefault("ns3::HpccNanoPuArcht::EnableArbiterQueueing", 

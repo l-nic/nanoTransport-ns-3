@@ -18,6 +18,30 @@
  * Author: Serhat Arslan <sarslan@stanford.edu>
  */
 
+/*
+ * This  is  an  implementation of the HPCC Algorithm described in [1] for
+ * a connectionless, reliable, low latency message delivery service. Since 
+ * NanoPuArcht runs protocols on PISA pipelines, some complex computations
+ * such as multiplication, division etc. are not possible. Therefore, one can 
+ * follow the description provided on the appendix of [2] to figure out how to
+ * implement the required calculations on a PISA pipeline.
+ *
+ * [1] Yuliang Li, Rui Miao, Hongqiang Harry Liu, Yan Zhuang, Fei Feng, 
+ *     Lingbo Tang, Zheng Cao, Ming Zhang, Frank Kelly, Mohammad Alizadeh, 
+ *     and Minlan Yu. 2019. HPCC: high precision congestion control. In 
+ *     Proceedings of the ACM Special Interest Group on Data Communication 
+ *     (SIGCOMM '19). Association for Computing Machinery, New York, NY, USA, 
+ *     44–58. DOI:https://doi-org.stanford.idm.oclc.org/10.1145/3341302.3342085
+ *
+ * [2] Ran Ben Basat, Sivaramakrishnan Ramanathan, Yuliang Li, Gianni Antichi, 
+ *     Minian Yu, and Michael Mitzenmacher. 2020. PINT: Probabilistic In-band 
+ *     Network Telemetry. In Proceedings of the Annual conference of the ACM 
+ *     Special Interest Group on Data Communication on the applications, 
+ *     technologies, architectures, and protocols for computer communication 
+ *     (SIGCOMM '20). Association for Computing Machinery, New York, NY, USA, 
+ *     662–680. DOI:https://doi-org.stanford.idm.oclc.org/10.1145/3387514.3405894
+*/
+
 #ifndef HPCC_NANOPU_TRANSPORT_H
 #define HPCC_NANOPU_TRANSPORT_H
 
