@@ -351,16 +351,11 @@ void NanoPuArchtPacketize::CreditToBtxEvent (uint16_t txMsgId, int rtxPkt,
                     " Changed credit for msg " << txMsgId <<
                     " from " << curCredit << " to " << m_credits[txMsgId]);
       }
-    }
-      
-    if (m_toBeTxBitmap.find(txMsgId) != m_toBeTxBitmap.end())
-    {
-//       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & ((((bitmap_t)1)<<m_credits[txMsgId])-1);
+        
       bitmap_t txPkts = m_toBeTxBitmap[txMsgId] & setBitMapUntil(m_credits[txMsgId]);
-    
       if (txPkts.any()) 
       {
-        bool isRtx = false;
+        bool isRtx = rtxPkt != -1;
         bool isNewMsg = false;
         Dequeue (txMsgId, txPkts, isRtx, isNewMsg);
         m_toBeTxBitmap[txMsgId] &= ~txPkts;
