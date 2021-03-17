@@ -717,7 +717,7 @@ void NanoPuArchtReassemble::SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer)
 rxMsgInfoMeta_t 
 NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, 
                                      uint16_t txMsgId, uint16_t msgLen, 
-                                     uint16_t pktOffset)
+                                     uint16_t pktOffset, bool readOnly)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << 
                    srcIp << srcPort << txMsgId << msgLen << pktOffset);
@@ -740,7 +740,8 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
     
     rxMsgInfo.isNewPkt = !m_rxInfoBitmap[rxMsgInfo.rxMsgId].test(pktOffset);
       
-    m_rxInfoBitmap[rxMsgInfo.rxMsgId].set(pktOffset);
+    if (!readOnly)
+      m_rxInfoBitmap[rxMsgInfo.rxMsgId].set(pktOffset);
     rxMsgInfo.ackNo = getFirstSetBitPos(~(m_rxInfoBitmap[rxMsgInfo.rxMsgId]));
     rxMsgInfo.numPkts = m_rxInfoBitmap[rxMsgInfo.rxMsgId].count();
       
@@ -760,7 +761,9 @@ NanoPuArchtReassemble::GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort,
      
     m_rxMsgIdTable.insert({key,rxMsgInfo.rxMsgId});
     m_receivedBitmap.insert({rxMsgInfo.rxMsgId,0});
-    m_rxInfoBitmap.insert({rxMsgInfo.rxMsgId,(bitmap_t)1<<pktOffset});
+    m_rxInfoBitmap.insert({rxMsgInfo.rxMsgId,0});
+    if (!readOnly)
+      m_rxInfoBitmap[rxMsgInfo.rxMsgId].set(pktOffset);
       
     if (m_nanoPuArcht->MemIsOptimized ())
     {

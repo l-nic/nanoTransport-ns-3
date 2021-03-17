@@ -461,7 +461,7 @@ public:
   void SetTimerModule (Ptr<NanoPuArchtIngressTimer> timer);
   
   rxMsgInfoMeta_t GetRxMsgInfo (Ipv4Address srcIp, uint16_t srcPort, uint16_t txMsgId,
-                                uint16_t msgLen, uint16_t pktOffset);
+                                uint16_t msgLen, uint16_t pktOffset, bool readOnly=false);
                                 
   void ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta);
   
