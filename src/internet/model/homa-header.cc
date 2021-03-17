@@ -110,8 +110,8 @@ HomaHeader::FlagsToString (uint8_t flags, const std::string& delimiter)
     "RESEND",
     "ACK",
     "BUSY",
-    "CUTOFFS",
-    "FREEZE",
+    "CHOP",
+    "NACK",
     "BOGUS"
   };
   std::string flagsDescription = "";

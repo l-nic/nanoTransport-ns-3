@@ -122,8 +122,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::ACK);
       genACK = false;
     }
-    if (genNACK)
-    { // Send NACKs only with PULLs because they trigger packet transmission
+    if (genNACK && delay==Time(0))
+    {
       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::NACK);
       genNACK = false;
     }
@@ -216,11 +216,9 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     uint16_t dstPort = ndph.GetDstPort ();
       
     rxMsgInfoMeta_t rxMsgInfo = m_nanoPuArcht->GetReassemblyBuffer ()
-                                             ->GetRxMsgInfo (srcIp, 
-                                                             srcPort, 
-                                                             txMsgId,
-                                                             msgLen, 
-                                                             pktOffset);
+                                             ->GetRxMsgInfo (srcIp, srcPort, 
+                                                 txMsgId, msgLen, pktOffset,
+                                                 ndph.GetFlags () & NdpHeader::Flags_t::CHOP);
       
     if (!rxMsgInfo.success)
       return false;
@@ -239,6 +237,15 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     } 
     else 
     {
+      if (!rxMsgInfo.isNewPkt)
+      {
+        NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << 
+                     " NanoPU Ndp IngressPipe dropping" <<
+                     " a duplicate packet:" << " (" << iph << ")" << 
+                     " (" << ndph << ")");
+        return true;
+      }
+        
       m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
                                    srcPort, dstPort, txMsgId, 
                                    pktOffset, 1);

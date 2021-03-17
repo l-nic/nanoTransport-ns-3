@@ -184,9 +184,9 @@ public:
     RESEND = 4,   //!< RESEND (Only sent from senders)
     ACK = 8,      //!< ACK (sent once the msg is completely received)
     BUSY = 16,    //!< BUSY
-    CUTOFFS = 32, //!< Priority cutoffs
-    FREEZE = 64,  //!< 
-    BOGUS = 128   //!< Used only in unit tests.
+    CHOP = 32,    //!< Trimmed packet flag for extensionversion with packet trimming (HomaTr)
+    NACK = 64,    //!< NACK for extension version with packet trimming (HomaTr)
+    BOGUS = 128   //!< Used in unit tests or NanoPu signalling to egress pipeline
   } Flags_t;
   
   static const uint8_t PROT_NUMBER = 198; //!< Protocol number of HOMA to be used in IP packets

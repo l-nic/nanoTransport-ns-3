@@ -163,6 +163,15 @@ main (int argc, char *argv[])
   std::locale loc;
   protocol[0] = std::toupper(protocol[0],loc);
     
+  Time::SetResolution (Time::NS);
+  Packet::EnablePrinting ();
+  LogComponentEnable ("NanoPuProtoEval", LOG_LEVEL_DEBUG);
+    
+  NS_LOG_DEBUG("Evaluation Scenario >> protocol: " << protocol <<
+               " bufferSize: "<< bufferSize << " rto(us): " << rto <<
+               " nSenders: " << nSenders << " bw: " << bandwidth <<
+               " linkDelay: " << delay);
+    
   std::string tracesFileName ("outputs/nanopu-protocol-eval/");
   tracesFileName += protocol + "-Buff" + bufferSize;
   std::string qStreamName = tracesFileName + ".qlen";
@@ -175,9 +184,6 @@ main (int argc, char *argv[])
     
   protocol += "NanoPuArcht";
     
-  Time::SetResolution (Time::NS);
-  Packet::EnablePrinting ();
-  LogComponentEnable ("NanoPuProtoEval", LOG_LEVEL_DEBUG);
   LogComponentEnable ("NanoPuArcht", LOG_LEVEL_WARN);
   LogComponentEnable (protocol.c_str(), LOG_LEVEL_WARN);
     
@@ -241,6 +247,12 @@ main (int argc, char *argv[])
                                "MaxSize", StringValue(bufferSize),
                                "NumBands", UintegerValue(nTotalPrioBands));
   }
+  else if (protocol.compare ("ns3::HomatrNanoPuArcht") == 0)
+  {
+    tchPfifo.SetRootQueueDisc ("ns3::PfifoHomatrQueueDisc", 
+                               "MaxSize", StringValue(bufferSize),
+                               "NumBands", UintegerValue(nTotalPrioBands));
+  }
   else
   {
     NS_ABORT_MSG("This experiment is not designed for " << protocol);
@@ -291,15 +303,16 @@ main (int argc, char *argv[])
     NdpHeader ndph;
     payloadSize -= ndph.GetSerializedSize ();
   }
-  else if (protocol.compare ("ns3::HomaNanoPuArcht") == 0)
+  else if (protocol.compare ("ns3::HomaNanoPuArcht") == 0 ||
+           protocol.compare ("ns3::HomatrNanoPuArcht") == 0)
   {
     HomaHeader homah;
     payloadSize -= homah.GetSerializedSize ();
-    Config::SetDefault("ns3::HomaNanoPuArcht::NumTotalPrioBands", 
+    Config::SetDefault(protocol+"::NumTotalPrioBands", 
                        UintegerValue(nTotalPrioBands));
-    Config::SetDefault("ns3::HomaNanoPuArcht::NumUnschedPrioBands", 
+    Config::SetDefault(protocol+"::NumUnschedPrioBands", 
                        UintegerValue(nUnschedPrioBands));
-    Config::SetDefault("ns3::HomaNanoPuArcht::OvercommitLevel", 
+    Config::SetDefault(protocol+"::OvercommitLevel", 
                        UintegerValue(nTotalPrioBands-nUnschedPrioBands));
   }
   else
@@ -328,6 +341,12 @@ main (int argc, char *argv[])
       Ptr<HomaNanoPuArcht> homaNanoPuArcht = CreateObject<HomaNanoPuArcht>();
       homaNanoPuArcht->AggregateIntoDevice(netDeviceContainers[i].Get (0));
       nanoPuArcht = homaNanoPuArcht;
+    }
+    else if (protocol.compare ("ns3::HomatrNanoPuArcht") == 0)
+    {
+      Ptr<HomatrNanoPuArcht> homatrNanoPuArcht = CreateObject<HomatrNanoPuArcht>();
+      homatrNanoPuArcht->AggregateIntoDevice(netDeviceContainers[i].Get (0));
+      nanoPuArcht = homatrNanoPuArcht;
     }
     else
     {

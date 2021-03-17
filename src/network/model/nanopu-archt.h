@@ -311,6 +311,7 @@ public:
   
   typedef enum CreditEventOpCode_t
   {
+    NO_OP = 0,        //!< No operation requested
     WRITE = 1,        //!< Write
     ADD  = 2,         //!< Add
     SHIFT_RIGHT  = 4, //!< Shift right
