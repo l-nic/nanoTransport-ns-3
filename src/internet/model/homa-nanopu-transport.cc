@@ -222,9 +222,6 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
     }
     m_busyMsgs[rxMsgInfo.rxMsgId] = false;
       
-    if (!rxMsgInfo.isNewPkt)
-        return true;
-      
     reassembleMeta_t metaData = { 
       .rxMsgId = rxMsgInfo.rxMsgId,
       .srcIp = srcIp,
