@@ -841,12 +841,6 @@ NanoPuArchtReassemble::ProcessNewPacket (Ptr<Packet> pkt, reassembleMeta_t meta)
 //       Simulator::Schedule (NanoSeconds(REASSEMBLE_DELAY), 
 //                            &NanoPuArcht::NotifyApplications, 
 //                            m_nanoPuArcht, msg, (int)meta.txMsgId);
-      
-//       /* Free the rxMsgId*/
-//       rxMsgIdTableKey_t key (meta.srcIp.Get (), meta.srcPort, meta.txMsgId);
-//       auto map = m_rxMsgIdTable.find (key);
-//       NS_ASSERT (meta.rxMsgId == map->second);
-//       m_rxMsgIdTable.erase (map);
         
       this->ClearStateForMsg(meta.rxMsgId);
     }

@@ -122,8 +122,8 @@ void NdpNanoPuArchtPktGen::CtrlPktEvent (bool genACK, bool genNACK, bool genPULL
       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::ACK);
       genACK = false;
     }
-    if (genNACK && delay==Time(0))
-    {
+    if (genNACK)
+    { // Send NACKs only with PULLs because they trigger packet transmission
       ndph.SetFlags (ndph.GetFlags () | NdpHeader::Flags_t::NACK);
       genNACK = false;
     }
@@ -225,10 +225,6 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
     if (!rxMsgInfo.success)
       return false;
       
-    // NOTE: The ackNo in the rxMsgInfo is the acknowledgement number
-    //       before processing this incoming data packet because this
-    //       packet has not updated the receivedBitmap in the reassembly
-    //       buffer yet.
     uint16_t pullOffsetDiff = 0;
     if (ndph.GetFlags () & NdpHeader::Flags_t::CHOP)
     {
@@ -236,11 +232,16 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
                    " NanoPU NDP IngressPipe processing chopped data packet.");
       genNACK = true;
       genPULL = true;
+        
+      m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
+                                   srcPort, dstPort, txMsgId, 
+                                   pktOffset, 0);
     } 
     else 
     {
-      if (!rxMsgInfo.isNewPkt)
-        return true;
+      m_nanoPuArcht->DataRecvTrace(p, srcIp, iph.GetDestination(),
+                                   srcPort, dstPort, txMsgId, 
+                                   pktOffset, 1);
         
       NS_LOG_LOGIC(Simulator::Now ().GetNanoSeconds () << 
                    " NanoPU NDP IngressPipe processing data packet.");
@@ -250,14 +251,15 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
       if (pktOffset + m_nanoPuArcht->GetInitialCredit () <= msgLen )
           genPULL = true;
         
-      reassembleMeta_t metaData = {};
-      metaData.rxMsgId = rxMsgInfo.rxMsgId;
-      metaData.srcIp = srcIp;
-      metaData.srcPort = srcPort;
-      metaData.dstPort = dstPort;
-      metaData.txMsgId = txMsgId;
-      metaData.msgLen = msgLen;
-      metaData.pktOffset = pktOffset;
+      reassembleMeta_t metaData = {
+        .rxMsgId = rxMsgInfo.rxMsgId,
+        .srcIp = srcIp,
+        .srcPort = srcPort,
+        .dstPort = dstPort,
+        .txMsgId = txMsgId,
+        .msgLen = msgLen,
+        .pktOffset = pktOffset
+      };
         
       pullOffsetDiff = 1;
       m_nanoPuArcht->GetReassemblyBuffer ()->ProcessNewPacket (cp, metaData);
@@ -322,9 +324,6 @@ bool NdpNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const Pa
 //                            NanoPuArchtPacketize::CreditEventOpCode_t::WRITE,
 //                            std::greater<int>());
     }
-      
-//     cp->Unref();
-//     cp = 0;
   }
     
   return true;
@@ -466,6 +465,11 @@ TypeId NdpNanoPuArcht::GetTypeId (void)
                      "Number of bytes (without metadata) currently stored in the arbiter queue",
                      MakeTraceSourceAccessor (&NdpNanoPuArcht::m_nArbiterBytes),
                      "ns3::TracedValueCallback::Uint32")
+    .AddTraceSource ("DataPktArrival",
+                     "Trace source indicating a DATA packet has arrived "
+                     "to the receiver NdpNanoPuArcht layer.",
+                     MakeTraceSourceAccessor (&NdpNanoPuArcht::m_dataRecvTrace),
+                     "ns3::Packet::TracedCallback")
   ;
   return tid;
 }
@@ -501,7 +505,7 @@ NdpNanoPuArcht::GetPktGen (void)
   return m_pktgen;
 }
     
-bool NdpNanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> p, 
+bool NdpNanoPuArcht::EnterIngressPipe (Ptr<NetDevice> device, Ptr<const Packet> p, 
                                     uint16_t protocol, const Address &from)
 {
   NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
@@ -509,6 +513,16 @@ bool NdpNanoPuArcht::EnterIngressPipe( Ptr<NetDevice> device, Ptr<const Packet> 
   m_ingresspipe->IngressPipe (device, p, protocol, from);
     
   return true;
+}
+    
+void NdpNanoPuArcht::DataRecvTrace (Ptr<const Packet> p, 
+                                     Ipv4Address srcIp, Ipv4Address dstIp,
+                                     uint16_t srcPort, uint16_t dstPort, 
+                                     int txMsgId, uint16_t pktOffset, uint8_t prio)
+{
+  NS_LOG_FUNCTION (Simulator::Now ().GetNanoSeconds () << this << p);
+    
+  m_dataRecvTrace(p, srcIp, dstIp, srcPort, dstPort, txMsgId, pktOffset, prio);
 }
     
 } // namespace ns3

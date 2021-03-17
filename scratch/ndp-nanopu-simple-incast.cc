@@ -166,6 +166,10 @@ main (int argc, char *argv[])
     
   /* Install the Internet stack so that devices use IP */
     
+  // Enable multi-path routing
+  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
+                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
+    
   InternetStackHelper stack;
   stack.InstallAll ();
     
@@ -210,10 +214,7 @@ main (int argc, char *argv[])
   queue_disc->TraceConnectWithoutContext ("BytesInQueue", 
                                           MakeBoundCallback (&BytesInQueueDiscTrace, 
                                                              qStream, queue_disc));
-  // Enable multi-path routing
-  Config::SetDefault("ns3::Ipv4GlobalRouting::EcmpMode", 
-                     EnumValue(Ipv4GlobalRouting::ECMP_RANDOM));
-    
+  
   /* Assign IP addresses */
     
   Ipv4AddressHelper addressHelper;
