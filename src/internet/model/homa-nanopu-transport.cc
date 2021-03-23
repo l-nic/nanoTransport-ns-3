@@ -349,6 +349,30 @@ bool HomaNanoPuArchtIngressPipe::IngressPipe( Ptr<NetDevice> device, Ptr<const P
                   " grantOffset: " << m_pendingMsgInfo[rxMsgIdToGrant].grantedIdx << 
                   " with prio: " << (uint16_t)prioBand);
     }
+//     else // CAUTION: The block below creates extra control packets!
+//     {
+//       // NOTE: Homa doesn't explicitly acknowledge packets before the message completes.
+//       //       However NanoPU version does it when no new message can be granted 
+//       //       otherwise. This is important because the retransmission mechanism of
+//       //       NanoPU is not receiver based but sender based. Therefore we need to 
+//       //       minimize retransmissions by letting sender know which packets are 
+//       //       actually delivered.
+//       homaNanoPuCtrlMeta_t ctrlMeta = {
+//         .flag = HomaHeader::Flags_t::ACK,
+//         .remoteIp = srcIp,
+//         .remotePort = srcPort,
+//         .localPort = dstPort,
+//         .txMsgId = txMsgId,
+//         .msgLen = msgLen,
+//         .pktOffset = rxMsgInfo.ackNo,
+//         .grantOffset = 0, // This is just an ACK, no packet is granted
+//         .priority = (uint8_t)(m_nanoPuArcht->GetNumTotalPrioBands()-1) // not used in ACKs
+//       };
+//       m_nanoPuArcht->GetPktGen ()->CtrlPktEvent (ctrlMeta);
+        
+//       NS_LOG_INFO(Simulator::Now ().GetNanoSeconds () << " NanoPU Homa ACKed msg: " << 
+//                   rxMsgInfo.rxMsgId << " pktOffset: " << rxMsgInfo.ackNo);
+//     }
         
     // TODO: Homa keeps a timer per granted inbound messages and send
     //       a RESEND packet once the timer expires.

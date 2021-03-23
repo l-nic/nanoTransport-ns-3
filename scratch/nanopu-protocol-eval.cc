@@ -134,6 +134,7 @@ main (int argc, char *argv[])
   /******** Set default variables ********/
   double startTime = 1.0; // Seconds
   int nSenders = 10;
+  int minMsgSize = 10;
   std::string bandwidth = "200Gbps";
   std::string delay = "50ns";
   uint32_t mtu = 1024; // Bytes
@@ -146,6 +147,8 @@ main (int argc, char *argv[])
     
   CommandLine cmd (__FILE__);
   cmd.AddValue ("nSenders", "The number of senders involved in the incast", nSenders);
+  cmd.AddValue ("minMsgSize", "The smallest message size for the experiment."
+                " The other messages sizes are determined based on this.", minMsgSize);
   cmd.AddValue ("bw", "The link bandwidth accross the network", bandwidth);
   cmd.AddValue ("delay", "The link delay accross the network", delay);
   cmd.AddValue ("mtu", "The MTU accross the network", mtu);
@@ -370,7 +373,7 @@ main (int argc, char *argv[])
   {
     Simulator::Schedule (Seconds (startTime), &SendMsg, 
                          nanoPuArchts[i], nanoPuArchts[0]->GetLocalIp (), 
-                         i, (10+(i-1)*2)*payloadSize, payloadSize);
+                         i, (minMsgSize+(i-1)*2)*payloadSize, payloadSize);
   }
     
   /******** Run the Actual Simulation ********/
