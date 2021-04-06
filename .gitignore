@@ -22,6 +22,7 @@ oprofile_data/
 *.out
 [D|U]l[A-Z][a-z]*Stats.txt
 seventh-packet-byte-count.png
+c_cpp_properties.json
 
 \#*#
 ~*
