@@ -539,7 +539,7 @@ void HomatrNanoPuArchtEgressPipe::EgressPipe (Ptr<const Packet> p, egressMeta_t 
     // TODO: Set generation information on the packet. (Not essential)
       
     // Priority of Data packets are determined by the packet tags
-    if (meta.isRtx && m_priorities[meta.txMsgId]==0)
+    if (meta.isRtx && m_priorities[meta.txMsgId] < m_nanoPuArcht->GetNumUnschedPrioBands ())
       priority = m_nanoPuArcht->GetNumUnschedPrioBands (); 
     else
       priority = m_priorities[meta.txMsgId];
