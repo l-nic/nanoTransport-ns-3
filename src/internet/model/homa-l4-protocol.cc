@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <numeric>
 
 #include "ns3/log.h"
 #include "ns3/assert.h"
